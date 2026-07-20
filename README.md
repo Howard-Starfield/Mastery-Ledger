@@ -6,7 +6,21 @@ Turn scattered sources into grounded knowledge, exam practice, and a review reco
 
 ![Mastery Ledger dashboard concept](design-mockups/concept-a-exam-ledger.png)
 
-## Install the Codex skill
+## Install the preview
+
+Mastery Ledger currently has two intentionally separate parts: the local application and the Codex skill adapter. Install both without cloning the repository:
+
+```powershell
+uv tool install "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
+npx skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y --copy
+mastery-ledger onboard --open --json
+```
+
+The commands expect [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for the Python application and `npx` from Node.js for the skill installer. The first command installs the application into an isolated per-user environment. The second installs the skill for Codex, and the third opens application-owned setup so the learner can choose where their course workspace belongs. Restart Codex after installing the skill.
+
+This is an unsigned development preview installed from the repository's moving `main` branch. It is suitable for testing, but it is not the future stable-release channel. A tagged, checksummed application release will replace this command before Mastery Ledger is presented as a learner-ready release.
+
+## Install only the Codex skill
 
 The repository already follows the standard `SKILL.md` layout and is discoverable by the open [`skills` CLI](https://github.com/vercel-labs/skills). Install the skill globally for Codex with one command:
 
@@ -29,7 +43,7 @@ Install this skill globally for Codex:
 https://github.com/Howard-Starfield/Mastery-Ledger/tree/main/mastery-ledger
 ```
 
-Installing the skill does not install the standalone Mastery Ledger application. The application remains a separate runtime; follow [Install and test from source](#install-and-test-from-source) for the current development build.
+Installing the skill does not install the standalone Mastery Ledger application. The application remains a separate runtime; follow [Install and test the preview](#install-and-test-the-preview) for the current development build.
 
 ## What Mastery Ledger is
 
@@ -98,11 +112,27 @@ First-run onboarding belongs to the application because it validates and persist
 - React onboarding for source invitation, workspace, privacy, accessibility, and editable review intervals.
 - Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
 
-## Install and test from source
+## Install and test the preview
 
 The onboarding slice is ready for developer testing. It is not yet a signed learner release, and completing onboarding currently ends on a setup receipt rather than the unfinished course dashboard.
 
 ### 1. Install the local application
+
+For a normal preview installation, `uv` can install the CLI directly from the official GitHub repository without a clone:
+
+```powershell
+uv tool install "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
+```
+
+The checked-in frontend build is included in the Python package, so Node.js is not required to launch and test onboarding. If `mastery-ledger` is not found afterward, run `uv tool update-shell` and open a new terminal.
+
+To update the preview from `main`, reinstall it explicitly:
+
+```powershell
+uv tool install --force "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
+```
+
+For contributors who already cloned the repository, use an editable installation instead:
 
 [`uv`](https://docs.astral.sh/uv/guides/tools/) provides the cleanest development installation because it gives the CLI an isolated environment while keeping this checkout editable:
 
@@ -111,9 +141,7 @@ Set-Location D:\AI_projects\Tutor_AI
 uv tool install --editable .
 ```
 
-The checked-in frontend build is included in the Python package, so Node.js is not required just to launch and test onboarding.
-
-If `mastery-ledger` is not found after installation, run `uv tool update-shell` and open a new terminal. To refresh an existing tool installation after package metadata or dependencies change, run `uv tool install --editable . --force`.
+To refresh an editable installation after package metadata or dependencies change, run `uv tool install --editable . --force`.
 
 ### 2. Run the first-use flow
 

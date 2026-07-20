@@ -1680,3 +1680,27 @@ Installing the skill never implies that the standalone application is installed.
 ### Item 13 accepted decision
 
 Document the one-command `npx skills add` flow as the easiest cross-agent installation, explicitly target Codex global scope, use copy mode, retain the bundled Codex installer as a fallback, and keep application installation separate.
+
+## 14. Preview application distribution
+
+The application package can be installed directly from the official GitHub repository with `uv`:
+
+```text
+uv tool install "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
+```
+
+This path was verified in an isolated tool directory: `uv` resolved and built the package, installed the `mastery-ledger` executable, and `mastery-ledger doctor --json` returned the expected `doctor-v1` `onboarding_required` response. The bundled React assets were available without Node.js.
+
+Treat this as a development-preview channel, not a signed release. The `main` reference is mutable, the source distribution is built on the learner's machine, and no checksum manifest currently freezes the complete dependency graph. The README must label those limits instead of presenting the command as a production installer.
+
+Keep the three user actions distinct:
+
+1. `uv tool install ...` installs the local application in an isolated per-user tool environment.
+2. `npx skills add ...` installs the Codex skill adapter.
+3. `mastery-ledger onboard --open --json` asks where learner-owned course data should live.
+
+The skill continues to prohibit silent application installation. When the runtime is absent, it may point the learner to the documented preview command for voluntary testing, but it must not execute that command without explicit approval or describe the preview as a signed learner release. Stable distribution remains gated on a versioned tag, immutable artifacts, checksums, compatibility metadata, and release verification.
+
+### Item 14 accepted decision
+
+Use direct `uv tool install` from the official repository as the no-clone preview installation, retain editable installs for contributors, clearly label the mutable unsigned channel, and preserve the separate application, skill, and workspace-onboarding trust boundaries.

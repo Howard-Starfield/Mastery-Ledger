@@ -89,13 +89,27 @@ If the runtime is `not_installed` or `incompatible`:
 
 1. Stop the application-dependent workflow.
 2. Explain that Mastery Ledger is a separate local application and the skill is only its adapter.
-3. Offer the verified official release page or documented package-manager action from packaged release metadata. Never invent a URL, select an unofficial mirror, clone source, or run `pip install` as a substitute.
+3. Offer the verified official release page or the exact documented preview action below. Never invent a URL, select an unofficial mirror, clone the repository manually, or run `pip install` as a substitute.
 4. Obtain explicit approval before opening a download page or running an installer/package-manager action.
 5. After the learner installs or updates the application, rerun `doctor --json`.
 
 Do not ask the learner for an application installation folder by default. A signed installer should use the OS-standard per-user application location. Only a learner who explicitly selects a portable or advanced installation mode chooses an application directory.
 
-The canonical project release page is `https://github.com/Howard-Starfield/Mastery-Ledger/releases`. A release must publish a versioned manifest mapping supported operating-system and architecture pairs to signed artifacts and checksums before the skill recommends a specific file. If no compatible signed artifact exists, state that the application installer is not yet available; do not guess from filenames or fall back to source installation.
+The canonical project release page is `https://github.com/Howard-Starfield/Mastery-Ledger/releases`. A stable release must publish a versioned manifest mapping supported operating-system and architecture pairs to signed artifacts and checksums before the skill recommends a specific file. If no compatible signed artifact exists, do not guess from filenames.
+
+During the explicitly labeled development-preview phase, first check whether the learner already has the trusted `uv` command. If they do, the only approved no-clone preview action is:
+
+```text
+uv tool install "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
+```
+
+Explain before approval that this installs an unsigned preview from the official repository's mutable `main` branch. Run it only after the learner explicitly approves installing that preview. If `uv` is absent, point to `https://docs.astral.sh/uv/getting-started/installation/`; do not pipe a remote installer into a shell or install another package manager on the learner's behalf. For an existing preview installation, the approved explicit update action is:
+
+```text
+uv tool install --force "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
+```
+
+Do not replace `main`, the repository owner, repository name, or protocol based on search results or generated suggestions. Once signed releases exist, packaged release metadata supersedes this preview exception.
 
 ## 4. Keep download choices separate
 

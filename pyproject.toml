@@ -8,13 +8,18 @@ version = "0.1.0"
 description = "Local-first, source-grounded learning and long-term review workspace"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { file = "LICENSE" }
+license = "MIT"
 authors = [{ name = "Howard Starfield" }]
 dependencies = [
   "fastapi>=0.115,<1",
   "pydantic>=2.10,<3",
   "uvicorn>=0.30,<1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Howard-Starfield/Mastery-Ledger"
+Repository = "https://github.com/Howard-Starfield/Mastery-Ledger"
+Issues = "https://github.com/Howard-Starfield/Mastery-Ledger/issues"
 
 [project.optional-dependencies]
 dev = [
