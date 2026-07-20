@@ -73,21 +73,117 @@ First-run onboarding belongs to the application because it validates and persist
 - React onboarding for source invitation, workspace, privacy, accessibility, and editable review intervals.
 - Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
 
-### Development quick start
+## Install and test from source
 
-```bash
-python -m venv .venv
-# Activate .venv using the command for your shell.
-python -m pip install -e ".[dev]"
-cd web
-npm install
-npm run build
-cd ..
+The onboarding slice is ready for developer testing. It is not yet a signed learner release, and completing onboarding currently ends on a setup receipt rather than the unfinished course dashboard.
+
+### 1. Install the local application
+
+[`uv`](https://docs.astral.sh/uv/guides/tools/) provides the cleanest development installation because it gives the CLI an isolated environment while keeping this checkout editable:
+
+```powershell
+Set-Location D:\AI_projects\Tutor_AI
+uv tool install --editable .
+```
+
+The checked-in frontend build is included in the Python package, so Node.js is not required just to launch and test onboarding.
+
+If `mastery-ledger` is not found after installation, run `uv tool update-shell` and open a new terminal. To refresh an existing tool installation after package metadata or dependencies change, run `uv tool install --editable . --force`.
+
+### 2. Run the first-use flow
+
+Confirm that the read-only runtime check reports `onboarding_required`:
+
+```powershell
 mastery-ledger doctor --json
+```
+
+Launch the protected loopback application and open onboarding in the default browser:
+
+```powershell
 mastery-ledger onboard --open --json
 ```
 
-This is a source-checkout workflow, not a learner installer. The official release page will not be recommended by the skill until a compatible signed artifact and checksum manifest exist.
+Complete all four setup steps, then verify that the same doctor command reports `ready`:
+
+```powershell
+mastery-ledger doctor --json
+```
+
+Expected transition:
+
+```text
+onboarding_required
+  -> workspace validated and setup saved
+  -> ready
+```
+
+### 3. What to test
+
+- The browser opens only for the operational onboarding command, not for `doctor`.
+- A relative workspace path is rejected and an absolute writable path is accepted.
+- The suggested workspace is separate from the application and skill directories.
+- Source invitation may be completed or left empty.
+- Processing mode, language, reduced motion, and the review curve survive the final confirmation.
+- The default curve includes `1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584` days.
+- No ASR model, FFmpeg binary, or source media is downloaded during onboarding.
+- A second `mastery-ledger doctor --json` reports the saved workspace and `ready` status.
+
+For an isolated manual run that does not touch the normal per-user registry or course location, set these variables in the same terminal before running `doctor` or `onboard`:
+
+```powershell
+$env:MASTERY_LEDGER_HOME = "$PWD\.work\manual-runtime"
+$env:MASTERY_LEDGER_DEFAULT_WORKSPACE = "$PWD\.work\manual-courses"
+```
+
+Both locations are under the ignored `.work/` directory.
+
+### 4. Run the automated checks
+
+Create a project-local development environment without using PowerShell activation scripts:
+
+```powershell
+python -m venv .venv
+& .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+& .\.venv\Scripts\python.exe -m pytest -q tests mastery-ledger/tests
+```
+
+Validate or modify the frontend:
+
+```powershell
+Set-Location D:\AI_projects\Tutor_AI\web
+npm.cmd ci
+npm.cmd test
+npm.cmd run build
+```
+
+`npm run build` replaces the bundled assets under `src/mastery_ledger/web/`; commit those assets with the frontend source when the UI changes.
+
+### 5. Install the Codex skill adapter
+
+The application and `$mastery-ledger` skill are separate install surfaces. Install the skill from this repository with the system skill installer:
+
+```powershell
+python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py" `
+  --repo Howard-Starfield/Mastery-Ledger `
+  --path mastery-ledger
+```
+
+Start a new Codex task afterward so the skill can be discovered. The skill expects the `mastery-ledger` application command installed above to be available on `PATH`.
+
+### Local files and Git hygiene
+
+`uv tool install` stores its managed tool environment outside this repository, so there is no `uv` folder to remove or ignore. This repository already ignores `.venv/`, `node_modules/`, `build/`, `dist/`, `*.egg-info/`, `.work/`, and generated local course/runtime directories.
+
+Do not add `uv.lock` to `.gitignore` if one is introduced later. A project lockfile is intended to be committed so contributors and releases resolve the same dependencies.
+
+Remove the development application installation with:
+
+```powershell
+uv tool uninstall mastery-ledger
+```
+
+The official release page will not be recommended by the skill until a compatible signed artifact and checksum manifest exist.
 
 ## Repository map
 
