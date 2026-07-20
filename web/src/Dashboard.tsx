@@ -132,7 +132,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
             <h2 id="due-title">{data?.due_now ? 'Keep the ownership curve moving.' : 'Nothing is overdue.'}</h2>
             <p>{data?.due_now ? 'Review the same grounded questions at the moment memory needs another successful retrieval.' : 'Your next scheduled questions will surface here automatically.'}</p>
           </div>
-          <button type="button" className="review-button" disabled={!data?.due_now}>Start due review <span>→</span></button>
+          <button type="button" className="review-button" disabled title="Due-review delivery is the next application slice">Review runner next <span>→</span></button>
         </section>
 
         <section className="exam-register" aria-labelledby="ready-exams-title">
