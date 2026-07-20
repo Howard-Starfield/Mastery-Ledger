@@ -130,6 +130,72 @@ export interface ReviewCurveUpdateResult {
   preserved_without_anchor_count: number
 }
 
+export type SourceType = 'web_article' | 'remote_video' | 'local_document' | 'local_media' | 'local_subtitle'
+export type RightsBasis = 'web_reference' | 'user_owned' | 'platform_permitted_download' | 'public_license' | 'explicit_permission'
+export type IngestionJobState = 'queued' | 'running' | 'needs_user_action' | 'partial' | 'complete' | 'failed' | 'cancelled'
+
+export interface SourceInboxCourse {
+  course_id: string
+  title: string
+  source_count: number
+  ready_count: number
+}
+
+export interface SourceSummary {
+  source_id: string
+  course_id: string
+  title: string
+  source_type: SourceType
+  original_location: string
+  processing_status: string
+  rights_basis: RightsBasis
+  language: string
+  retrieved_at: string | null
+  content_hash: string | null
+  knowledge_path: string | null
+  artifact_count: number
+  error_code: string | null
+  recovery_suggestion: string | null
+}
+
+export interface IngestionJob {
+  job_id: string
+  kind: string
+  state: IngestionJobState
+  course_id: string
+  source_id: string
+  progress: number
+  stage: string
+  error_code: string | null
+  recovery_suggestion: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SourceInboxResult {
+  schema_version: 'source-inbox-v1'
+  courses: SourceInboxCourse[]
+  sources: SourceSummary[]
+  jobs: IngestionJob[]
+  capabilities: {
+    web_app: 'ready' | 'unavailable'
+    yt_dlp: 'ready' | 'not_installed'
+    local_asr: 'ready' | 'not_configured'
+    ffmpeg_export: 'ready' | 'unavailable'
+  }
+}
+
+export interface SourceIntakePayload {
+  course_id: string | null
+  new_course_title: string | null
+  source_type: SourceType
+  location: string
+  title: string | null
+  rights_basis: RightsBasis
+  language: string
+  allow_transcription: boolean
+}
+
 export interface ExamOption {
   option_id: string
   text: string
@@ -217,6 +283,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
           : 'Unexpected application error.'
     throw new Error(message)
   }
+  if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
 
@@ -243,6 +310,16 @@ export const applicationApi = {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
+  sources: () => request<SourceInboxResult>('/api/v1/sources'),
+  addSource: (payload: SourceIntakePayload) =>
+    request<{ schema_version: 'source-intake-v1'; course_id: string; source_id: string; job: IngestionJob }>(
+      '/api/v1/sources',
+      { method: 'POST', body: JSON.stringify(payload) },
+    ),
+  cancelSourceJob: (jobId: string) =>
+    request<void>(`/api/v1/sources/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
+  retrySourceJob: (jobId: string) =>
+    request<void>(`/api/v1/sources/jobs/${encodeURIComponent(jobId)}/retry`, { method: 'POST' }),
   startReview: (courseId?: string) =>
     request<ExamAttempt>(`/api/v1/reviews/attempts${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ''}`, {
       method: 'POST',

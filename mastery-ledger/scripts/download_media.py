@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Rights-aware wrapper around yt-dlp for permitted media acquisition.
+"""Acquire permitted captions or media through the yt-dlp Python API.
 
-The script refuses unknown rights, does not accept cookies or credentials, and
-writes a manifest of produced files. Prefer an audited durable ingestion backend when
-one is available.
+This helper never reads a user's global yt-dlp configuration, never accepts
+cookies or credentials, and defaults to one remote item. The caller must make
+the rights decision explicitly before any network acquisition is attempted.
 """
 
 from __future__ import annotations
@@ -12,8 +12,6 @@ import argparse
 import hashlib
 import json
 import re
-import shutil
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,14 +23,7 @@ ALLOWED_RIGHTS = {
     "public_license",
     "explicit_permission",
 }
-MIN_SAFE_YTDLP = (2024, 7, 1)
-
-
-def version_tuple(value: str) -> tuple[int, int, int]:
-    match = re.search(r"(\d{4})[.-](\d{1,2})[.-](\d{1,2})", value)
-    if not match:
-        raise ValueError(f"Unrecognized yt-dlp version: {value!r}")
-    return tuple(int(part) for part in match.groups())
+MODES = {"probe", "human_subtitles", "automatic_subtitles", "audio", "video"}
 
 
 def sha256_file(path: Path) -> str:
@@ -43,48 +34,50 @@ def sha256_file(path: Path) -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
-def build_command(
-    *,
-    executable: str,
-    url: str,
-    output_dir: Path,
-    mode: str,
-    languages: str,
-    playlist: bool,
-) -> list[str]:
-    output_template = "%(playlist_index)03d - %(title).180B [%(id)s].%(ext)s"
-    command = [
-        executable,
-        "--no-overwrites",
-        "--write-info-json",
-        "--paths",
-        str(output_dir),
-        "--output",
-        output_template,
-    ]
-    command.append("--yes-playlist" if playlist else "--no-playlist")
+def validate_source_id(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", value):
+        raise ValueError("source ID must be 1-80 safe filename characters")
+    return value
 
-    if mode == "subtitles":
-        command.extend(
-            [
-                "--skip-download",
-                "--write-subs",
-                "--write-auto-subs",
-                "--sub-langs",
-                languages,
-                "--sub-format",
-                "srt/vtt/best",
-            ]
+
+def build_options(
+    *, output_dir: Path, source_id: str, mode: str, languages: list[str], playlist: bool
+) -> dict[str, Any]:
+    if mode not in MODES:
+        raise ValueError(f"Unsupported mode: {mode}")
+    options: dict[str, Any] = {
+        "quiet": True,
+        "no_warnings": True,
+        "ignoreconfig": True,
+        "noplaylist": not playlist,
+        "paths": {"home": str(output_dir)},
+        "outtmpl": {"default": f"{source_id}.%(id)s.%(ext)s"},
+        "overwrites": False,
+        "writeinfojson": mode != "probe",
+    }
+    if mode == "probe":
+        options["skip_download"] = True
+    elif mode == "human_subtitles":
+        options.update(
+            skip_download=True,
+            writesubtitles=True,
+            writeautomaticsub=False,
+            subtitleslangs=languages,
+            subtitlesformat="vtt/srt/best",
+        )
+    elif mode == "automatic_subtitles":
+        options.update(
+            skip_download=True,
+            writesubtitles=False,
+            writeautomaticsub=True,
+            subtitleslangs=languages,
+            subtitlesformat="vtt/srt/best",
         )
     elif mode == "audio":
-        command.extend(["--format", "bestaudio/best", "--extract-audio", "--audio-format", "m4a"])
-    elif mode == "video":
-        command.extend(["--format", "bv*+ba/b", "--merge-output-format", "mp4"])
+        options["format"] = "bestaudio/best"
     else:
-        raise ValueError(f"Unsupported mode: {mode}")
-
-    command.append(url)
-    return command
+        options.update(format="bv*+ba/b", merge_output_format="mp4")
+    return options
 
 
 def collect_files(output_dir: Path) -> list[dict[str, Any]]:
@@ -94,7 +87,7 @@ def collect_files(output_dir: Path) -> list[dict[str, Any]]:
             continue
         files.append(
             {
-                "path": str(path.relative_to(output_dir)),
+                "path": str(path.relative_to(output_dir)).replace("\\", "/"),
                 "size_bytes": path.stat().st_size,
                 "content_hash": sha256_file(path),
             }
@@ -102,79 +95,128 @@ def collect_files(output_dir: Path) -> list[dict[str, Any]]:
     return files
 
 
-def main() -> int:
+def probe_record(info: dict[str, Any], *, submitted_url: str, version: str) -> dict[str, Any]:
+    return {
+        "schema_version": "media-probe-v1",
+        "submitted_url": submitted_url,
+        "webpage_url": info.get("webpage_url") or submitted_url,
+        "extractor": info.get("extractor"),
+        "extractor_key": info.get("extractor_key"),
+        "remote_id": info.get("id"),
+        "title": info.get("title"),
+        "duration": info.get("duration"),
+        "live_status": info.get("live_status"),
+        "subtitle_languages": sorted(str(key) for key in (info.get("subtitles") or {})),
+        "automatic_caption_languages": sorted(
+            str(key) for key in (info.get("automatic_captions") or {})
+        ),
+        "yt_dlp_version": version,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("url")
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--source-id", required=True)
     parser.add_argument("--rights-basis", required=True)
-    parser.add_argument("--mode", choices=["subtitles", "audio", "video"], default="subtitles")
-    parser.add_argument("--languages", default="en.*,zh.*")
+    parser.add_argument("--mode", choices=sorted(MODES), default="probe")
+    parser.add_argument("--languages", default="en.*,en")
     parser.add_argument("--playlist", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.rights_basis not in ALLOWED_RIGHTS:
         parser.error(
-            "Remote media requires --rights-basis user_owned, platform_permitted_download, public_license, or explicit_permission"
+            "remote acquisition requires an allowed --rights-basis; unknown rights are refused"
         )
     if not args.url.startswith(("https://", "http://")):
         parser.error("URL must use http or https")
-
-    executable = shutil.which("yt-dlp")
-    if executable is None:
-        print(json.dumps({"status": "failed", "code": "missing_ytdlp", "message": "yt-dlp is not installed"}))
-        return 2
-
-    version_result = subprocess.run([executable, "--version"], capture_output=True, text=True, check=False)
-    if version_result.returncode != 0:
-        print(json.dumps({"status": "failed", "code": "ytdlp_version_failed", "message": version_result.stderr.strip()}))
-        return 2
     try:
-        installed_version = version_tuple(version_result.stdout.strip())
-    except ValueError as exc:
-        print(json.dumps({"status": "failed", "code": "unknown_ytdlp_version", "message": str(exc)}))
-        return 2
-    if installed_version < MIN_SAFE_YTDLP:
+        source_id = validate_source_id(args.source_id)
+    except ValueError as error:
+        parser.error(str(error))
+
+    try:
+        import yt_dlp
+        from yt_dlp.utils import DownloadError, UnsupportedError
+    except ImportError:
         print(
             json.dumps(
                 {
                     "status": "failed",
-                    "code": "unsafe_ytdlp_version",
-                    "message": "Update yt-dlp to version 2024.07.01 or newer before downloading subtitles or media.",
+                    "code": "missing_ytdlp",
+                    "message": "Install Mastery Ledger core dependencies; no standalone executable is used.",
                 }
             )
         )
         return 2
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    command = build_command(
-        executable=executable,
-        url=args.url,
+    started_at = datetime.now(timezone.utc).isoformat()
+    options = build_options(
         output_dir=args.output_dir,
+        source_id=source_id,
         mode=args.mode,
-        languages=args.languages,
+        languages=[item.strip() for item in args.languages.split(",") if item.strip()],
         playlist=args.playlist,
     )
-    started_at = datetime.now(timezone.utc).isoformat()
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
-    files = collect_files(args.output_dir)
+    state = "failed"
+    error_code: str | None = None
+    message: str | None = None
+    info: dict[str, Any] = {}
+    try:
+        with yt_dlp.YoutubeDL(options) as ydl:
+            raw_info = ydl.extract_info(args.url, download=args.mode != "probe")
+            sanitized = ydl.sanitize_info(raw_info)
+        if not isinstance(sanitized, dict):
+            raise RuntimeError("yt-dlp returned no usable metadata")
+        info = sanitized
+        if not args.playlist and (info.get("entries") or info.get("_type") in {"playlist", "multi_video"}):
+            raise RuntimeError("playlist scope requires --playlist")
+        if info.get("is_live") or info.get("live_status") in {"is_live", "is_upcoming"}:
+            raise RuntimeError("live or upcoming media is not a stable source")
+        state = "complete"
+    except UnsupportedError:
+        error_code, message = "unsupported_url", "No installed yt-dlp extractor accepted this URL."
+    except DownloadError:
+        error_code, message = "acquisition_failed", "yt-dlp could not acquire the requested public item."
+    except RuntimeError as error:
+        error_code, message = "unstable_or_unbounded_source", str(error)
+
+    version = getattr(yt_dlp.version, "__version__", "unknown")
+    probe = probe_record(info, submitted_url=args.url, version=version)
+    probe_path = args.output_dir / "probe.json"
+    probe_path.write_text(json.dumps(probe, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     manifest = {
-        "schema_version": "1.0",
-        "kind": "media_download",
-        "state": "complete" if result.returncode == 0 else "failed",
+        "schema_version": "media-download-v2",
+        "kind": "media_acquisition",
+        "state": state,
+        "source_id": source_id,
         "rights_basis": args.rights_basis,
         "mode": args.mode,
         "url": args.url,
-        "yt_dlp_version": version_result.stdout.strip(),
+        "yt_dlp_version": version,
         "started_at": started_at,
         "finished_at": datetime.now(timezone.utc).isoformat(),
-        "return_code": result.returncode,
-        "files": files,
-        "stderr_tail": result.stderr[-4000:],
+        "files": collect_files(args.output_dir),
+        "error_code": error_code,
+        "message": message,
     }
     manifest_path = args.output_dir / "download-job.json"
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"status": manifest["state"], "manifest": str(manifest_path), "files": len(files)}))
-    return 0 if result.returncode == 0 else 3
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {
+                "status": state,
+                "manifest": str(manifest_path),
+                "files": len(manifest["files"]),
+                "error_code": error_code,
+            }
+        )
+    )
+    return 0 if state == "complete" else 3
 
 
 if __name__ == "__main__":

@@ -243,3 +243,92 @@ class ExamCompletion(BaseModel):
     unanswered_count: int = Field(ge=0)
     score_percent: float = Field(ge=0, le=100)
     questions: list[QuestionReview] = Field(default_factory=list)
+
+
+SourceType = Literal[
+    "web_article",
+    "remote_video",
+    "local_document",
+    "local_media",
+    "local_subtitle",
+]
+RightsBasis = Literal[
+    "web_reference",
+    "user_owned",
+    "platform_permitted_download",
+    "public_license",
+    "explicit_permission",
+]
+JobState = Literal[
+    "queued",
+    "running",
+    "needs_user_action",
+    "partial",
+    "complete",
+    "failed",
+    "cancelled",
+]
+
+
+class SourceIntakeRequest(BaseModel):
+    course_id: str | None = Field(default=None, min_length=1, max_length=120)
+    new_course_title: str | None = Field(default=None, min_length=1, max_length=160)
+    source_type: SourceType
+    location: str = Field(min_length=1, max_length=8192)
+    title: str | None = Field(default=None, max_length=300)
+    rights_basis: RightsBasis = "web_reference"
+    language: str = Field(default="en", min_length=2, max_length=24)
+    allow_transcription: bool = False
+
+
+class SourceSummary(BaseModel):
+    source_id: str
+    course_id: str
+    title: str
+    source_type: SourceType
+    original_location: str
+    processing_status: str
+    rights_basis: RightsBasis
+    language: str
+    retrieved_at: str | None = None
+    content_hash: str | None = None
+    knowledge_path: str | None = None
+    artifact_count: int = Field(default=0, ge=0)
+    error_code: str | None = None
+    recovery_suggestion: str | None = None
+
+
+class IngestionJobView(BaseModel):
+    job_id: str
+    kind: str
+    state: JobState
+    course_id: str
+    source_id: str
+    progress: float = Field(ge=0, le=1)
+    stage: str
+    error_code: str | None = None
+    recovery_suggestion: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class SourceInboxCourse(BaseModel):
+    course_id: str
+    title: str
+    source_count: int = Field(ge=0)
+    ready_count: int = Field(ge=0)
+
+
+class SourceInboxResult(BaseModel):
+    schema_version: Literal["source-inbox-v1"] = "source-inbox-v1"
+    courses: list[SourceInboxCourse] = Field(default_factory=list)
+    sources: list[SourceSummary] = Field(default_factory=list)
+    jobs: list[IngestionJobView] = Field(default_factory=list)
+    capabilities: CapabilityState = Field(default_factory=CapabilityState)
+
+
+class SourceIntakeResult(BaseModel):
+    schema_version: Literal["source-intake-v1"] = "source-intake-v1"
+    course_id: str
+    source_id: str
+    job: IngestionJobView

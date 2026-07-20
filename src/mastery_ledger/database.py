@@ -127,6 +127,213 @@ def save_settings(values: dict[str, object], path: Path | None = None) -> None:
         connection.commit()
 
 
+def enqueue_job(kind: str, payload: dict[str, object], path: Path | None = None) -> str:
+    initialize_database(path)
+    job_id = f"JOB-{uuid.uuid4().hex[:16].upper()}"
+    timestamp = utc_now()
+    with closing(connect(path)) as connection:
+        connection.execute(
+            """
+            INSERT INTO jobs(job_id, kind, state, payload_json, created_at, updated_at)
+            VALUES(?, ?, 'queued', ?, ?, ?)
+            """,
+            (job_id, kind, json.dumps(payload), timestamp, timestamp),
+        )
+        connection.commit()
+    return job_id
+
+
+def recover_interrupted_jobs(path: Path | None = None) -> int:
+    initialize_database(path)
+    timestamp = utc_now()
+    with closing(connect(path)) as connection:
+        cursor = connection.execute(
+            "UPDATE jobs SET state = 'queued', updated_at = ? WHERE state = 'running'",
+            (timestamp,),
+        )
+        connection.commit()
+        return int(cursor.rowcount)
+
+
+def claim_next_job(path: Path | None = None) -> dict[str, object] | None:
+    initialize_database(path)
+    timestamp = utc_now()
+    with closing(connect(path)) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            """
+            SELECT job_id, kind, payload_json, created_at, updated_at
+            FROM jobs WHERE state = 'queued' ORDER BY created_at, job_id LIMIT 1
+            """
+        ).fetchone()
+        if row is None:
+            connection.commit()
+            return None
+        updated = connection.execute(
+            "UPDATE jobs SET state = 'running', updated_at = ? WHERE job_id = ? AND state = 'queued'",
+            (timestamp, row["job_id"]),
+        )
+        connection.commit()
+        if updated.rowcount != 1:
+            return None
+    try:
+        payload = json.loads(row["payload_json"])
+    except (TypeError, json.JSONDecodeError):
+        payload = {}
+    return {
+        "job_id": row["job_id"],
+        "kind": row["kind"],
+        "state": "running",
+        "payload": payload if isinstance(payload, dict) else {},
+        "created_at": row["created_at"],
+        "updated_at": timestamp,
+    }
+
+
+def update_job(
+    job_id: str,
+    *,
+    state: str,
+    payload: dict[str, object] | None = None,
+    path: Path | None = None,
+) -> bool:
+    timestamp = utc_now()
+    with closing(connect(path)) as connection:
+        if payload is None:
+            cursor = connection.execute(
+                "UPDATE jobs SET state = ?, updated_at = ? WHERE job_id = ?",
+                (state, timestamp, job_id),
+            )
+        else:
+            cursor = connection.execute(
+                "UPDATE jobs SET state = ?, payload_json = ?, updated_at = ? WHERE job_id = ?",
+                (state, json.dumps(payload), timestamp, job_id),
+            )
+        connection.commit()
+        return cursor.rowcount == 1
+
+
+def list_jobs(path: Path | None = None, *, limit: int = 500) -> list[dict[str, object]]:
+    target = path or database_path()
+    if not target.exists():
+        return []
+    with closing(connect(target)) as connection:
+        rows = connection.execute(
+            """
+            SELECT job_id, kind, state, payload_json, created_at, updated_at
+            FROM jobs ORDER BY created_at DESC, job_id DESC LIMIT ?
+            """,
+            (max(1, min(limit, 2000)),),
+        ).fetchall()
+    jobs: list[dict[str, object]] = []
+    for row in rows:
+        try:
+            payload = json.loads(row["payload_json"])
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        jobs.append(
+            {
+                "job_id": row["job_id"],
+                "kind": row["kind"],
+                "state": row["state"],
+                "payload": payload if isinstance(payload, dict) else {},
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+        )
+    return jobs
+
+
+def get_job(job_id: str, path: Path | None = None) -> dict[str, object] | None:
+    target = path or database_path()
+    if not target.exists():
+        return None
+    with closing(connect(target)) as connection:
+        row = connection.execute(
+            """
+            SELECT job_id, kind, state, payload_json, created_at, updated_at
+            FROM jobs WHERE job_id = ? LIMIT 1
+            """,
+            (job_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    try:
+        payload = json.loads(row["payload_json"])
+    except (TypeError, json.JSONDecodeError):
+        payload = {}
+    return {
+        "job_id": row["job_id"],
+        "kind": row["kind"],
+        "state": row["state"],
+        "payload": payload if isinstance(payload, dict) else {},
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def request_job_cancellation(job_id: str, path: Path | None = None) -> bool:
+    timestamp = utc_now()
+    with closing(connect(path)) as connection:
+        row = connection.execute(
+            "SELECT state, payload_json FROM jobs WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        if row is None or row["state"] in {"complete", "failed", "cancelled"}:
+            return False
+        try:
+            payload = json.loads(row["payload_json"])
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        payload["cancellation_requested"] = True
+        state = "cancelled" if row["state"] == "queued" else row["state"]
+        connection.execute(
+            "UPDATE jobs SET state = ?, payload_json = ?, updated_at = ? WHERE job_id = ?",
+            (state, json.dumps(payload), timestamp, job_id),
+        )
+        connection.commit()
+        return True
+
+
+def retry_job(job_id: str, path: Path | None = None) -> bool:
+    timestamp = utc_now()
+    with closing(connect(path)) as connection:
+        row = connection.execute(
+            "SELECT state, payload_json FROM jobs WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        if row is None or row["state"] not in {
+            "needs_user_action",
+            "partial",
+            "failed",
+            "cancelled",
+        }:
+            return False
+        try:
+            payload = json.loads(row["payload_json"])
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        payload.update(
+            {
+                "progress": 0.0,
+                "stage": "queued",
+                "error_code": None,
+                "recovery_suggestion": None,
+                "cancellation_requested": False,
+            }
+        )
+        cursor = connection.execute(
+            "UPDATE jobs SET state = 'queued', payload_json = ?, updated_at = ? WHERE job_id = ?",
+            (json.dumps(payload), timestamp, job_id),
+        )
+        connection.commit()
+        return cursor.rowcount == 1
+
+
 def save_onboarding(request: OnboardingRequest, workspace_path: Path) -> WorkspaceState:
     initialize_database()
     timestamp = utc_now()

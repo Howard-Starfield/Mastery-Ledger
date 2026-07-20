@@ -2,7 +2,7 @@
 
 Turn documents, websites, video, audio, and researched topics into source-grounded courses, focused exams, and long-term review records.
 
-> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, Focused Question exams, durable attempts, scheduled-review sessions, deterministic question scheduling, concept evidence, versioned curve settings, and the skill prototype. Course ingestion and learner-facing knowledge/evidence surfaces remain under development; signed distribution remains a release gate.
+> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, Focused Question exams, durable attempts, scheduled reviews, concept evidence, versioned curve settings, a durable Source Inbox, and the Codex skill adapter. Knowledge Wiki and Evidence & Activity remain under development; signed distribution remains a release gate.
 
 ![Mastery Ledger Exam Ledger dashboard](design-mockups/mastery-ledger-dashboard.png)
 
@@ -78,9 +78,9 @@ Mastery Ledger has two cooperating layers: a local application for learner-facin
 | Source disclosure | Shows no source details for an incorrect active answer; enables a still-collapsed citation panel after a correct answer and during final review | Application preview |
 | Scheduled reviews | Starts source-grounded due questions from the dashboard and applies the configured Ownership Curve on final submission | Application preview |
 | Ownership Curve settings | Edits, validates, versions, duplicates, and applies a review curve using an explicit schedule-migration policy | Application preview |
-| Source intake and scope | Asks for learner-provided sources, records the learning goal and boundaries, and supports adding more sources to an existing course | Codex skill workflow |
-| Web and document ingestion | Organizes approved webpages and local materials into source manifests with provenance, hashes, processing state, and precise locators | Codex skill workflow |
-| Video and audio processing | Uses a rights-aware `yt-dlp` wrapper, prefers available subtitles, normalizes SRT/VTT timestamps, and supports optional local `faster-whisper` transcription | Skill scripts |
+| Source intake and scope | Registers learner-provided files and links, records rights and provenance before processing, and supports adding sources to existing or new courses | Application preview + Codex skill workflow |
+| Web and document ingestion | Runs recoverable jobs through isolated staging, promotes source Markdown and originals into a portable course, and records hashes, status, and recovery steps | Application preview |
+| Video and audio processing | Uses the `yt-dlp` Python API, probes one public item, prefers human then automatic captions, and permits local `faster-whisper` transcription only after explicit approval and model configuration | Application preview + skill scripts |
 | Research orchestration | Splits independent research into bounded tasks, routes completed reports through verification, and prevents reviewers from running before their dependencies | Codex skill workflow |
 | Evidence and contradiction control | Separates claims, sources, contradictions, gaps, verification decisions, and approved evidence before learner-facing synthesis | Codex skill workflow |
 | Course and assessment generation | Builds source-grounded study guides, knowledge pages, question banks, and exam definitions from approved evidence | Codex skill workflow |
@@ -112,15 +112,16 @@ Onboarding belongs to the application. The skill can detect that setup is requir
 
 ## What is next
 
-- **Source Inbox** — add files and links, inspect processing state, and revisit provenance from the application.
 - **Knowledge Wiki** — browse approved concepts, relationships, contradictions, and exact source locations.
 - **Evidence & Activity** — inspect source decisions, worker handoffs, rejected claims, and machine-readable action events.
-- **Workflow guardrails** — enforce `.work/` isolation, durable action logs, completion envelopes, and main-agent-only artifact promotion in executable code.
+- **Workflow guardrails** — extend the implemented ingestion isolation and action ledger to research-agent completion envelopes and final publication.
 - **Stable distribution** — publish tagged, checksummed application releases and signed installers.
 
 ## Application architecture
 
 The accepted standalone stack is a Python **FastAPI + SQLite** runtime with a **React + TypeScript** interface built by Vite. Release builds bundle the compiled frontend into the Python application, so learners do not need Node.js. Course knowledge and review artifacts remain portable files in a learner-selected workspace; SQLite holds the application index and durable processing queue.
+
+Exact resolved Python graphs are recorded in `requirements/core.lock` and `requirements/transcription.lock`. The latter is optional because local ASR is intentionally not installed or model-configured during ordinary onboarding.
 
 First-run onboarding belongs to the application because it validates and persists workspace, privacy, accessibility, dependency, and model-download choices. For an operational request, the optional Codex skill runs the read-only `mastery-ledger doctor --json`; an `onboarding_required` result launches the fixed local onboarding command once. A missing application is never downloaded or installed automatically. The skill passes proposed learning context without maintaining a second configuration system.
 
@@ -144,6 +145,10 @@ First-run onboarding belongs to the application because it validates and persist
 - Idempotent `learner-progress.json` concept counts and evidence derived from deterministic multiple-choice results.
 - Versioned Ownership Curve editor with direct interval controls, human horizon labels, warnings, reset, profile duplication, and explicit new-only, future-advancement, or recalculate-all policies.
 - Per-question curve identity and intervals, with pending migrations applied only after the next completed due review and synchronized concept dates after an intentional recalculation.
+- Durable Source Inbox registration, rights validation, course creation, filtering, retry, cancellation, and job-state polling.
+- Recoverable ingestion worker with restart recovery, `.work/ingestion` staging, atomic promotion, and observable JSONL events.
+- Local document, SRT/VTT, and media ingestion; public-web extraction; and subtitle-first remote video processing through the `yt-dlp` Python API.
+- Canonical `source-manifest.yaml`, `source/SRC-*.md`, `source/media/SRC-*/`, and `logs/events.jsonl` course artifacts with legacy-manifest read compatibility.
 - Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
 
 ## Install and test the preview
@@ -229,6 +234,9 @@ onboarding_required
 - The Exam Ledger dashboard discovers only exams whose canonical `exam.json` status is `ready`.
 - Search and course filters operate within the internally scrollable Ready Exams register.
 - Due totals and Ownership Curve counts match each course's `progress/review-queue.json` records.
+- Source Inbox preserves existing legacy manifest records, writes a pending receipt before processing, and shows queued, running, complete, failed, or cancelled durable jobs.
+- Local documents are processed from `.work/ingestion`, promoted to `source/SRC-*.md` plus `source/media/SRC-*/`, and leave no successful staging directory behind.
+- Remote videos are probed without credentials or user configuration, prefer human captions over automatic captions, and do not download media unless transcription is approved and a local ASR model is configured.
 
 For an isolated manual run that does not touch the normal per-user registry or course location, set these variables in the same terminal before running `doctor` or `onboard`:
 

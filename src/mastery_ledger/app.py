@@ -11,7 +11,13 @@ from fastapi.staticfiles import StaticFiles
 
 from mastery_ledger.config import bundled_web_dir, default_workspace_path
 from mastery_ledger.dashboard import build_dashboard
-from mastery_ledger.database import initialize_database, save_onboarding
+from mastery_ledger.database import (
+    get_job,
+    initialize_database,
+    request_job_cancellation,
+    retry_job,
+    save_onboarding,
+)
 from mastery_ledger.exam_service import (
     AttemptConflictError,
     AttemptNotFoundError,
@@ -20,6 +26,7 @@ from mastery_ledger.exam_service import (
     ExamSessionStore,
     ExamValidationError,
 )
+from mastery_ledger.ingestion_worker import IngestionWorker
 from mastery_ledger.models import (
     ApplicationSettings,
     DashboardResult,
@@ -32,6 +39,9 @@ from mastery_ledger.models import (
     QuestionSubmissionRequest,
     ReviewCurveUpdateRequest,
     ReviewCurveUpdateResult,
+    SourceInboxResult,
+    SourceIntakeRequest,
+    SourceIntakeResult,
     WorkspaceState,
     WorkspaceValidationRequest,
     WorkspaceValidationResult,
@@ -44,19 +54,44 @@ from mastery_ledger.settings_service import (
     application_settings,
     update_review_curve,
 )
+from mastery_ledger.source_service import (
+    SourceIntakeError,
+    _course_by_id,
+    queue_source,
+    source_inbox,
+    update_source_record,
+)
 
 SESSION_COOKIE = "mastery_ledger_session"
 
 
-def create_app(*, session_token: str | None = None, web_dir: Path | None = None) -> FastAPI:
+def create_app(
+    *,
+    session_token: str | None = None,
+    web_dir: Path | None = None,
+    start_ingestion_worker: bool = True,
+) -> FastAPI:
     token = session_token or os.environ.get("MASTERY_LEDGER_SESSION_TOKEN") or secrets.token_urlsafe(32)
     frontend = web_dir or bundled_web_dir()
     exam_sessions = ExamSessionStore()
+    ingestion_worker = IngestionWorker(
+        lambda: (
+            doctor.active_workspace
+            if (doctor := build_doctor_result()).status == "ready"
+            else None
+        )
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         initialize_database()
-        yield
+        if start_ingestion_worker:
+            ingestion_worker.start()
+        try:
+            yield
+        finally:
+            if start_ingestion_worker:
+                ingestion_worker.stop()
 
     app = FastAPI(
         title="Mastery Ledger",
@@ -105,6 +140,91 @@ def create_app(*, session_token: str | None = None, web_dir: Path | None = None)
     )
     def settings() -> ApplicationSettings:
         return application_settings(ready_workspace())
+
+    @app.get(
+        "/api/v1/sources",
+        response_model=SourceInboxResult,
+        dependencies=[Depends(require_session)],
+    )
+    def sources() -> SourceInboxResult:
+        return source_inbox(ready_workspace())
+
+    @app.post(
+        "/api/v1/sources",
+        response_model=SourceIntakeResult,
+        dependencies=[Depends(require_session)],
+    )
+    def add_source(request: SourceIntakeRequest) -> SourceIntakeResult:
+        try:
+            return queue_source(ready_workspace(), request)
+        except SourceIntakeError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from error
+
+    def owned_job(job_id: str) -> dict[str, object]:
+        job = get_job(job_id)
+        payload = job.get("payload") if job else None
+        workspace = ready_workspace()
+        if (
+            job is None
+            or not isinstance(payload, dict)
+            or payload.get("workspace_id") != workspace.workspace_id
+        ):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ingestion job not found.")
+        return job
+
+    @app.post(
+        "/api/v1/sources/jobs/{job_id}/cancel",
+        status_code=status.HTTP_204_NO_CONTENT,
+        dependencies=[Depends(require_session)],
+    )
+    def cancel_source_job(job_id: str) -> Response:
+        job = owned_job(job_id)
+        if not request_job_cancellation(job_id):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This job cannot be cancelled.")
+        current = get_job(job_id)
+        payload = job.get("payload")
+        if current and current.get("state") == "cancelled" and isinstance(payload, dict):
+            workspace = ready_workspace()
+            found = _course_by_id(Path(workspace.path), str(payload.get("course_id") or ""))
+            if found is not None:
+                update_source_record(
+                    found[0],
+                    str(payload.get("source_id") or ""),
+                    {
+                        "processing_status": "cancelled",
+                        "error_code": "cancelled",
+                        "recovery_suggestion": "Retry if this source is still needed.",
+                    },
+                )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.post(
+        "/api/v1/sources/jobs/{job_id}/retry",
+        status_code=status.HTTP_204_NO_CONTENT,
+        dependencies=[Depends(require_session)],
+    )
+    def retry_source_job(job_id: str) -> Response:
+        job = owned_job(job_id)
+        if not retry_job(job_id):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This job is not ready to retry.")
+        payload = job.get("payload")
+        if isinstance(payload, dict):
+            workspace = ready_workspace()
+            found = _course_by_id(Path(workspace.path), str(payload.get("course_id") or ""))
+            if found is not None:
+                update_source_record(
+                    found[0],
+                    str(payload.get("source_id") or ""),
+                    {
+                        "processing_status": "queued",
+                        "error_code": None,
+                        "recovery_suggestion": None,
+                    },
+                )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.put(
         "/api/v1/settings/review-curve",

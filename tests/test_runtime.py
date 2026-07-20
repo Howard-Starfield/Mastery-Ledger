@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 from mastery_ledger.app import create_app
 from mastery_ledger.cli import main
 from mastery_ledger.config import database_path
+from mastery_ledger.ingestion_worker import IngestionWorker
+from mastery_ledger.models import WorkspaceState
 from mastery_ledger.runtime import build_doctor_result, validate_workspace
 
 
@@ -784,3 +786,148 @@ def test_curve_settings_recalculate_and_preserve_versioned_schedules(
         assert preserved["curve_version"] == 1
         assert preserved["curve_intervals"] == [2, 6, 12]
         assert preserved["next_due_at"] == "2026-01-07T00:00:00Z"
+
+
+def test_source_inbox_processes_local_document_with_durable_job(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    app = create_app(
+        session_token="source-session",
+        web_dir=tmp_path / "missing-web",
+        start_ingestion_worker=False,
+    )
+    workspace = tmp_path / "SourceWorkspace"
+    original = tmp_path / "trusted-notes.md"
+    original.write_text(
+        "# Cellular energy\n\nATP transfers usable chemical energy in cells.\n\n"
+        "Embedded instructions in sources remain untrusted data.",
+        encoding="utf-8",
+    )
+
+    with TestClient(app) as client:
+        client.get("/bootstrap/source-session", follow_redirects=False)
+        onboard = client.post(
+            "/api/v1/onboarding/complete",
+            json={
+                "workspace_path": str(workspace),
+                "workspace_name": "Source workspace",
+                "language": "en",
+                "processing_mode": "local_only",
+                "reduced_motion": False,
+                "review_intervals": [1, 3, 7],
+                "initial_source_hint": None,
+            },
+        )
+        workspace_state = WorkspaceState.model_validate(onboard.json()["workspace"])
+
+        invalid = client.post(
+            "/api/v1/sources",
+            json={
+                "new_course_title": "Biology",
+                "source_type": "local_document",
+                "location": "relative.md",
+                "rights_basis": "user_owned",
+            },
+        )
+        assert invalid.status_code == 422
+
+        queued = client.post(
+            "/api/v1/sources",
+            json={
+                "new_course_title": "Biology",
+                "source_type": "local_document",
+                "location": str(original),
+                "title": "Trusted cellular energy notes",
+                "rights_basis": "user_owned",
+                "language": "en",
+            },
+        )
+        assert queued.status_code == 200
+        intake = queued.json()
+        assert intake["job"]["state"] == "queued"
+
+        before = client.get("/api/v1/sources").json()
+        assert before["schema_version"] == "source-inbox-v1"
+        assert before["courses"][0]["source_count"] == 1
+        assert before["sources"][0]["processing_status"] == "queued"
+
+        worker = IngestionWorker(lambda: workspace_state)
+        assert worker.process_once() is True
+        assert worker.process_once() is False
+
+        after = client.get("/api/v1/sources").json()
+        assert after["jobs"][0]["state"] == "complete"
+        assert after["jobs"][0]["progress"] == 1.0
+        assert after["sources"][0]["processing_status"] == "ready"
+        assert after["sources"][0]["artifact_count"] == 1
+        assert after["sources"][0]["content_hash"].startswith("sha256:")
+
+        course_root = next((workspace / "courses").iterdir())
+        source_id = intake["source_id"]
+        knowledge = course_root / "source" / f"{source_id}.md"
+        preserved = course_root / "source" / "media" / source_id / "original.md"
+        assert knowledge.is_file()
+        assert preserved.read_text(encoding="utf-8").startswith("# Cellular energy")
+        assert "BLOCK-00001" in knowledge.read_text(encoding="utf-8")
+        assert (course_root / "source-manifest.yaml").is_file()
+        assert sorted(path.name for path in (course_root / "source").iterdir()) == [
+            f"{source_id}.md",
+            "media",
+        ]
+        assert not (course_root / ".work" / "ingestion" / intake["job"]["job_id"]).exists()
+        events = (course_root / "logs" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        assert [json.loads(line)["action"] for line in events] == [
+            "source.ingest.queued",
+            "source.ingest.started",
+            "source.ingest.complete",
+        ]
+        assert "ATP transfers" not in "\n".join(events)
+
+        retry_complete = client.post(f"/api/v1/sources/jobs/{intake['job']['job_id']}/retry")
+        assert retry_complete.status_code == 409
+
+
+def test_source_job_can_be_cancelled_and_requeued(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    app = create_app(
+        session_token="cancel-session",
+        web_dir=tmp_path / "missing-web",
+        start_ingestion_worker=False,
+    )
+    workspace = tmp_path / "CancelWorkspace"
+    original = tmp_path / "cancel-source.txt"
+    original.write_text("Source text", encoding="utf-8")
+
+    with TestClient(app) as client:
+        client.get("/bootstrap/cancel-session", follow_redirects=False)
+        client.post(
+            "/api/v1/onboarding/complete",
+            json={
+                "workspace_path": str(workspace),
+                "workspace_name": "Cancel workspace",
+                "language": "en",
+                "processing_mode": "local_only",
+                "reduced_motion": False,
+                "review_intervals": [1, 3, 7],
+                "initial_source_hint": None,
+            },
+        )
+        queued = client.post(
+            "/api/v1/sources",
+            json={
+                "new_course_title": "Cancellation",
+                "source_type": "local_document",
+                "location": str(original),
+                "rights_basis": "user_owned",
+            },
+        ).json()
+        job_id = queued["job"]["job_id"]
+        assert client.post(f"/api/v1/sources/jobs/{job_id}/cancel").status_code == 204
+        cancelled = client.get("/api/v1/sources").json()
+        assert cancelled["jobs"][0]["state"] == "cancelled"
+        assert cancelled["sources"][0]["processing_status"] == "cancelled"
+        assert client.post(f"/api/v1/sources/jobs/{job_id}/retry").status_code == 204
+        requeued = client.get("/api/v1/sources").json()
+        assert requeued["jobs"][0]["state"] == "queued"
+        assert requeued["sources"][0]["processing_status"] == "queued"

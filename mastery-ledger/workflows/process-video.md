@@ -33,7 +33,7 @@ Never discard the raw subtitle or media file.
 
 ```bash
 python scripts/normalize_subtitles.py input.srt \
-  --output-dir studies/my-study/sources/transcripts \
+  --output-dir studies/my-study/source/media/SRC-001 \
   --source-id SRC-001 --item-id LESSON-003 \
   --origin human_caption
 ```
@@ -47,18 +47,19 @@ Outputs:
 
 ```bash
 python scripts/download_media.py "https://example.invalid/video" \
-  --output-dir studies/my-study/sources/SRC-001 \
+  --output-dir studies/my-study/.work/ingestion/JOB-001/media \
+  --source-id SRC-001 \
   --rights-basis explicit_permission \
-  --mode subtitles --languages "en.*,zh.*"
+  --mode human_subtitles --languages "en.*,zh.*"
 ```
 
-This wrapper requires `yt-dlp`, does not accept cookies, and writes a job manifest. Use the installed Mastery Ledger runtime instead when it exposes an audited, durable downloader API.
+If the probe reports no matching human captions, run a separate `--mode automatic_subtitles` acquisition so provenance remains explicit. The wrapper imports the locked `yt-dlp` Python package, ignores ambient configuration, does not accept cookies, and writes `probe.json` plus a structured job manifest. Prefer the application Source Inbox, which provides durable job recovery and promotion.
 
 ### Local ASR
 
 ```bash
 python scripts/transcribe_media.py lesson.mp4 \
-  --output-dir studies/my-study/sources/transcripts \
+  --output-dir studies/my-study/.work/ingestion/JOB-001/media \
   --source-id SRC-001 --item-id LESSON-003 \
   --model small --language en
 ```
@@ -67,11 +68,11 @@ This optionally uses `faster-whisper`. Record model, version, source hash, langu
 
 ## Durable product integration
 
-For the Mastery Ledger application, downloading and transcription should be durable backend jobs, not conversation-only processes. Use states:
+The Mastery Ledger application runs downloading and transcription as durable backend jobs, not conversation-only processes. It uses states:
 
 `QUEUED`, `RUNNING`, `NEEDS_USER_ACTION`, `PARTIAL`, `COMPLETE`, `FAILED`, `CANCELLED`.
 
-The service should own retries, cancellation, staging directories, completion manifests, and crash recovery. The skill should call that service when available.
+The service owns retries, cancellation, staging directories, completion manifests, and crash recovery. The skill should call that service when available.
 
 ## Transcript quality checks
 

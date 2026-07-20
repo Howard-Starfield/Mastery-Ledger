@@ -102,8 +102,8 @@ class AttemptState:
 
 def _source_manifest(course_root: Path) -> dict[str, Any] | None:
     for path in (
-        course_root / "source" / "source-manifest.yaml",
         course_root / "source-manifest.yaml",
+        course_root / "source" / "source-manifest.yaml",
     ):
         if path.is_file():
             payload = _read_yaml(path, course_root)

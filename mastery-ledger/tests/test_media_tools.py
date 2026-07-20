@@ -20,6 +20,35 @@ def load_module(name: str, relative: str):
 
 
 class MediaToolTests(unittest.TestCase):
+    def test_media_options_use_python_api_and_keep_caption_origins_separate(self) -> None:
+        tool = load_module("download_media", "scripts/download_media.py")
+        human = tool.build_options(
+            output_dir=Path("out"),
+            source_id="SRC-1",
+            mode="human_subtitles",
+            languages=["en.*"],
+            playlist=False,
+        )
+        automatic = tool.build_options(
+            output_dir=Path("out"),
+            source_id="SRC-1",
+            mode="automatic_subtitles",
+            languages=["en.*"],
+            playlist=False,
+        )
+        self.assertTrue(human["ignoreconfig"])
+        self.assertTrue(human["noplaylist"])
+        self.assertTrue(human["writesubtitles"])
+        self.assertFalse(human["writeautomaticsub"])
+        self.assertFalse(automatic["writesubtitles"])
+        self.assertTrue(automatic["writeautomaticsub"])
+        self.assertIn("SRC-1", human["outtmpl"]["default"])
+
+    def test_media_source_id_rejects_unsafe_paths(self) -> None:
+        tool = load_module("download_media_validation", "scripts/download_media.py")
+        with self.assertRaises(ValueError):
+            tool.validate_source_id("../outside")
+
     def test_srt_parser_preserves_cue_ids_and_timestamps(self) -> None:
         tool = load_module("normalize_subtitles", "scripts/normalize_subtitles.py")
         content = (ROOT / "tests" / "fixtures" / "sample.srt").read_text(encoding="utf-8")

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { applicationApi, type DashboardExam, type DashboardResult } from './api'
 import CurveSettings from './CurveSettings'
 import ExamRunner from './ExamRunner'
+import SourceInbox from './SourceInbox'
 
 type DashboardProps = {
   workspaceName: string
@@ -64,6 +65,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [activeExam, setActiveExam] = useState<DashboardExam | null>(null)
   const [activeReview, setActiveReview] = useState(false)
   const [curveSettingsOpen, setCurveSettingsOpen] = useState(false)
+  const [sourcesOpen, setSourcesOpen] = useState(false)
 
   const refresh = () => {
     setLoading(true)
@@ -95,6 +97,9 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   if (activeReview) {
     return <ExamRunner reviewMode onExit={() => { setActiveReview(false); refresh() }} />
   }
+  if (sourcesOpen) {
+    return <SourceInbox workspaceName={data?.workspace.name ?? workspaceName} onExit={() => { setSourcesOpen(false); refresh() }} />
+  }
 
   return (
     <main className="ledger-app">
@@ -113,7 +118,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
       <aside className="ledger-nav">
         <nav aria-label="Primary navigation">
           {navItems.map((item) => (
-            <button key={item.label} type="button" className={item.active ? 'is-active' : ''} disabled={!item.active}>
+            <button key={item.label} type="button" className={item.active ? 'is-active' : ''} disabled={!item.active && item.label !== 'Sources'} onClick={() => item.label === 'Sources' && setSourcesOpen(true)}>
               <Icon name={item.icon} />
               <span>{item.label}</span>
               {item.label === 'Due now' && Boolean(data?.due_now) && <em>{data?.due_now}</em>}

@@ -105,8 +105,8 @@ def _question_count(course_root: Path) -> int:
 
 def _source_counts(course_root: Path) -> tuple[int, int]:
     candidates = (
-        course_root / "source" / "source-manifest.yaml",
         course_root / "source-manifest.yaml",
+        course_root / "source" / "source-manifest.yaml",
     )
     payload = next((_read_yaml(path, course_root) for path in candidates if path.is_file()), None)
     sources = _list_records(payload, "sources")

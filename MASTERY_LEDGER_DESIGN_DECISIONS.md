@@ -1367,7 +1367,7 @@ Keep the fragile behavior in packaged Python scripts rather than LLM-generated s
 | `normalize_subtitles.py` | Convert SRT/VTT captions into timestamped canonical transcript artifacts |
 | `transcribe_media.py` | Run permitted local ASR and record model/version provenance |
 
-`download_media.py` currently detects only a `yt-dlp` executable on `PATH`; implementation must replace that behavior with the resolved runtime Python and either the supported `YoutubeDL` API or `python -m yt_dlp`. It must also add ignored ambient configuration, separate human-caption and automatic-caption modes, stable source-ID output paths, and the structured result protocol before Item 7 is complete.
+`download_media.py` now uses the resolved runtime's supported `YoutubeDL` Python API, ignores ambient configuration, separates human-caption and automatic-caption modes, uses stable source-ID output paths, and emits sanitized probe and structured result records. The application worker layers durable queueing, subtitle-first fallback, staging, promotion, recovery, and event logs over the same contract.
 
 ### Item 7 decisions to confirm
 
@@ -1652,8 +1652,13 @@ The first executable slice implements:
 - idempotent question scheduling on the configured Ownership Curve.
 - scheduled-review delivery from canonical due questions;
 - idempotent concept-level learner-progress evidence and dashboard summaries.
+- versioned Ownership Curve editing and explicit schedule-migration policies;
+- durable worker execution with restart recovery and cancellation/retry state;
+- learner-facing Source Inbox intake, status filtering, and job polling;
+- local document/subtitle/media ingestion plus public web and subtitle-first remote video extraction;
+- `.work/ingestion` isolation, atomic source promotion, canonical source manifests, and observable JSONL action events.
 
-The following remain release gates rather than completed functionality: signed installers and release manifests, application/skill compatibility-range enforcement, native folder-picker integration, workspace repair UI, durable worker execution, ingestion, learner-facing Source Inbox, Knowledge Wiki and Evidence/Activity surfaces, and curve editing after onboarding.
+The following remain release gates rather than completed functionality: signed installers and release manifests, application/skill compatibility-range enforcement, native folder-picker integration, workspace repair UI, Knowledge Wiki and Evidence/Activity surfaces, and research-agent completion-envelope enforcement in the application runtime.
 
 ### Item 12 implementation references
 
