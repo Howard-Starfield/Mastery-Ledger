@@ -1,10 +1,12 @@
 # Mastery Ledger
 
-Turn scattered sources into grounded knowledge, exam practice, and a review record that can last for years.
+Turn documents, websites, video, audio, and researched topics into source-grounded courses, focused exams, and long-term review records.
 
 > **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, Focused Question exam delivery, and the skill prototype. Course ingestion, durable attempt history, scheduled review execution, and signed installers remain under development.
 
-![Mastery Ledger dashboard concept](design-mockups/concept-a-exam-ledger.png)
+![Mastery Ledger Exam Ledger dashboard](design-mockups/mastery-ledger-dashboard.png)
+
+_Product interface direction using sample course data. The availability table below separates implemented preview behavior from planned surfaces._
 
 ## Install the preview
 
@@ -61,46 +63,66 @@ flowchart LR
 
 The name **ledger** is intentional: source receipts, evidence decisions, questions, answers, and review history remain inspectable instead of disappearing after one chat.
 
-## Demo: from an academic file organizer to lasting mastery
+## Function showcase
 
-The repository includes a conceptual demo based on Ritika Tiwari's public presentation, [Introducing Study Ledger: A Comprehensive Academic Resource Management System](https://prezi.com/p/0xgcfk1r4fea/introducing-study-ledger-a-comprehensive-academic-resource-management-system/).
+Mastery Ledger has two cooperating layers: a local application for learner-facing setup and exams, and a Codex skill for source ingestion, research orchestration, evidence control, course generation, and tutoring workflows.
 
-That presentation describes a local academic-resource organizer centered on course folders, document uploads, previews, subject browsing, search, privacy, and error handling. Mastery Ledger uses those requirements as an attributed input and demonstrates the next layer:
+| Function | What it does | Availability |
+|---|---|---|
+| Guided onboarding | Selects and validates a learner-owned workspace, language, processing mode, accessibility preference, initial source, and review curve | Application preview |
+| Runtime doctor | Reports machine-readable `ready` or `onboarding_required` state without opening a browser or mutating setup | Application preview |
+| Exam Ledger dashboard | Discovers portable course manifests, ready exams, due questions, source readiness, recent courses, and Ownership Curve stages | Application preview |
+| Ready Exam register | Provides an internally scrollable, searchable, course-filtered list backed by canonical `exam.json` files | Application preview |
+| Focused Question exams | Delivers one question at a time with selectable answers, flags, navigation, timer, final submission, scoring, and review mode | Application preview |
+| Answer isolation | Keeps answer keys, explanations, and citation details out of the initial browser payload; every answer locks after one submission | Application preview |
+| Source disclosure | Shows no source details for an incorrect active answer; enables a still-collapsed citation panel after a correct answer and during final review | Application preview |
+| Source intake and scope | Asks for learner-provided sources, records the learning goal and boundaries, and supports adding more sources to an existing course | Codex skill workflow |
+| Web and document ingestion | Organizes approved webpages and local materials into source manifests with provenance, hashes, processing state, and precise locators | Codex skill workflow |
+| Video and audio processing | Uses a rights-aware `yt-dlp` wrapper, prefers available subtitles, normalizes SRT/VTT timestamps, and supports optional local `faster-whisper` transcription | Skill scripts |
+| Research orchestration | Splits independent research into bounded tasks, routes completed reports through verification, and prevents reviewers from running before their dependencies | Codex skill workflow |
+| Evidence and contradiction control | Separates claims, sources, contradictions, gaps, verification decisions, and approved evidence before learner-facing synthesis | Codex skill workflow |
+| Course and assessment generation | Builds source-grounded study guides, knowledge pages, question banks, and exam definitions from approved evidence | Codex skill workflow |
+| Citation validation | Validates source IDs, structured locators, support targets, answer explanations, and evidence packets before publication | Skill scripts |
+| Mastery records | Provides a validated script contract for updating question proficiency and the configured long-term interval curve | Skill script; application integration pending |
+| Tutoring and course updates | Runs source-grounded tutoring passes and reopens affected evidence, questions, and contradictions when sources or goals change | Codex skill workflow |
 
-| Resource organization | Mastery Ledger extension |
-|---|---|
-| Upload and categorize files | Register sources with provenance and processing state |
-| Browse by course or subject | Build a linked Knowledge Wiki from approved evidence |
-| Preview and search documents | Search claims and jump back to precise source locations |
-| Keep files local | Keep courses, attempts, and logs in a learner-selected workspace |
-| Retrieve study material | Generate focused exams and explain supported correct answers |
-| Maintain a clean archive | Track what is due until the learner owns the concept long-term |
+## Product interface
 
-Explore the complete [Study Ledger to Mastery Ledger demo](demo/study-ledger-course/README.md).
+### Workspace and ready exams
+
+The Exam Ledger landing page gathers due work, available exams, course state, source readiness, and the complete Ownership Curve without editing generated HTML for each course. The dashboard preview at the top of this README shows this surface.
 
 ## Exam Ledger
 
 Exam Ledger is the focused assessment interface inside Mastery Ledger. Learners answer selectable multiple-choice questions without hints. Incorrect choices are marked without revealing the answer; after a correct answer, the explanation becomes available and the source panel remains collapsed until opened.
 
-![Focused question exam concept](design-mockups/exam-concept-2-focused-question-v2.png)
+![Focused Question exam with selectable answers and collapsed source disclosure](design-mockups/exam-concept-2-focused-question-v2.png)
+
+_Focused Question design direction. The current runner implements selectable answers, the question palette, flags, timer, scoring, and source gating; durable notes and autosave remain future work._
 
 Question content is data, not generated interface code. A fixed local web template renders validated exam files. The current preview keeps an active attempt in application memory; the next persistence slice will write durable attempt and review records back to the course workspace.
 
-## Planned product areas
+### First-run workspace setup
 
-- **Source Inbox** — add files and links, inspect processing state, and revisit source provenance.
-- **Knowledge Wiki** — browse source-grounded concepts and relationships.
-- **Exam Ledger** — take focused mock exams and review supported explanations.
-- **Review Queue** — see questions due on the ownership curve.
-- **Evidence & Activity** — inspect source decisions, contradictions, agent handoffs, and machine-readable action events.
+Onboarding belongs to the application. The skill can detect that setup is required, but the learner confirms the workspace and processing choices in the protected local interface.
+
+![Mastery Ledger first-run workspace onboarding](design-mockups/onboarding-first-run.png)
+
+## What is next
+
+- **Durable attempts and review scheduling** — write completed attempts into the course and update each question's next due date.
+- **Review Queue sessions** — launch scheduled reviews from the dashboard and apply the learner's editable Ownership Curve.
+- **Source Inbox** — add files and links, inspect processing state, and revisit provenance from the application.
+- **Knowledge Wiki** — browse approved concepts, relationships, contradictions, and exact source locations.
+- **Evidence & Activity** — inspect source decisions, worker handoffs, rejected claims, and machine-readable action events.
+- **Workflow guardrails** — enforce `.work/` isolation, durable action logs, completion envelopes, and main-agent-only artifact promotion in executable code.
+- **Stable distribution** — publish tagged, checksummed application releases and signed installers.
 
 ## Application architecture
 
 The accepted standalone stack is a Python **FastAPI + SQLite** runtime with a **React + TypeScript** interface built by Vite. Release builds bundle the compiled frontend into the Python application, so learners do not need Node.js. Course knowledge and review artifacts remain portable files in a learner-selected workspace; SQLite holds the application index and durable processing queue.
 
 First-run onboarding belongs to the application because it validates and persists workspace, privacy, accessibility, dependency, and model-download choices. For an operational request, the optional Codex skill runs the read-only `mastery-ledger doctor --json`; an `onboarding_required` result launches the fixed local onboarding command once. A missing application is never downloaded or installed automatically. The skill passes proposed learning context without maintaining a second configuration system.
-
-![Mastery Ledger first-run onboarding](design-mockups/onboarding-first-run.png)
 
 ### Implemented application slice
 
@@ -273,7 +295,6 @@ pyproject.toml                           Python package and CLI definition
 src/mastery_ledger/                      FastAPI runtime, SQLite state, and bundled web assets
 web/                                     React and TypeScript frontend source
 tests/                                   application contract tests
-demo/study-ledger-course/                attributed, source-grounded demo
 design-mockups/                          dashboard and exam-interface concepts
 mastery-ledger/                         installable skill prototype
 MASTERY_LEDGER_DESIGN_DECISIONS.md      architecture decision record
@@ -281,8 +302,4 @@ LLM Wiki.md                              original knowledge-wiki concept notes
 LICENSE                                  MIT license
 ```
 
-The installable skill now uses the `mastery-ledger` identity. LinkVault appears only as an optional source connector; it is not a runtime dependency or storage owner.
-
-## Attribution
-
-The demo source is credited to Ritika Tiwari and linked directly. Its ideas are summarized and transformed in original wording; the presentation itself is not redistributed in this repository.
+The installable skill uses the `mastery-ledger` identity. LinkVault appears only as an optional source connector; it is not a runtime dependency or storage owner.

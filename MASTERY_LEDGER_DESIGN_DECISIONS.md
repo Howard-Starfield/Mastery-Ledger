@@ -180,7 +180,7 @@ Three high-fidelity directions were generated from the supplied exam screenshot 
 
 Artifacts:
 
-- `design-mockups/concept-a-exam-ledger.png`
+- `design-mockups/mastery-ledger-dashboard.png`
 - `design-mockups/concept-b-answer-sheet-command-center.png`
 - `design-mockups/concept-c-ownership-horizon.png`
 
