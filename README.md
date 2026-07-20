@@ -59,7 +59,7 @@ Question content is data, not generated interface code. A fixed local web templa
 
 The accepted standalone stack is a Python **FastAPI + SQLite** runtime with a **React + TypeScript** interface built by Vite. Release builds bundle the compiled frontend into the Python application, so learners do not need Node.js. Course knowledge and review artifacts remain portable files in a learner-selected workspace; SQLite holds the application index and durable processing queue.
 
-First-run onboarding belongs to the application because it validates and persists workspace, privacy, accessibility, dependency, and model-download choices. The optional Codex skill detects onboarding state, opens the application flow, and passes proposed learning context without maintaining a second configuration system.
+First-run onboarding belongs to the application because it validates and persists workspace, privacy, accessibility, dependency, and model-download choices. For an operational request, the optional Codex skill runs the read-only `mastery-ledger doctor --json`; an `onboarding_required` result launches the fixed local onboarding command once. A missing application is never downloaded or installed automatically. The skill passes proposed learning context without maintaining a second configuration system.
 
 ## Repository map
 

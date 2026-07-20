@@ -12,6 +12,7 @@ class SkillStructureTests(unittest.TestCase):
         required = [
             ROOT / "SKILL.md",
             ROOT / "agents" / "openai.yaml",
+            ROOT / "workflows" / "runtime-onboarding.md",
             ROOT / "workflows" / "intake-and-scope.md",
             ROOT / "workflows" / "orchestrate-research.md",
             ROOT / "workflows" / "ingest-material.md",

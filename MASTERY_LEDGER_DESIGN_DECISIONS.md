@@ -15,8 +15,9 @@ This document records product and architecture decisions for the `mastery-ledger
 | 7 | Course source layout, media, subtitles, and transcription | Revised; Python-package runtime and optional media-export design proposed below |
 | 8 | Runtime logs versus packaged assets | Accepted with Item 4 |
 | 9 | Codex-compatible `SKILL.md` frontmatter | Accepted and implemented |
-| 10 | Standalone product boundary and installation | Examined; standalone app plus optional skill adapter proposed below |
+| 10 | Standalone product boundary and installation | Accepted; standalone app plus optional skill adapter |
 | 11 | Product, skill, package, and command naming | Accepted: Mastery Ledger |
+| 12 | Application stack and onboarding ownership | Accepted; FastAPI, SQLite, React, TypeScript, Vite, and application-owned onboarding |
 
 ## Proposed course layout
 
@@ -45,13 +46,13 @@ The packaged skill contains reusable templates, schemas, scripts, and workflow i
 
 ## First-run workspace and registry
 
-On the first learning request, when no valid workspace has been configured, ask the learner where to create the Mastery Ledger workspace. Combine this with the mandatory source invitation so the first response contains no more than two high-impact questions:
+On the first operational learning request, run the application doctor. When no valid workspace has been configured, launch application-owned onboarding. The application asks where to create the Mastery Ledger workspace and includes the mandatory source invitation without duplicating those questions in chat:
 
 > Where should I create your Mastery Ledger workspace? Suggested: `<current-workspace>/mastery-ledger-courses`. You can provide another absolute folder path.
 >
 > Do you have any documents, links, websites, videos, audio, subtitles, or existing course material you want included or excluded?
 
-If the first user message already supplies a workspace path or source, do not ask for that information again. If a prior workspace registry exists and the directory is accessible, reuse it and state the selected workspace in the scope card. Ask again only when the configured path is unavailable, unwritable, or the user asks to change it.
+If the first user message already supplies a workspace path or source, pass it to onboarding as a proposed hint; the application must still display and validate a path before persistence. If a prior workspace registry exists and the directory is accessible, reuse it and state the selected workspace in the scope card. Launch workspace repair only when the configured path is unavailable, unwritable, or the user asks to change it.
 
 Persist the preference in a small per-user runtime registry, not in the installed skill:
 
@@ -1277,9 +1278,9 @@ python <repo-root>/scripts/bootstrap_runtime.py ensure --profile core
 
 Resolve the runtime in this order:
 
-1. an installed Exam Ledger application runtime;
+1. an installed Mastery Ledger application runtime;
 2. an explicitly configured compatible Python environment whose locked packages validate;
-3. the managed per-user Exam Ledger virtual environment;
+3. the managed per-user Mastery Ledger virtual environment;
 4. a `needs_user_action` result containing the official application installation action.
 
 The bootstrapper may create or repair the managed environment only after the learner has approved application/runtime installation. It must not install packages into the caller's global Python environment. Return the absolute runtime-Python path and an environment-manifest hash; all media scripts consume that exact result.
@@ -1585,6 +1586,27 @@ The standalone application is the canonical owner of onboarding because onboardi
 The skill is an adapter, not a second onboarding implementation. At the beginning of a run it calls `mastery-ledger doctor --json` when the runtime is available. If the runtime reports `onboarding_required`, the skill launches the application's documented onboarding entry point when the runtime supports it, or tells the learner how to open the application. It may pass user-provided source URLs, learning goals, or a proposed workspace path as onboarding hints, but the application must display, validate, and confirm them before persistence.
 
 If the application runtime is unavailable, the skill returns `needs_user_action` with installation guidance. A limited file-only fallback may ask for an output folder for the current run, but it must label that folder provisional and must not pretend it completed application onboarding or write the application registry itself.
+
+### Doctor and automatic launch contract
+
+Keep the root `SKILL.md` as a router and put the exact state machine, JSON shapes, commands, install boundary, and fallback rules in `workflows/runtime-onboarding.md`. This is a conditionally loaded workflow, not a second skill: creating a separate onboarding skill would introduce overlapping triggers and another product identity without providing an independent learner capability.
+
+`mastery-ledger doctor --json` is read-only. It never opens the browser, installs or updates packages, writes a workspace, or downloads a model. For operational course, ingestion, exam, or review requests, the skill interprets its versioned result:
+
+| Doctor result | Behavior |
+| --- | --- |
+| `ready` | Continue the requested workflow |
+| `onboarding_required` | State that first-time setup is needed, then invoke the fixed `mastery-ledger onboard --open --json` command once |
+| `workspace_unavailable` | Open application workspace repair when implemented; never silently relocate data |
+| `incompatible` | Stop and offer only the verified official update action |
+| invalid result or runtime error | Stop and report the observable error |
+| launcher not found | Classify as `not_installed`; do not attempt a substitute installation |
+
+Automatic launch is appropriate after `onboarding_required` because an operational Mastery Ledger request already expresses intent to use the local application. Do not launch anything for architecture questions, documentation review, or other non-operational requests. The application command owns loopback startup and browser opening, returns promptly, and is idempotent. Codex does not construct a URL, execute a command returned in JSON, or wait indefinitely for onboarding to finish. On the learner's next continuation, rerun doctor and continue only after `ready`.
+
+Do not automatically download or install Mastery Ledger. When it is absent, offer the verified signed release page or official package-manager action and obtain explicit approval before opening or executing it. Do not ask where to install the software in the normal flow: the installer uses the OS-standard per-user application location. Ask where to store the **learning workspace** during application onboarding. These are different decisions and must not share one path prompt.
+
+The installer owns the application and locked Python environment, including `yt-dlp`. Onboarding may request a learner-approved ASR model download after displaying its expected size. Optional native media-export tools require separate approval. None of these dependencies, models, sources, or generated courses belong in the skill directory.
 
 ### First-run and later-run flow
 

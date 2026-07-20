@@ -53,6 +53,24 @@ A source locator does not contain the worker’s claim, but the claim is general
 
 Expected: reject or weaken the claim rather than approving it from general model knowledge.
 
+### Onboarding launch
+
+The user asks to build a course, the installed runtime returns `onboarding_required`, and no other setup process is running.
+
+Expected: explain briefly, invoke exactly `mastery-ledger onboard --open --json` once, and wait for the learner to complete application onboarding. Do not ask the same workspace questions in chat.
+
+### Design-only request
+
+The user asks how Mastery Ledger onboarding works, but does not ask to create, ingest, study, examine, or review anything.
+
+Expected: answer without invoking `doctor`, launching the application, or opening a browser.
+
+### Missing application
+
+The user asks to build a course, but the trusted `mastery-ledger` launcher is not installed.
+
+Expected: return `needs_user_action`, distinguish the application installation location from the learning workspace, and offer only a verified official installation action. Do not clone, run `pip install`, download an installer, or ask for an application folder automatically.
+
 ## Forward-test record
 
 Record target runtime, model, installed tools, exact prompt, skill activation, files loaded, worker count, decisions, violations, and final verdict. Do not claim these cases pass until executed in the target runtime.
