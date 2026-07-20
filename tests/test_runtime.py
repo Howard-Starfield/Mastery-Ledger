@@ -135,3 +135,109 @@ def test_doctor_cli_emits_one_json_object(runtime_home: Path, capsys: pytest.Cap
     assert payload["schema_version"] == "doctor-v1"
     assert payload["status"] == "onboarding_required"
     assert captured.err == ""
+
+
+def test_dashboard_discovers_ready_exams_and_review_queue(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    app = create_app(session_token="test-session", web_dir=tmp_path / "missing-web")
+    workspace = tmp_path / "Learning"
+
+    with TestClient(app) as client:
+        client.get("/bootstrap/test-session", follow_redirects=False)
+        completion = client.post(
+            "/api/v1/onboarding/complete",
+            json={
+                "workspace_path": str(workspace),
+                "workspace_name": "Dashboard workspace",
+                "language": "en",
+                "processing_mode": "local_only",
+                "reduced_motion": False,
+                "review_intervals": [1, 3, 7, 14],
+                "initial_source_hint": None,
+            },
+        )
+        assert completion.status_code == 200
+
+        course = workspace / "courses" / "course-one"
+        (course / "questions").mkdir(parents=True)
+        (course / "progress").mkdir()
+        (course / "source").mkdir()
+        (course / "exams" / "EXAM-READY").mkdir(parents=True)
+        (course / "exams" / "EXAM-DRAFT").mkdir()
+        (course / "course.yaml").write_text(
+            "course_id: COURSE-ONE\ntitle: Clinical Foundations\nupdated_at: '2026-07-20T10:00:00Z'\n",
+            encoding="utf-8",
+        )
+        (course / "questions" / "question-bank.json").write_text(
+            json.dumps({"questions": [{"question_id": "Q-1"}, {"question_id": "Q-2"}]}),
+            encoding="utf-8",
+        )
+        (course / "progress" / "review-queue.json").write_text(
+            json.dumps(
+                {
+                    "questions": [
+                        {"question_id": "Q-1", "stage_index": 0, "next_due_at": "2020-01-01T00:00:00Z"},
+                        {"question_id": "Q-2", "stage_index": 2, "next_due_at": "2999-01-01T00:00:00Z"},
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        (course / "source" / "source-manifest.yaml").write_text(
+            "sources:\n  - source_id: SRC-1\n    processing_status: ready\n  - source_id: SRC-2\n    processing_status: pending\n",
+            encoding="utf-8",
+        )
+        (course / "exams" / "EXAM-READY" / "exam.json").write_text(
+            json.dumps(
+                {
+                    "exam_id": "EXAM-READY",
+                    "course_id": "COURSE-ONE",
+                    "title": "Clinical Foundations Mock Exam",
+                    "status": "ready",
+                    "question_count": 40,
+                    "estimated_minutes": 60,
+                    "concepts": ["diagnosis", "treatment"],
+                    "created_at": "2026-07-20T12:00:00Z",
+                    "source_status": "verified",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (course / "exams" / "EXAM-DRAFT" / "exam.json").write_text(
+            json.dumps({"exam_id": "EXAM-DRAFT", "status": "draft", "questions": []}),
+            encoding="utf-8",
+        )
+
+        response = client.get("/api/v1/dashboard")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dashboard-v1"
+    assert payload["workspace"]["name"] == "Dashboard workspace"
+    assert payload["due_now"] == 1
+    assert [exam["exam_id"] for exam in payload["ready_exams"]] == ["EXAM-READY"]
+    assert payload["ready_exams"][0]["source_status"] == "verified"
+    assert payload["recent_courses"][0] == {
+        "course_id": "COURSE-ONE",
+        "title": "Clinical Foundations",
+        "question_count": 2,
+        "ready_exam_count": 1,
+        "due_count": 1,
+        "source_count": 2,
+        "source_ready_count": 1,
+        "updated_at": "2026-07-20T10:00:00Z",
+    }
+    assert [stage["interval_days"] for stage in payload["ownership_curve"]] == [1, 3, 7, 14]
+    assert [stage["question_count"] for stage in payload["ownership_curve"]] == [1, 0, 1, 0]
+
+
+def test_dashboard_requires_completed_onboarding(runtime_home: Path, tmp_path: Path) -> None:
+    app = create_app(session_token="test-session", web_dir=tmp_path / "missing-web")
+
+    with TestClient(app) as client:
+        client.get("/bootstrap/test-session", follow_redirects=False)
+        response = client.get("/api/v1/dashboard")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Complete onboarding before opening the workspace dashboard."

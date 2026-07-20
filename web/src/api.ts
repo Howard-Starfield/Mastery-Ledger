@@ -42,6 +42,54 @@ export interface OnboardingResult {
   }
 }
 
+export interface ApplicationStatus {
+  schema_version: 'doctor-v1'
+  status: 'ready' | 'onboarding_required' | 'workspace_unavailable' | 'incompatible' | 'runtime_error'
+  app_version: string
+  onboarding_required: boolean
+  active_workspace: OnboardingResult['workspace'] | null
+  action: string | null
+}
+
+export interface DashboardExam {
+  exam_id: string
+  course_id: string
+  course_title: string
+  title: string
+  question_count: number
+  estimated_minutes: number
+  concepts: string[]
+  created_at: string | null
+  source_status: 'verified' | 'ready' | 'review_needed'
+}
+
+export interface DashboardCourse {
+  course_id: string
+  title: string
+  question_count: number
+  ready_exam_count: number
+  due_count: number
+  source_count: number
+  source_ready_count: number
+  updated_at: string | null
+}
+
+export interface OwnershipStage {
+  stage_index: number
+  interval_days: number
+  question_count: number
+}
+
+export interface DashboardResult {
+  schema_version: 'dashboard-v1'
+  workspace: OnboardingResult['workspace']
+  due_now: number
+  ready_exams: DashboardExam[]
+  recent_courses: DashboardCourse[]
+  ownership_curve: OwnershipStage[]
+  warnings: string[]
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: 'same-origin',
@@ -73,4 +121,9 @@ export const onboardingApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+}
+
+export const applicationApi = {
+  status: () => request<ApplicationStatus>('/api/v1/status'),
+  dashboard: () => request<DashboardResult>('/api/v1/dashboard'),
 }

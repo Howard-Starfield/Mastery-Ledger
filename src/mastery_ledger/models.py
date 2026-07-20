@@ -78,3 +78,42 @@ class OnboardingResult(BaseModel):
     schema_version: Literal["onboarding-result-v1"] = "onboarding-result-v1"
     status: Literal["complete"] = "complete"
     workspace: WorkspaceState
+
+
+class DashboardExam(BaseModel):
+    exam_id: str
+    course_id: str
+    course_title: str
+    title: str
+    question_count: int = Field(ge=0)
+    estimated_minutes: int = Field(ge=0)
+    concepts: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+    source_status: Literal["verified", "ready", "review_needed"] = "ready"
+
+
+class DashboardCourse(BaseModel):
+    course_id: str
+    title: str
+    question_count: int = Field(ge=0)
+    ready_exam_count: int = Field(ge=0)
+    due_count: int = Field(ge=0)
+    source_count: int = Field(ge=0)
+    source_ready_count: int = Field(ge=0)
+    updated_at: str | None = None
+
+
+class OwnershipStage(BaseModel):
+    stage_index: int = Field(ge=0)
+    interval_days: int = Field(ge=1)
+    question_count: int = Field(ge=0)
+
+
+class DashboardResult(BaseModel):
+    schema_version: Literal["dashboard-v1"] = "dashboard-v1"
+    workspace: WorkspaceState
+    due_now: int = Field(ge=0)
+    ready_exams: list[DashboardExam] = Field(default_factory=list)
+    recent_courses: list[DashboardCourse] = Field(default_factory=list)
+    ownership_curve: list[OwnershipStage] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

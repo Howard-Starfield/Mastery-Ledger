@@ -1,12 +1,15 @@
 import { type CSSProperties, type FormEvent, useEffect, useMemo, useState } from 'react'
 
 import {
+  applicationApi,
   onboardingApi,
+  type ApplicationStatus,
   type OnboardingDefaults,
   type OnboardingResult,
   type ProcessingMode,
   type WorkspaceValidation,
 } from './api'
+import Dashboard from './Dashboard'
 import { formatReviewIntervals, parseReviewIntervals } from './reviewIntervals'
 
 const steps = [
@@ -72,7 +75,7 @@ function ArrowIcon() {
   )
 }
 
-function App() {
+function OnboardingApp() {
   const [step, setStep] = useState(0)
   const [form, setForm] = useState<FormState>(emptyForm)
   const [defaults, setDefaults] = useState<OnboardingDefaults | null>(null)
@@ -222,6 +225,9 @@ function App() {
           <div className="completion-card__note">
             Return to Codex and continue your original request. The next doctor check will report <code>ready</code>.
           </div>
+          <button className="button button--primary completion-card__action" type="button" onClick={() => window.location.assign('/')}>
+            Open Exam Ledger <ArrowIcon />
+          </button>
         </section>
       </main>
     )
@@ -461,6 +467,44 @@ function App() {
       </section>
     </main>
   )
+}
+
+function App() {
+  const [status, setStatus] = useState<ApplicationStatus | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
+
+  useEffect(() => {
+    applicationApi
+      .status()
+      .then(setStatus)
+      .catch((cause: Error) => setStatusError(cause.message))
+  }, [])
+
+  if (statusError) {
+    return (
+      <main className="launch-state launch-state--error">
+        <LedgerMark />
+        <h1>Local session unavailable</h1>
+        <p>{statusError}</p>
+        <code>mastery-ledger onboard --open --json</code>
+      </main>
+    )
+  }
+
+  if (!status) {
+    return (
+      <main className="launch-state" aria-busy="true">
+        <LedgerMark />
+        <p>Reading the ledger…</p>
+      </main>
+    )
+  }
+
+  if (status.status === 'ready' && status.active_workspace) {
+    return <Dashboard workspaceName={status.active_workspace.name} />
+  }
+
+  return <OnboardingApp />
 }
 
 export default App

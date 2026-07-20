@@ -10,8 +10,10 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from mastery_ledger.config import bundled_web_dir, default_workspace_path
+from mastery_ledger.dashboard import build_dashboard
 from mastery_ledger.database import initialize_database, save_onboarding
 from mastery_ledger.models import (
+    DashboardResult,
     DoctorResult,
     OnboardingRequest,
     OnboardingResult,
@@ -52,6 +54,16 @@ def create_app(*, session_token: str | None = None, web_dir: Path | None = None)
     @app.get("/api/v1/status", response_model=DoctorResult, dependencies=[Depends(require_session)])
     def application_status() -> DoctorResult:
         return build_doctor_result()
+
+    @app.get("/api/v1/dashboard", response_model=DashboardResult, dependencies=[Depends(require_session)])
+    def dashboard() -> DashboardResult:
+        doctor = build_doctor_result()
+        if doctor.status != "ready" or doctor.active_workspace is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Complete onboarding before opening the workspace dashboard.",
+            )
+        return build_dashboard(doctor.active_workspace)
 
     @app.get("/api/v1/onboarding/defaults", dependencies=[Depends(require_session)])
     def onboarding_defaults() -> dict[str, object]:

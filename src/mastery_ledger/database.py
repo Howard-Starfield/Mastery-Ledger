@@ -86,6 +86,29 @@ def active_workspace(path: Path | None = None) -> sqlite3.Row | None:
         raise DatabaseReadError(f"The application database could not be read: {error}") from error
 
 
+def read_setting(key: str, default: object = None, path: Path | None = None) -> object:
+    target = path or database_path()
+    if not target.exists():
+        return default
+    uri = f"{target.resolve().as_uri()}?mode=ro"
+    try:
+        connection = sqlite3.connect(uri, uri=True)
+        connection.row_factory = sqlite3.Row
+        with closing(connection):
+            row = connection.execute(
+                "SELECT value_json FROM settings WHERE key = ? LIMIT 1",
+                (key,),
+            ).fetchone()
+    except sqlite3.Error as error:
+        raise DatabaseReadError(f"The application database could not be read: {error}") from error
+    if row is None:
+        return default
+    try:
+        return json.loads(row["value_json"])
+    except (TypeError, json.JSONDecodeError):
+        return default
+
+
 def save_onboarding(request: OnboardingRequest, workspace_path: Path) -> WorkspaceState:
     initialize_database()
     timestamp = utc_now()

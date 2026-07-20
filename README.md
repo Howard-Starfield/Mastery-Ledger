@@ -2,7 +2,7 @@
 
 Turn scattered sources into grounded knowledge, exam practice, and a review record that can last for years.
 
-> **Project status:** Mastery Ledger now includes an executable first-run application scaffold and skill prototype. Course ingestion, exam delivery, review scheduling, and signed installers remain under development.
+> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, and the skill prototype. Course ingestion, focused exam delivery, review execution, and signed installers remain under development.
 
 ![Mastery Ledger dashboard concept](design-mockups/concept-a-exam-ledger.png)
 
@@ -110,11 +110,13 @@ First-run onboarding belongs to the application because it validates and persist
 - SQLite-backed workspace registry and onboarding preferences.
 - Absolute-path validation and atomic first-workspace creation.
 - React onboarding for source invitation, workspace, privacy, accessibility, and editable review intervals.
+- Workspace dashboard that discovers course manifests, ready exams, due questions, source readiness, and Ownership Curve stages from portable course files.
+- Scrollable and searchable Ready Exams register with course filtering and an exam-detail sheet.
 - Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
 
 ## Install and test the preview
 
-The onboarding slice is ready for developer testing. It is not yet a signed learner release, and completing onboarding currently ends on a setup receipt rather than the unfinished course dashboard.
+The onboarding and workspace-dashboard slices are ready for developer testing. This is not yet a signed learner release; completing onboarding shows a setup receipt with an action that opens Exam Ledger.
 
 ### 1. Install the local application
 
@@ -181,6 +183,9 @@ onboarding_required
 - The default curve includes `1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584` days.
 - No ASR model, FFmpeg binary, or source media is downloaded during onboarding.
 - A second `mastery-ledger doctor --json` reports the saved workspace and `ready` status.
+- The Exam Ledger dashboard discovers only exams whose canonical `exam.json` status is `ready`.
+- Search and course filters operate within the internally scrollable Ready Exams register.
+- Due totals and Ownership Curve counts match each course's `progress/review-queue.json` records.
 
 For an isolated manual run that does not touch the normal per-user registry or course location, set these variables in the same terminal before running `doctor` or `onboard`:
 
