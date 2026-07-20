@@ -24,10 +24,11 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 
 ## Start every run
 
-1. Detect available capabilities: filesystem, web, PDF/media reading, scripts, persistent storage, subagents, parallelism, and source-citation support.
-2. Look for an existing `study.yaml` and resume it when the request belongs to that study.
-3. Determine the mode: `provided-material-only`, `existing-library`, `local-media`, `topic-research`, or `hybrid`.
-4. Read [intake and scope](workflows/intake-and-scope.md). Do not launch broad research before the scope and worker budget are approved.
+1. Detect available capabilities: the Mastery Ledger runtime, filesystem, web, PDF/media reading, scripts, persistent storage, subagents, parallelism, and source-citation support.
+2. When the runtime exists, call its documented `doctor --json` operation. If it reports `onboarding_required`, route the learner to application-owned onboarding; pass supplied paths, sources, or goals only as proposed hints and never write the application registry directly.
+3. Look for an existing `study.yaml` and resume it when the request belongs to that study.
+4. Determine the mode: `provided-material-only`, `existing-library`, `local-media`, `topic-research`, or `hybrid`.
+5. Read [intake and scope](workflows/intake-and-scope.md). Do not launch broad research before the scope and worker budget are approved.
 
 ## Route by phase
 

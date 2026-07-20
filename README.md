@@ -55,6 +55,12 @@ Question content is data, not generated interface code. A fixed local web templa
 - **Review Queue** — see questions due on the ownership curve.
 - **Evidence & Activity** — inspect source decisions, contradictions, agent handoffs, and machine-readable action events.
 
+## Application architecture
+
+The accepted standalone stack is a Python **FastAPI + SQLite** runtime with a **React + TypeScript** interface built by Vite. Release builds bundle the compiled frontend into the Python application, so learners do not need Node.js. Course knowledge and review artifacts remain portable files in a learner-selected workspace; SQLite holds the application index and durable processing queue.
+
+First-run onboarding belongs to the application because it validates and persists workspace, privacy, accessibility, dependency, and model-download choices. The optional Codex skill detects onboarding state, opens the application flow, and passes proposed learning context without maintaining a second configuration system.
+
 ## Repository map
 
 ```text

@@ -1043,9 +1043,9 @@ The main agent reads the prioritized inbox instead of receiving every raw worker
 
 #### Language and dependencies
 
-Implement all workspace creation, boundary checks, event merging, promotion, and finalization in **CPython 3.10 or newer**. Use the Python standard library only for these guardrails so the same commands work on Windows, macOS, and Linux. Do not make Bash, PowerShell, Node.js, or an LLM-generated script part of the canonical workflow.
+Implement all workspace creation, boundary checks, event merging, promotion, and finalization in **CPython 3.11 or newer**. Use the Python standard library only for these guardrails so the same commands work on Windows, macOS, and Linux. Do not make Bash, PowerShell, Node.js, or an LLM-generated script part of the canonical workflow.
 
-Detect Python before starting a guarded run. If Python 3.10+ is unavailable, return `blocked` and ask the learner to install or select a supported runtime. Do not simulate the guardrails with ad hoc shell commands.
+Detect Python before starting a guarded run. If Python 3.11+ is unavailable, return `blocked` and ask the learner to install or select a supported runtime. Do not simulate the guardrails with ad hoc shell commands.
 
 Use formats by responsibility:
 
@@ -1167,7 +1167,7 @@ Use exit code `0` for success, `2` for validation failure or required user actio
 Require the main agent to execute this state machine exactly:
 
 ```text
-1. Detect Python 3.10+ and resolve the packaged skill root.
+1. Detect Python 3.11+ and resolve the packaged skill root.
 2. Run init_study.py only when the course does not yet exist.
 3. Run workspace_runtime.py prepare-run and use only its returned paths.
 4. Call next-tasks and dispatch only returned task IDs; prepare each with prepare-task.
@@ -1212,7 +1212,7 @@ The default writable course root should be:
 <active-workspace>/mastery-ledger-courses/<course-id>/
 ```
 
-When no writable workspace exists, use a user data location such as `~/ExamLedger/courses/<course-id>/`. Record the resolved absolute course root for the current run, but keep paths inside `course.yaml` relative so the course folder remains movable.
+When no writable workspace exists, use a user data location such as `~/MasteryLedger/courses/<course-id>/`. Record the resolved absolute course root for the current run, but keep paths inside `course.yaml` relative so the course folder remains movable.
 
 ### Prevent path confusion
 
@@ -1537,3 +1537,81 @@ The preliminary search is a collision screen, not trademark, package-index, doma
 ### Item 11 accepted decision
 
 Adopt **Mastery Ledger** for the standalone product, application, CLI namespace, and main Codex skill. Retain **Exam Ledger** as the exam interface and use **ingest** as an operation rather than the skill's identity.
+
+## 12. Application stack and onboarding ownership
+
+### Accepted stack
+
+Use one local application with a separately built frontend:
+
+```text
+React + TypeScript source
+        │ release build
+        ▼
+prebuilt static assets
+        │ served same-origin
+        ▼
+FastAPI on 127.0.0.1
+        ├── validated /api/v1 routes
+        ├── workspace boundary service
+        ├── SQLite application index and durable job queue
+        └── course folders remain portable files
+```
+
+**Backend:** CPython 3.11 or newer, FastAPI, Uvicorn, Pydantic models, and the standard-library `sqlite3` driver initially. FastAPI owns the loopback API, validation boundary, application lifespan, and delivery of the prebuilt web assets. Bind only to `127.0.0.1`, use a random per-launch session token, keep the UI and API same-origin, and never expose an arbitrary filesystem route.
+
+SQLite stores application-level state that benefits from transactions and queries: the workspace registry, course index, durable job queue, schema versions, and recoverable processing status. It does not replace the course folder. Sources, knowledge pages, exams, attempts, question banks, review history, and auditable logs remain portable course artifacts in the learner-selected workspace.
+
+Media download, subtitle extraction, and transcription are durable application jobs. Do not implement them with FastAPI request-scoped background tasks. Persist a job before execution, run the worker outside the request lifecycle, write outputs through staging and atomic promotion, and recover interrupted jobs after restart.
+
+**Frontend:** React with TypeScript, built as a static single-page application with Vite. React fits the shared state and reusable interaction surfaces in the approved designs: workspace switching, scrollable exam lists, answer-sheet navigation, question feedback states, collapsed citation panels, due queues, and editable review curves. Keep canonical state in backend schemas; store only UI state and unsaved form state in React. Use semantic controls such as real buttons, radio groups, headings, and dialogs.
+
+Vite and Node.js are development and release-build dependencies only. The release pipeline builds the frontend once and copies its output into `src/mastery_ledger/web/`. Learners receive those prebuilt assets and do not need Node.js. Use a pinned lockfile and a relative or explicitly configured base path so packaged assets resolve correctly.
+
+Do not adopt Electron, Next.js, a remote hosted service, or a second Node backend for the first release. They duplicate Python-owned filesystem and media responsibilities or add a runtime the learner does not otherwise need. A thin native shell can be evaluated later if browser-mode folder selection or OS integration proves insufficient.
+
+### Onboarding belongs to the application
+
+The standalone application is the canonical owner of onboarding because onboarding creates durable state and must work without Codex. It owns:
+
+1. the welcome, local-first, and processing-privacy explanation;
+2. workspace selection, path canonicalization, write testing, and registry persistence;
+3. language and accessibility preferences;
+4. dependency and capability checks;
+5. explicit approval before downloading an ASR model, including its expected size;
+6. the initial review-curve profile, with safe defaults and later editing;
+7. an invitation to add the first source now or continue to an empty dashboard.
+
+The skill is an adapter, not a second onboarding implementation. At the beginning of a run it calls `mastery-ledger doctor --json` when the runtime is available. If the runtime reports `onboarding_required`, the skill launches the application's documented onboarding entry point when the runtime supports it, or tells the learner how to open the application. It may pass user-provided source URLs, learning goals, or a proposed workspace path as onboarding hints, but the application must display, validate, and confirm them before persistence.
+
+If the application runtime is unavailable, the skill returns `needs_user_action` with installation guidance. A limited file-only fallback may ask for an output folder for the current run, but it must label that folder provisional and must not pretend it completed application onboarding or write the application registry itself.
+
+### First-run and later-run flow
+
+```text
+Application launch or skill invocation
+  -> mastery-ledger doctor --json
+  -> configured: open the active workspace dashboard
+  -> onboarding required: open application onboarding
+       -> validate and save workspace
+       -> record privacy and accessibility preferences
+       -> run capability checks
+       -> request approval for optional model downloads
+       -> optionally add the first source
+       -> open Source Inbox or dashboard
+```
+
+Workspace changes after onboarding also go through application settings. The skill may request the change, but it must not silently switch, migrate, or rewrite registered workspaces.
+
+### Item 12 accepted decision
+
+Build the standalone runtime with **FastAPI + SQLite** and the interface with **React + TypeScript + Vite**, shipping prebuilt frontend assets inside the Python release. Put canonical onboarding in the application; keep the skill responsible only for detection, launch, context handoff, and a clearly limited fallback.
+
+### Item 12 implementation references
+
+- [FastAPI lifespan events](https://fastapi.tiangolo.com/advanced/events/)
+- [FastAPI static files](https://fastapi.tiangolo.com/tutorial/static-files/)
+- [FastAPI background-task caveats](https://fastapi.tiangolo.com/tutorial/background-tasks/)
+- [React state structure](https://react.dev/learn/choosing-the-state-structure)
+- [React guidance on unnecessary effects](https://react.dev/learn/you-might-not-need-an-effect)
+- [Vite production builds](https://vite.dev/guide/build.html)

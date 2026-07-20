@@ -44,9 +44,11 @@ The skill may call an installed Mastery Ledger runtime when exposed. Tool names 
 
 The durable application service should own operational state. The skill should not open or mutate an application database directly unless that database contract explicitly allows it.
 
+Application onboarding is also runtime-owned. The skill may detect onboarding state, launch the documented onboarding entry point, and pass proposed context. The application must validate and confirm workspace paths, privacy choices, model downloads, and registry changes. A script-only fallback may ask for a provisional output folder for the current run, but it must not claim to have configured the application.
+
 ## Optional dependencies
 
-- Python 3.10+ for bundled utilities;
+- Python 3.11+ for bundled utilities;
 - `yt-dlp` for permitted remote media acquisition;
 - `faster-whisper` for optional local ASR;
 - media codecs supported by the ASR stack.
