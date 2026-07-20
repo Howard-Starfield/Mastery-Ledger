@@ -109,6 +109,24 @@ def read_setting(key: str, default: object = None, path: Path | None = None) -> 
         return default
 
 
+def save_settings(values: dict[str, object], path: Path | None = None) -> None:
+    """Persist a group of application settings in one SQLite transaction."""
+    initialize_database(path)
+    timestamp = utc_now()
+    with closing(connect(path)) as connection:
+        for key, value in values.items():
+            connection.execute(
+                """
+                INSERT INTO settings(key, value_json, updated_at) VALUES(?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value_json = excluded.value_json,
+                    updated_at = excluded.updated_at
+                """,
+                (key, json.dumps(value), timestamp),
+            )
+        connection.commit()
+
+
 def save_onboarding(request: OnboardingRequest, workspace_path: Path) -> WorkspaceState:
     initialize_database()
     timestamp = utc_now()
@@ -141,6 +159,24 @@ def save_onboarding(request: OnboardingRequest, workspace_path: Path) -> Workspa
             "processing_mode": request.processing_mode,
             "reduced_motion": request.reduced_motion,
             "review_intervals": request.review_intervals,
+            "active_review_curve": {
+                "curve_id": "CURVE-OWNERSHIP",
+                "version": 1,
+                "name": "My ownership curve",
+                "interval_days": request.review_intervals,
+                "created_at": timestamp,
+                "supersedes_version": None,
+            },
+            "review_curve_history": [
+                {
+                    "curve_id": "CURVE-OWNERSHIP",
+                    "version": 1,
+                    "name": "My ownership curve",
+                    "interval_days": request.review_intervals,
+                    "created_at": timestamp,
+                    "supersedes_version": None,
+                }
+            ],
             "initial_source_hint": request.initial_source_hint or None,
             "onboarding_complete": True,
         }

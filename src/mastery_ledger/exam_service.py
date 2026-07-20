@@ -13,16 +13,13 @@ from typing import Any, Callable
 from urllib.parse import urlparse
 
 from mastery_ledger.dashboard import (
-    DEFAULT_REVIEW_INTERVALS,
     _course_roots,
     _inside,
     _list_records,
     _manifest,
     _read_json,
     _read_yaml,
-    _valid_intervals,
 )
-from mastery_ledger.database import read_setting
 from mastery_ledger.models import (
     ExamAttemptStart,
     ExamCompletion,
@@ -30,9 +27,11 @@ from mastery_ledger.models import (
     ExamQuestionView,
     QuestionFeedback,
     QuestionReview,
+    ReviewCurveProfile,
     SourceDisclosure,
     WorkspaceState,
 )
+from mastery_ledger.settings_service import active_review_curve, valid_intervals
 
 MAX_QUESTIONS = 500
 MAX_ATTEMPTS = 100
@@ -543,7 +542,7 @@ def _update_review_queue(
     state: AttemptState,
     completion: ExamCompletion,
     completed_at: datetime,
-    intervals: list[int],
+    curve: ReviewCurveProfile,
 ) -> dict[str, Any]:
     path, existing = _review_queue_payload(state.exam.course_root)
     applied = existing.get("applied_attempt_ids", [])
@@ -563,6 +562,11 @@ def _update_review_queue(
     if len(indexed) != len(records):
         raise AttemptStorageError("The review queue has missing or duplicate question IDs.")
     timestamp = _timestamp(completed_at)
+    active_curve_fields = {
+        "curve_id": curve.curve_id,
+        "curve_version": curve.version,
+        "curve_intervals": curve.interval_days,
+    }
 
     for question, review in zip(state.exam.questions, completion.questions, strict=True):
         record = indexed.get(question.view.question_id)
@@ -573,25 +577,36 @@ def _update_review_queue(
                 "question_version": question.version,
                 "concept_ids": question.view.concept_ids,
                 "stage_index": 0,
-                "interval_days": intervals[0],
+                "interval_days": curve.interval_days[0],
                 "last_due_at": None,
                 "last_reviewed_at": timestamp if answered else None,
-                "next_due_at": _timestamp(completed_at + timedelta(days=intervals[0])),
+                "last_successful_due_review_at": None,
+                "scheduled_from_at": timestamp,
+                "next_due_at": _timestamp(
+                    completed_at + timedelta(days=curve.interval_days[0])
+                ),
                 "due_success_count": 0,
                 "lapse_count": 0,
                 "early_practice_count": 1 if answered else 0,
                 "last_result": review.status,
                 "last_attempt_id": state.attempt_id,
                 "status": "learning",
+                **active_curve_fields,
             }
             records.append(record)
             indexed[question.view.question_id] = record
             continue
 
+        record_intervals = valid_intervals(
+            record.get("curve_intervals", existing.get("curve_intervals", curve.interval_days))
+        )
+        record.setdefault("curve_id", curve.curve_id)
+        record.setdefault("curve_version", curve.version)
+        record["curve_intervals"] = record_intervals
         stage = record.get("stage_index", 0)
         if not isinstance(stage, int):
             stage = 0
-        stage = min(max(stage, 0), len(intervals) - 1)
+        stage = min(max(stage, 0), len(record_intervals) - 1)
         next_due = _parse_timestamp(record.get("next_due_at"))
         if next_due is None:
             raise AttemptStorageError(
@@ -603,15 +618,35 @@ def _update_review_queue(
         record["last_result"] = review.status
         record["last_attempt_id"] = state.attempt_id
 
+        scheduling_intervals = record_intervals
+        pending_intervals = record.get("pending_curve_intervals")
+        apply_pending = (
+            is_due
+            and review.status in {"correct", "incorrect"}
+            and isinstance(pending_intervals, list)
+            and valid_intervals(pending_intervals) == pending_intervals
+        )
+        if apply_pending:
+            scheduling_intervals = pending_intervals
+            stage = min(stage, len(scheduling_intervals) - 1)
+            record["curve_id"] = str(record.get("pending_curve_id") or curve.curve_id)
+            pending_version = record.get("pending_curve_version", curve.version)
+            record["curve_version"] = (
+                pending_version if isinstance(pending_version, int) and pending_version > 0 else curve.version
+            )
+            record["curve_intervals"] = scheduling_intervals
+
         if review.status == "correct":
             record["last_reviewed_at"] = timestamp
             if is_due:
-                stage = min(stage + 1, len(intervals) - 1)
+                stage = min(stage + 1, len(scheduling_intervals) - 1)
                 record["last_due_at"] = _timestamp(next_due)
+                record["last_successful_due_review_at"] = timestamp
                 record["due_success_count"] = int(record.get("due_success_count", 0)) + 1
                 record["next_due_at"] = _timestamp(
-                    completed_at + timedelta(days=intervals[stage])
+                    completed_at + timedelta(days=scheduling_intervals[stage])
                 )
+                record["scheduled_from_at"] = timestamp
             else:
                 record["early_practice_count"] = int(
                     record.get("early_practice_count", 0)
@@ -623,17 +658,21 @@ def _update_review_queue(
                 record["last_due_at"] = _timestamp(next_due)
                 record["lapse_count"] = int(record.get("lapse_count", 0)) + 1
                 record["next_due_at"] = _timestamp(
-                    completed_at + timedelta(days=intervals[0])
+                    completed_at + timedelta(days=scheduling_intervals[0])
                 )
+                record["scheduled_from_at"] = timestamp
             else:
                 record["early_practice_count"] = int(
                     record.get("early_practice_count", 0)
                 ) + 1
+        if apply_pending:
+            for key in ("pending_curve_id", "pending_curve_version", "pending_curve_intervals"):
+                record.pop(key, None)
         record["stage_index"] = stage
-        record["interval_days"] = intervals[stage]
+        record["interval_days"] = scheduling_intervals[stage]
         record["status"] = (
             "maintenance"
-            if stage == len(intervals) - 1 and review.status == "correct" and is_due
+            if stage == len(scheduling_intervals) - 1 and review.status == "correct" and is_due
             else "learning"
         )
 
@@ -646,7 +685,9 @@ def _update_review_queue(
         **preserved,
         "schema_version": "review-queue-v1",
         "course_id": state.exam.course_id,
-        "curve_intervals": intervals,
+        "curve_id": curve.curve_id,
+        "curve_version": curve.version,
+        "curve_intervals": curve.interval_days,
         "updated_at": timestamp,
         "applied_attempt_ids": [*applied_ids, state.attempt_id],
         "questions": records,
@@ -908,14 +949,12 @@ class ExamSessionStore:
 
             completed_at = self._clock().astimezone(UTC)
             completion = _build_completion(attempt)
-            intervals = _valid_intervals(
-                read_setting("review_intervals", DEFAULT_REVIEW_INTERVALS)
-            )
+            curve = active_review_curve()
             review_queue = _update_review_queue(
                 attempt,
                 completion,
                 completed_at,
-                intervals,
+                curve,
             )
             _update_learner_progress(
                 attempt,

@@ -21,6 +21,7 @@ from mastery_ledger.exam_service import (
     ExamValidationError,
 )
 from mastery_ledger.models import (
+    ApplicationSettings,
     DashboardResult,
     DoctorResult,
     ExamAttemptStart,
@@ -29,12 +30,20 @@ from mastery_ledger.models import (
     OnboardingResult,
     QuestionFeedback,
     QuestionSubmissionRequest,
+    ReviewCurveUpdateRequest,
+    ReviewCurveUpdateResult,
     WorkspaceState,
     WorkspaceValidationRequest,
     WorkspaceValidationResult,
 )
 from mastery_ledger.review_service import ReviewNotFoundError, start_due_review
 from mastery_ledger.runtime import build_doctor_result, validate_workspace
+from mastery_ledger.settings_service import (
+    DEFAULT_REVIEW_INTERVALS,
+    SettingsUpdateError,
+    application_settings,
+    update_review_curve,
+)
 
 SESSION_COOKIE = "mastery_ledger_session"
 
@@ -88,6 +97,28 @@ def create_app(*, session_token: str | None = None, web_dir: Path | None = None)
                 detail="Complete onboarding before starting an exam.",
             )
         return doctor.active_workspace
+
+    @app.get(
+        "/api/v1/settings",
+        response_model=ApplicationSettings,
+        dependencies=[Depends(require_session)],
+    )
+    def settings() -> ApplicationSettings:
+        return application_settings(ready_workspace())
+
+    @app.put(
+        "/api/v1/settings/review-curve",
+        response_model=ReviewCurveUpdateResult,
+        dependencies=[Depends(require_session)],
+    )
+    def save_review_curve(request: ReviewCurveUpdateRequest) -> ReviewCurveUpdateResult:
+        try:
+            return update_review_curve(ready_workspace(), request)
+        except SettingsUpdateError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from error
 
     @app.post(
         "/api/v1/reviews/attempts",
@@ -174,7 +205,7 @@ def create_app(*, session_token: str | None = None, web_dir: Path | None = None)
             "language": "en",
             "processing_mode": "local_only",
             "reduced_motion": False,
-            "review_intervals": [1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584],
+            "review_intervals": DEFAULT_REVIEW_INTERVALS,
         }
 
     @app.post(

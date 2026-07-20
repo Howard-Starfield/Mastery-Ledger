@@ -80,6 +80,55 @@ class OnboardingResult(BaseModel):
     workspace: WorkspaceState
 
 
+class ReviewCurveProfile(BaseModel):
+    curve_id: str = Field(min_length=1, max_length=120)
+    version: int = Field(ge=1)
+    name: str = Field(min_length=1, max_length=120)
+    interval_days: list[int]
+    created_at: str | None = None
+    supersedes_version: int | None = Field(default=None, ge=1)
+
+    @field_validator("interval_days")
+    @classmethod
+    def validate_intervals(cls, value: list[int]) -> list[int]:
+        return OnboardingRequest.validate_intervals(value)
+
+
+class ApplicationSettings(BaseModel):
+    schema_version: Literal["settings-v1"] = "settings-v1"
+    language: str
+    processing_mode: Literal["local_only", "cloud_allowed", "metadata_only"]
+    reduced_motion: bool
+    review_curve: ReviewCurveProfile
+    default_review_intervals: list[int]
+    scheduled_question_count: int = Field(ge=0)
+
+
+class ReviewCurveUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    interval_days: list[int]
+    application_policy: Literal[
+        "new_questions_only", "future_advancement", "recalculate_all"
+    ]
+    save_mode: Literal["new_version", "duplicate_profile"] = "new_version"
+    confirm_recalculate: bool = False
+
+    @field_validator("interval_days")
+    @classmethod
+    def validate_intervals(cls, value: list[int]) -> list[int]:
+        return OnboardingRequest.validate_intervals(value)
+
+
+class ReviewCurveUpdateResult(BaseModel):
+    schema_version: Literal["review-curve-update-v1"] = "review-curve-update-v1"
+    review_curve: ReviewCurveProfile
+    application_policy: Literal[
+        "new_questions_only", "future_advancement", "recalculate_all"
+    ]
+    affected_question_count: int = Field(ge=0)
+    preserved_without_anchor_count: int = Field(ge=0)
+
+
 class DashboardExam(BaseModel):
     exam_id: str
     course_id: str

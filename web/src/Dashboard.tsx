@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { applicationApi, type DashboardExam, type DashboardResult } from './api'
+import CurveSettings from './CurveSettings'
 import ExamRunner from './ExamRunner'
 
 type DashboardProps = {
@@ -62,6 +63,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [selectedExam, setSelectedExam] = useState<DashboardExam | null>(null)
   const [activeExam, setActiveExam] = useState<DashboardExam | null>(null)
   const [activeReview, setActiveReview] = useState(false)
+  const [curveSettingsOpen, setCurveSettingsOpen] = useState(false)
 
   const refresh = () => {
     setLoading(true)
@@ -194,7 +196,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
           ))}
         </div>
         <div className="curve-note"><span>∞</span><p><strong>The curve is the goal.</strong> Correct due answers move one rung. A lapse returns the question to day one.</p></div>
-        <button type="button" className="curve-edit" disabled title="Curve editing is currently available during onboarding">Edit curve in settings</button>
+        <button type="button" className="curve-edit" onClick={() => setCurveSettingsOpen(true)}>Edit curve in settings</button>
         {Boolean(data?.warnings.length) && <details className="scan-warnings"><summary>{data?.warnings.length} scan warning{data?.warnings.length === 1 ? '' : 's'}</summary>{data?.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>}
       </aside>
 
@@ -210,6 +212,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
           </section>
         </div>
       )}
+      {curveSettingsOpen && <CurveSettings onClose={() => setCurveSettingsOpen(false)} onSaved={refresh} />}
     </main>
   )
 }

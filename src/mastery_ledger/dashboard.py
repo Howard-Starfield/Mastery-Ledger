@@ -16,8 +16,8 @@ from mastery_ledger.models import (
     OwnershipStage,
     WorkspaceState,
 )
+from mastery_ledger.settings_service import DEFAULT_REVIEW_INTERVALS, valid_intervals
 
-DEFAULT_REVIEW_INTERVALS = [1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584]
 MAX_COURSES = 500
 MAX_EXAMS_PER_COURSE = 2_000
 MAX_ATTEMPTS_PER_COURSE = 2_000
@@ -226,10 +226,7 @@ def _exam_summaries(
 
 
 def _valid_intervals(value: object) -> list[int]:
-    if not isinstance(value, list):
-        return DEFAULT_REVIEW_INTERVALS
-    intervals = [item for item in value if isinstance(item, int) and item > 0]
-    return intervals if intervals == sorted(set(intervals)) and intervals else DEFAULT_REVIEW_INTERVALS
+    return valid_intervals(value)
 
 
 def build_dashboard(workspace: WorkspaceState, *, now: datetime | None = None) -> DashboardResult:

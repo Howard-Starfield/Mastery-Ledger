@@ -93,6 +93,43 @@ export interface DashboardResult {
   warnings: string[]
 }
 
+export interface ReviewCurveProfile {
+  curve_id: string
+  version: number
+  name: string
+  interval_days: number[]
+  created_at: string | null
+  supersedes_version: number | null
+}
+
+export interface ApplicationSettings {
+  schema_version: 'settings-v1'
+  language: string
+  processing_mode: ProcessingMode
+  reduced_motion: boolean
+  review_curve: ReviewCurveProfile
+  default_review_intervals: number[]
+  scheduled_question_count: number
+}
+
+export type CurveApplicationPolicy = 'new_questions_only' | 'future_advancement' | 'recalculate_all'
+
+export interface ReviewCurveUpdatePayload {
+  name: string
+  interval_days: number[]
+  application_policy: CurveApplicationPolicy
+  save_mode: 'new_version' | 'duplicate_profile'
+  confirm_recalculate: boolean
+}
+
+export interface ReviewCurveUpdateResult {
+  schema_version: 'review-curve-update-v1'
+  review_curve: ReviewCurveProfile
+  application_policy: CurveApplicationPolicy
+  affected_question_count: number
+  preserved_without_anchor_count: number
+}
+
 export interface ExamOption {
   option_id: string
   text: string
@@ -200,6 +237,12 @@ export const onboardingApi = {
 export const applicationApi = {
   status: () => request<ApplicationStatus>('/api/v1/status'),
   dashboard: () => request<DashboardResult>('/api/v1/dashboard'),
+  settings: () => request<ApplicationSettings>('/api/v1/settings'),
+  updateReviewCurve: (payload: ReviewCurveUpdatePayload) =>
+    request<ReviewCurveUpdateResult>('/api/v1/settings/review-curve', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
   startReview: (courseId?: string) =>
     request<ExamAttempt>(`/api/v1/reviews/attempts${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ''}`, {
       method: 'POST',

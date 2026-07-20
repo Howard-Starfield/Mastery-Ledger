@@ -2,7 +2,7 @@
 
 Turn documents, websites, video, audio, and researched topics into source-grounded courses, focused exams, and long-term review records.
 
-> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, Focused Question exams, durable attempts, scheduled-review sessions, deterministic question scheduling, concept evidence, and the skill prototype. Course ingestion and learner-facing knowledge/evidence surfaces remain under development; signed distribution remains a release gate.
+> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, Focused Question exams, durable attempts, scheduled-review sessions, deterministic question scheduling, concept evidence, versioned curve settings, and the skill prototype. Course ingestion and learner-facing knowledge/evidence surfaces remain under development; signed distribution remains a release gate.
 
 ![Mastery Ledger Exam Ledger dashboard](design-mockups/mastery-ledger-dashboard.png)
 
@@ -77,6 +77,7 @@ Mastery Ledger has two cooperating layers: a local application for learner-facin
 | Answer isolation | Keeps answer keys, explanations, and citation details out of the initial browser payload; every answer locks after one submission | Application preview |
 | Source disclosure | Shows no source details for an incorrect active answer; enables a still-collapsed citation panel after a correct answer and during final review | Application preview |
 | Scheduled reviews | Starts source-grounded due questions from the dashboard and applies the configured Ownership Curve on final submission | Application preview |
+| Ownership Curve settings | Edits, validates, versions, duplicates, and applies a review curve using an explicit schedule-migration policy | Application preview |
 | Source intake and scope | Asks for learner-provided sources, records the learning goal and boundaries, and supports adding more sources to an existing course | Codex skill workflow |
 | Web and document ingestion | Organizes approved webpages and local materials into source manifests with provenance, hashes, processing state, and precise locators | Codex skill workflow |
 | Video and audio processing | Uses a rights-aware `yt-dlp` wrapper, prefers available subtitles, normalizes SRT/VTT timestamps, and supports optional local `faster-whisper` transcription | Skill scripts |
@@ -141,6 +142,8 @@ First-run onboarding belongs to the application because it validates and persist
 - Dashboard and exam-detail resume indicators for compatible in-progress attempts.
 - Due Review runner backed by canonical question definitions, the existing answer-isolation rules, and durable review attempts.
 - Idempotent `learner-progress.json` concept counts and evidence derived from deterministic multiple-choice results.
+- Versioned Ownership Curve editor with direct interval controls, human horizon labels, warnings, reset, profile duplication, and explicit new-only, future-advancement, or recalculate-all policies.
+- Per-question curve identity and intervals, with pending migrations applied only after the next completed due review and synchronized concept dates after an intentional recalculation.
 - Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
 
 ## Install and test the preview
@@ -215,6 +218,8 @@ onboarding_required
 - Final submission writes a complete attempt result and updates each question's review record exactly once.
 - A correct due answer advances one stage, an incorrect due answer resets to stage zero, and early practice does not advance the schedule.
 - The Due Now action opens deliverable scheduled questions and returns the learner to the refreshed dashboard after final submission.
+- Ownership Curve settings reject invalid or descending stages, show the number of scheduled questions, and require confirmation before recalculating pending dates.
+- Future advancement preserves current due dates until the next completed due review; new-question-only preserves every existing curve version.
 - Course cards report how many concepts have evidence and how many have reached a proficient or stable state.
 - Source invitation may be completed or left empty.
 - Processing mode, language, reduced motion, and the review curve survive the final confirmation.

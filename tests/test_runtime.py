@@ -576,6 +576,25 @@ def test_due_review_advances_curve_and_updates_concept_progress(
             encoding="utf-8",
         )
 
+        curve_update = client.put(
+            "/api/v1/settings/review-curve",
+            json={
+                "name": "Biology ownership curve",
+                "interval_days": [1, 5, 12],
+                "application_policy": "future_advancement",
+                "save_mode": "new_version",
+                "confirm_recalculate": False,
+            },
+        )
+        assert curve_update.status_code == 200
+        assert curve_update.json()["review_curve"]["version"] == 2
+        migrated_queue = json.loads(
+            (progress_root / "review-queue.json").read_text(encoding="utf-8")
+        )
+        assert migrated_queue["questions"][0]["next_due_at"] == "2020-01-01T00:00:00Z"
+        assert migrated_queue["questions"][0]["curve_version"] == 1
+        assert migrated_queue["questions"][0]["pending_curve_version"] == 2
+
         start = client.post("/api/v1/reviews/attempts")
         assert start.status_code == 200
         attempt = start.json()
@@ -614,7 +633,10 @@ def test_due_review_advances_curve_and_updates_concept_progress(
     )
     queue_record = queue["questions"][0]
     assert queue_record["stage_index"] == 1
-    assert queue_record["interval_days"] == 3
+    assert queue_record["interval_days"] == 5
+    assert queue_record["curve_version"] == 2
+    assert queue_record["curve_intervals"] == [1, 5, 12]
+    assert "pending_curve_version" not in queue_record
     assert queue_record["due_success_count"] == 1
 
     learner_progress = json.loads(
@@ -631,3 +653,134 @@ def test_due_review_advances_curve_and_updates_concept_progress(
     assert concept["status"] == "introduced"
     assert concept["next_review_at"] == queue_record["next_due_at"]
     assert concept["evidence"][0]["evaluation_method"] == "deterministic_multiple_choice"
+
+
+def test_curve_settings_recalculate_and_preserve_versioned_schedules(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    app = create_app(session_token="settings-session", web_dir=tmp_path / "missing-web")
+    workspace = tmp_path / "SettingsWorkspace"
+
+    with TestClient(app) as client:
+        client.get("/bootstrap/settings-session", follow_redirects=False)
+        onboard = client.post(
+            "/api/v1/onboarding/complete",
+            json={
+                "workspace_path": str(workspace),
+                "workspace_name": "Settings workspace",
+                "language": "en",
+                "processing_mode": "local_only",
+                "reduced_motion": False,
+                "review_intervals": [1, 3, 7],
+                "initial_source_hint": None,
+            },
+        )
+        assert onboard.status_code == 200
+        course = workspace / "courses" / "history"
+        progress = course / "progress"
+        progress.mkdir(parents=True)
+        (course / "course.yaml").write_text(
+            "course_id: COURSE-HISTORY\ntitle: History\n",
+            encoding="utf-8",
+        )
+        (progress / "review-queue.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "review-queue-v1",
+                    "course_id": "COURSE-HISTORY",
+                    "curve_intervals": [1, 3, 7],
+                    "questions": [
+                        {
+                            "question_id": "Q-HISTORY-1",
+                            "concept_ids": ["primary-sources"],
+                            "stage_index": 1,
+                            "interval_days": 3,
+                            "scheduled_from_at": "2026-01-01T00:00:00Z",
+                            "next_due_at": "2026-01-04T00:00:00Z",
+                            "status": "learning",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (progress / "learner-progress.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "learner-progress-v1",
+                    "course_id": "COURSE-HISTORY",
+                    "concepts": [
+                        {
+                            "concept_id": "primary-sources",
+                            "next_review_at": "2026-01-04T00:00:00Z",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        settings = client.get("/api/v1/settings")
+        assert settings.status_code == 200
+        assert settings.json()["review_curve"]["version"] == 1
+        assert settings.json()["scheduled_question_count"] == 1
+
+        unconfirmed = client.put(
+            "/api/v1/settings/review-curve",
+            json={
+                "name": "Long history curve",
+                "interval_days": [2, 6, 12],
+                "application_policy": "recalculate_all",
+                "save_mode": "duplicate_profile",
+                "confirm_recalculate": False,
+            },
+        )
+        assert unconfirmed.status_code == 422
+        assert "Confirm recalculation" in unconfirmed.json()["detail"]
+
+        recalculated = client.put(
+            "/api/v1/settings/review-curve",
+            json={
+                "name": "Long history curve",
+                "interval_days": [2, 6, 12],
+                "application_policy": "recalculate_all",
+                "save_mode": "duplicate_profile",
+                "confirm_recalculate": True,
+            },
+        )
+        assert recalculated.status_code == 200
+        recalculated_payload = recalculated.json()
+        assert recalculated_payload["review_curve"]["version"] == 1
+        assert recalculated_payload["review_curve"]["curve_id"] != "CURVE-OWNERSHIP"
+        assert recalculated_payload["affected_question_count"] == 1
+
+        queue = json.loads((progress / "review-queue.json").read_text(encoding="utf-8"))
+        record = queue["questions"][0]
+        assert record["curve_id"] == recalculated_payload["review_curve"]["curve_id"]
+        assert record["curve_version"] == 1
+        assert record["curve_intervals"] == [2, 6, 12]
+        assert record["interval_days"] == 6
+        assert record["next_due_at"] == "2026-01-07T00:00:00Z"
+        learner_progress = json.loads(
+            (progress / "learner-progress.json").read_text(encoding="utf-8")
+        )
+        assert learner_progress["concepts"][0]["next_review_at"] == "2026-01-07T00:00:00Z"
+
+        new_only = client.put(
+            "/api/v1/settings/review-curve",
+            json={
+                "name": "Long history curve",
+                "interval_days": [2, 8, 16],
+                "application_policy": "new_questions_only",
+                "save_mode": "new_version",
+                "confirm_recalculate": False,
+            },
+        )
+        assert new_only.status_code == 200
+        assert new_only.json()["review_curve"]["version"] == 2
+        preserved = json.loads((progress / "review-queue.json").read_text(encoding="utf-8"))[
+            "questions"
+        ][0]
+        assert preserved["curve_version"] == 1
+        assert preserved["curve_intervals"] == [2, 6, 12]
+        assert preserved["next_due_at"] == "2026-01-07T00:00:00Z"
