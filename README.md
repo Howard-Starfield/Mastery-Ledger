@@ -2,7 +2,7 @@
 
 Turn scattered sources into grounded knowledge, exam practice, and a review record that can last for years.
 
-> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, and the skill prototype. Course ingestion, focused exam delivery, review execution, and signed installers remain under development.
+> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, Focused Question exam delivery, and the skill prototype. Course ingestion, durable attempt history, scheduled review execution, and signed installers remain under development.
 
 ![Mastery Ledger dashboard concept](design-mockups/concept-a-exam-ledger.png)
 
@@ -84,7 +84,7 @@ Exam Ledger is the focused assessment interface inside Mastery Ledger. Learners 
 
 ![Focused question exam concept](design-mockups/exam-concept-2-focused-question-v2.png)
 
-Question content is data, not generated interface code. A fixed local web template renders validated exam files and records attempts back to the course workspace.
+Question content is data, not generated interface code. A fixed local web template renders validated exam files. The current preview keeps an active attempt in application memory; the next persistence slice will write durable attempt and review records back to the course workspace.
 
 ## Planned product areas
 
@@ -112,11 +112,14 @@ First-run onboarding belongs to the application because it validates and persist
 - React onboarding for source invitation, workspace, privacy, accessibility, and editable review intervals.
 - Workspace dashboard that discovers course manifests, ready exams, due questions, source readiness, and Ownership Curve stages from portable course files.
 - Scrollable and searchable Ready Exams register with course filtering and an exam-detail sheet.
+- Focused Question runner with a question map, flags, locked single submissions, final-submit checkpoint, scoring, and review mode.
+- Server-side answer checking that keeps keys and gated explanations out of the initial browser payload.
+- Collapsed source disclosure that unlocks after a correct answer and for every question after final submission.
 - Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
 
 ## Install and test the preview
 
-The onboarding and workspace-dashboard slices are ready for developer testing. This is not yet a signed learner release; completing onboarding shows a setup receipt with an action that opens Exam Ledger.
+The onboarding, workspace dashboard, and Focused Question slices are ready for developer testing. This is not yet a signed learner release; completing onboarding shows a setup receipt with an action that opens Exam Ledger.
 
 ### 1. Install the local application
 
@@ -178,6 +181,11 @@ onboarding_required
 - The browser opens only for the operational onboarding command, not for `doctor`.
 - A relative workspace path is rejected and an absolute writable path is accepted.
 - The suggested workspace is separate from the application and skill directories.
+- A ready exam opens from its detail sheet and initially exposes no answer key, explanation, or citation details to the browser.
+- Each question accepts one locked submission: an incorrect answer reveals no hint, while a correct answer reveals its explanation and enables a still-collapsed source disclosure.
+- Final submission reports the score and enables still-collapsed sources for every question in review mode.
+
+Exam attempts currently live in application memory and reset when the local server stops. Durable attempt files and review scheduling are the next persistence slice.
 - Source invitation may be completed or left empty.
 - Processing mode, language, reduced motion, and the review curve survive the final confirmation.
 - The default curve includes `1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584` days.

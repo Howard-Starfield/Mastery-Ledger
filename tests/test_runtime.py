@@ -241,3 +241,135 @@ def test_dashboard_requires_completed_onboarding(runtime_home: Path, tmp_path: P
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Complete onboarding before opening the workspace dashboard."
+
+
+def test_focused_exam_locks_answers_and_gates_explanations(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    app = create_app(session_token="test-session", web_dir=tmp_path / "missing-web")
+    workspace = tmp_path / "ExamWorkspace"
+
+    with TestClient(app) as client:
+        client.get("/bootstrap/test-session", follow_redirects=False)
+        client.post(
+            "/api/v1/onboarding/complete",
+            json={
+                "workspace_path": str(workspace),
+                "workspace_name": "Exam workspace",
+                "language": "en",
+                "processing_mode": "local_only",
+                "reduced_motion": False,
+                "review_intervals": [1, 3, 7],
+                "initial_source_hint": None,
+            },
+        )
+
+        course = workspace / "courses" / "medicine"
+        exam_root = course / "exams" / "EXAM-FOCUSED"
+        source_root = course / "source"
+        exam_root.mkdir(parents=True)
+        source_root.mkdir()
+        (course / "course.yaml").write_text(
+            "course_id: COURSE-MED\ntitle: Medicine Foundations\n",
+            encoding="utf-8",
+        )
+        (source_root / "source-manifest.yaml").write_text(
+            "sources:\n  - source_id: SRC-001\n    title: Clinical guide\n    processing_status: ready\n",
+            encoding="utf-8",
+        )
+        source_ref = {
+            "source_id": "SRC-001",
+            "locator": {"kind": "section", "value": "2", "label": "Section 2"},
+            "supports": ["correct_answer", "explanation"],
+            "support_strength": "direct",
+            "href": "https://example.com/guide#section-2",
+        }
+        (exam_root / "exam.json").write_text(
+            json.dumps(
+                {
+                    "exam_id": "EXAM-FOCUSED",
+                    "course_id": "COURSE-MED",
+                    "title": "Focused Medicine Mock",
+                    "status": "ready",
+                    "estimated_minutes": 10,
+                    "questions": [
+                        {
+                            "question_id": "Q-001",
+                            "prompt": "Which option is supported?",
+                            "options": [
+                                {"option_id": "A", "text": "Unsupported option"},
+                                {"option_id": "B", "text": "Supported option"},
+                            ],
+                            "correct_option_id": "B",
+                            "correct_explanation": "Option B matches the clinical guide.",
+                            "source_refs": [source_ref],
+                            "concept_ids": ["diagnosis"],
+                        },
+                        {
+                            "question_id": "Q-002",
+                            "prompt": "Choose the second supported option.",
+                            "options": [
+                                {"option_id": "A", "text": "First option"},
+                                {"option_id": "B", "text": "Second option"},
+                            ],
+                            "correct_option_id": "A",
+                            "correct_explanation": "Option A is supported.",
+                            "source_refs": [source_ref],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        start = client.post("/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts")
+        assert start.status_code == 200
+        start_payload = start.json()
+        serialized_start = json.dumps(start_payload)
+        assert "correct_option_id" not in serialized_start
+        assert "correct_explanation" not in serialized_start
+        assert "source_count" in serialized_start
+        attempt_id = start_payload["attempt_id"]
+
+        wrong = client.post(
+            f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/questions/Q-001",
+            json={"option_id": "A"},
+        )
+        assert wrong.status_code == 200
+        assert wrong.json()["status"] == "incorrect"
+        assert wrong.json()["explanation"] is None
+        assert wrong.json()["sources"] == []
+
+        retry = client.post(
+            f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/questions/Q-001",
+            json={"option_id": "B"},
+        )
+        assert retry.status_code == 409
+
+        correct = client.post(
+            f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/questions/Q-002",
+            json={"option_id": "A"},
+        )
+        assert correct.status_code == 200
+        assert correct.json()["status"] == "correct"
+        assert correct.json()["explanation"] == "Option A is supported."
+        assert correct.json()["sources"][0] == {
+            "source_id": "SRC-001",
+            "title": "Clinical guide",
+            "locator_label": "Section 2",
+            "support_strength": "direct",
+            "href": "https://example.com/guide#section-2",
+        }
+
+        finish = client.post(
+            f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/finish"
+        )
+
+    assert finish.status_code == 200
+    completion = finish.json()
+    assert completion["correct_count"] == 1
+    assert completion["incorrect_count"] == 1
+    assert completion["unanswered_count"] == 0
+    assert completion["score_percent"] == 50.0
+    assert completion["questions"][0]["correct_option_id"] == "B"
+    assert completion["questions"][0]["sources"][0]["source_id"] == "SRC-001"

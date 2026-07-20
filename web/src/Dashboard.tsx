@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { applicationApi, type DashboardExam, type DashboardResult } from './api'
+import ExamRunner from './ExamRunner'
 
 type DashboardProps = {
   workspaceName: string
@@ -59,6 +60,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedExam, setSelectedExam] = useState<DashboardExam | null>(null)
+  const [activeExam, setActiveExam] = useState<DashboardExam | null>(null)
 
   const refresh = () => {
     setLoading(true)
@@ -83,6 +85,10 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   }, [course, data, evidence, query])
 
   const maxStageCount = Math.max(1, ...(data?.ownership_curve.map((stage) => stage.question_count) ?? [1]))
+
+  if (activeExam) {
+    return <ExamRunner courseId={activeExam.course_id} examId={activeExam.exam_id} onExit={() => setActiveExam(null)} />
+  }
 
   return (
     <main className="ledger-app">
@@ -194,7 +200,8 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
             <p className="kicker">{selectedExam.exam_id}</p><h2 id="exam-sheet-title">{selectedExam.title}</h2><p className="sheet-course">{selectedExam.course_title}</p>
             <dl><div><dt>Questions</dt><dd>{selectedExam.question_count}</dd></div><div><dt>Expected time</dt><dd>{selectedExam.estimated_minutes} minutes</dd></div><div><dt>Evidence</dt><dd>{selectedExam.source_status.replace('_', ' ')}</dd></div><div><dt>Created</dt><dd>{formatDate(selectedExam.created_at)}</dd></div></dl>
             {Boolean(selectedExam.concepts.length) && <div className="sheet-concepts">{selectedExam.concepts.map((concept) => <span key={concept}>{concept}</span>)}</div>}
-            <div className="sheet-notice"><strong>Exam runner is the next application slice.</strong><p>This register is already reading the canonical exam manifest; delivery will open the Focused Question interface without changing the exam file.</p></div>
+            <div className="sheet-notice"><strong>Focused Question delivery</strong><p>Each answer locks once. Incorrect answers reveal nothing; correct answers enable the collapsed source disclosure.</p></div>
+            <button type="button" className="sheet-start" onClick={() => { setActiveExam(selectedExam); setSelectedExam(null) }}>Begin focused exam <span>→</span></button>
           </section>
         </div>
       )}

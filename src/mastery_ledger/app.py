@@ -12,11 +12,23 @@ from fastapi.staticfiles import StaticFiles
 from mastery_ledger.config import bundled_web_dir, default_workspace_path
 from mastery_ledger.dashboard import build_dashboard
 from mastery_ledger.database import initialize_database, save_onboarding
+from mastery_ledger.exam_service import (
+    AttemptConflictError,
+    AttemptNotFoundError,
+    ExamNotFoundError,
+    ExamSessionStore,
+    ExamValidationError,
+)
 from mastery_ledger.models import (
     DashboardResult,
     DoctorResult,
+    ExamAttemptStart,
+    ExamCompletion,
     OnboardingRequest,
     OnboardingResult,
+    QuestionFeedback,
+    QuestionSubmissionRequest,
+    WorkspaceState,
     WorkspaceValidationRequest,
     WorkspaceValidationResult,
 )
@@ -28,6 +40,7 @@ SESSION_COOKIE = "mastery_ledger_session"
 def create_app(*, session_token: str | None = None, web_dir: Path | None = None) -> FastAPI:
     token = session_token or os.environ.get("MASTERY_LEDGER_SESSION_TOKEN") or secrets.token_urlsafe(32)
     frontend = web_dir or bundled_web_dir()
+    exam_sessions = ExamSessionStore()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -64,6 +77,66 @@ def create_app(*, session_token: str | None = None, web_dir: Path | None = None)
                 detail="Complete onboarding before opening the workspace dashboard.",
             )
         return build_dashboard(doctor.active_workspace)
+
+    def ready_workspace() -> WorkspaceState:
+        doctor = build_doctor_result()
+        if doctor.status != "ready" or doctor.active_workspace is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Complete onboarding before starting an exam.",
+            )
+        return doctor.active_workspace
+
+    @app.post(
+        "/api/v1/exams/{course_id}/{exam_id}/attempts",
+        response_model=ExamAttemptStart,
+        dependencies=[Depends(require_session)],
+    )
+    def start_exam(course_id: str, exam_id: str) -> ExamAttemptStart:
+        try:
+            return exam_sessions.start(ready_workspace(), course_id, exam_id)
+        except ExamNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+        except ExamValidationError as error:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+
+    @app.post(
+        "/api/v1/exams/{course_id}/{exam_id}/attempts/{attempt_id}/questions/{question_id}",
+        response_model=QuestionFeedback,
+        dependencies=[Depends(require_session)],
+    )
+    def submit_exam_question(
+        course_id: str,
+        exam_id: str,
+        attempt_id: str,
+        question_id: str,
+        request: QuestionSubmissionRequest,
+    ) -> QuestionFeedback:
+        try:
+            return exam_sessions.submit(
+                attempt_id,
+                course_id,
+                exam_id,
+                question_id,
+                request.option_id,
+            )
+        except AttemptNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+        except AttemptConflictError as error:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        except ExamValidationError as error:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+
+    @app.post(
+        "/api/v1/exams/{course_id}/{exam_id}/attempts/{attempt_id}/finish",
+        response_model=ExamCompletion,
+        dependencies=[Depends(require_session)],
+    )
+    def finish_exam(course_id: str, exam_id: str, attempt_id: str) -> ExamCompletion:
+        try:
+            return exam_sessions.finish(attempt_id, course_id, exam_id)
+        except AttemptNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 
     @app.get("/api/v1/onboarding/defaults", dependencies=[Depends(require_session)])
     def onboarding_defaults() -> dict[str, object]:

@@ -117,3 +117,74 @@ class DashboardResult(BaseModel):
     recent_courses: list[DashboardCourse] = Field(default_factory=list)
     ownership_curve: list[OwnershipStage] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class ExamOption(BaseModel):
+    option_id: str = Field(min_length=1, max_length=24)
+    text: str = Field(min_length=1, max_length=10_000)
+
+
+class ExamQuestionView(BaseModel):
+    question_id: str = Field(min_length=1, max_length=160)
+    prompt: str = Field(min_length=1, max_length=50_000)
+    options: list[ExamOption] = Field(min_length=2, max_length=12)
+    difficulty: str | int | None = None
+    concept_ids: list[str] = Field(default_factory=list)
+    source_count: int = Field(ge=0)
+    source_status: Literal["verified", "unavailable"]
+
+
+class ExamAttemptStart(BaseModel):
+    schema_version: Literal["exam-attempt-v1"] = "exam-attempt-v1"
+    attempt_id: str
+    exam_id: str
+    course_id: str
+    course_title: str
+    title: str
+    estimated_minutes: int = Field(ge=0)
+    questions: list[ExamQuestionView]
+
+
+class QuestionSubmissionRequest(BaseModel):
+    option_id: str = Field(min_length=1, max_length=24)
+
+
+class SourceDisclosure(BaseModel):
+    source_id: str
+    title: str
+    locator_label: str
+    support_strength: Literal["direct", "partial", "contextual"]
+    href: str | None = None
+
+
+class QuestionFeedback(BaseModel):
+    schema_version: Literal["question-feedback-v1"] = "question-feedback-v1"
+    question_id: str
+    selected_option_id: str
+    status: Literal["correct", "incorrect"]
+    correct: bool
+    locked: Literal[True] = True
+    explanation: str | None = None
+    sources: list[SourceDisclosure] = Field(default_factory=list)
+
+
+class QuestionReview(BaseModel):
+    question_id: str
+    selected_option_id: str | None = None
+    correct_option_id: str
+    status: Literal["correct", "incorrect", "unanswered"]
+    explanation: str
+    sources: list[SourceDisclosure] = Field(default_factory=list)
+
+
+class ExamCompletion(BaseModel):
+    schema_version: Literal["exam-completion-v1"] = "exam-completion-v1"
+    attempt_id: str
+    status: Literal["complete"] = "complete"
+    question_count: int = Field(ge=0)
+    answered_count: int = Field(ge=0)
+    correct_count: int = Field(ge=0)
+    incorrect_count: int = Field(ge=0)
+    unanswered_count: int = Field(ge=0)
+    score_percent: float = Field(ge=0, le=100)
+    questions: list[QuestionReview] = Field(default_factory=list)

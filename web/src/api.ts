@@ -90,6 +90,73 @@ export interface DashboardResult {
   warnings: string[]
 }
 
+export interface ExamOption {
+  option_id: string
+  text: string
+}
+
+export interface ExamQuestion {
+  question_id: string
+  prompt: string
+  options: ExamOption[]
+  difficulty: string | number | null
+  concept_ids: string[]
+  source_count: number
+  source_status: 'verified' | 'unavailable'
+}
+
+export interface ExamAttempt {
+  schema_version: 'exam-attempt-v1'
+  attempt_id: string
+  exam_id: string
+  course_id: string
+  course_title: string
+  title: string
+  estimated_minutes: number
+  questions: ExamQuestion[]
+}
+
+export interface SourceDisclosure {
+  source_id: string
+  title: string
+  locator_label: string
+  support_strength: 'direct' | 'partial' | 'contextual'
+  href: string | null
+}
+
+export interface QuestionFeedback {
+  schema_version: 'question-feedback-v1'
+  question_id: string
+  selected_option_id: string
+  status: 'correct' | 'incorrect'
+  correct: boolean
+  locked: true
+  explanation: string | null
+  sources: SourceDisclosure[]
+}
+
+export interface QuestionReview {
+  question_id: string
+  selected_option_id: string | null
+  correct_option_id: string
+  status: 'correct' | 'incorrect' | 'unanswered'
+  explanation: string
+  sources: SourceDisclosure[]
+}
+
+export interface ExamCompletion {
+  schema_version: 'exam-completion-v1'
+  attempt_id: string
+  status: 'complete'
+  question_count: number
+  answered_count: number
+  correct_count: number
+  incorrect_count: number
+  unanswered_count: number
+  score_percent: number
+  questions: QuestionReview[]
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: 'same-origin',
@@ -126,4 +193,18 @@ export const onboardingApi = {
 export const applicationApi = {
   status: () => request<ApplicationStatus>('/api/v1/status'),
   dashboard: () => request<DashboardResult>('/api/v1/dashboard'),
+  startExam: (courseId: string, examId: string) =>
+    request<ExamAttempt>(`/api/v1/exams/${encodeURIComponent(courseId)}/${encodeURIComponent(examId)}/attempts`, {
+      method: 'POST',
+    }),
+  submitExamAnswer: (attempt: ExamAttempt, questionId: string, optionId: string) =>
+    request<QuestionFeedback>(
+      `/api/v1/exams/${encodeURIComponent(attempt.course_id)}/${encodeURIComponent(attempt.exam_id)}/attempts/${encodeURIComponent(attempt.attempt_id)}/questions/${encodeURIComponent(questionId)}`,
+      { method: 'POST', body: JSON.stringify({ option_id: optionId }) },
+    ),
+  finishExam: (attempt: ExamAttempt) =>
+    request<ExamCompletion>(
+      `/api/v1/exams/${encodeURIComponent(attempt.course_id)}/${encodeURIComponent(attempt.exam_id)}/attempts/${encodeURIComponent(attempt.attempt_id)}/finish`,
+      { method: 'POST' },
+    ),
 }
