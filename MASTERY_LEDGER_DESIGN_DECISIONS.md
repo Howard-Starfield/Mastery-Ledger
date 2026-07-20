@@ -18,6 +18,7 @@ This document records product and architecture decisions for the `mastery-ledger
 | 10 | Standalone product boundary and installation | Accepted; standalone app plus optional skill adapter |
 | 11 | Product, skill, package, and command naming | Accepted: Mastery Ledger |
 | 12 | Application stack and onboarding ownership | Accepted; FastAPI, SQLite, React, TypeScript, Vite, and application-owned onboarding |
+| 13 | Codex skill distribution | Accepted; direct GitHub install through the open skills CLI plus Codex-native fallback |
 
 ## Proposed course layout
 
@@ -1653,3 +1654,29 @@ The following remain release gates rather than completed functionality: signed i
 - [React state structure](https://react.dev/learn/choosing-the-state-structure)
 - [React guidance on unnecessary effects](https://react.dev/learn/you-might-not-need-an-effect)
 - [Vite production builds](https://vite.dev/guide/build.html)
+
+## 13. Codex skill distribution
+
+Keep the `mastery-ledger/` folder as the canonical skill package inside the main repository. Its valid `SKILL.md` frontmatter and one-level package layout are already discovered correctly from the public GitHub repository by the open [`skills` CLI](https://github.com/vercel-labs/skills).
+
+### Recommended one-command install
+
+```text
+npx skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y --copy
+```
+
+- `@mastery-ledger` selects the single skill from the mixed application repository.
+- `-g` installs to the global user scope.
+- `-a codex` prevents installation into unrelated agents.
+- `-y` makes the documented command non-interactive.
+- `--copy` materializes the skill rather than relying on symlink behavior, which is safer for Codex discovery and Windows installations.
+
+This is a third-party open installer maintained by Vercel Labs, not a native OpenAI command. Retain Codex's bundled `$skill-installer` as the first-party-style fallback: the learner can ask Codex to install the direct tree URL `https://github.com/Howard-Starfield/Mastery-Ledger/tree/main/mastery-ledger`, or run the bundled `install-skill-from-github.py` helper.
+
+Do not publish a custom Mastery Ledger npm installer merely to wrap these existing mechanisms. It would create another package, release channel, and supply-chain surface without improving discovery. Reconsider a dedicated installer only when the standalone application has signed releases and can coordinate application and skill compatibility as one verified installation experience.
+
+Installing the skill never implies that the standalone application is installed. The skill must still run `mastery-ledger doctor --json` and follow the missing-runtime contract.
+
+### Item 13 accepted decision
+
+Document the one-command `npx skills add` flow as the easiest cross-agent installation, explicitly target Codex global scope, use copy mode, retain the bundled Codex installer as a fallback, and keep application installation separate.

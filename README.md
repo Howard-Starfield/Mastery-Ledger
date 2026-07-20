@@ -6,6 +6,31 @@ Turn scattered sources into grounded knowledge, exam practice, and a review reco
 
 ![Mastery Ledger dashboard concept](design-mockups/concept-a-exam-ledger.png)
 
+## Install the Codex skill
+
+The repository already follows the standard `SKILL.md` layout and is discoverable by the open [`skills` CLI](https://github.com/vercel-labs/skills). Install the skill globally for Codex with one command:
+
+```powershell
+npx skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y --copy
+```
+
+This command installs the `mastery-ledger/` skill folder into Codex's global skill location. `--copy` avoids symlink-discovery and Windows permission problems. Start a new Codex task after installation.
+
+The `skills` CLI is an open third-party installer maintained by Vercel Labs, not an OpenAI package. To inspect the repository without installing, run:
+
+```powershell
+npx skills add Howard-Starfield/Mastery-Ledger --list
+```
+
+Codex can also use its bundled `$skill-installer`. Paste this request into Codex:
+
+```text
+Install this skill globally for Codex:
+https://github.com/Howard-Starfield/Mastery-Ledger/tree/main/mastery-ledger
+```
+
+Installing the skill does not install the standalone Mastery Ledger application. The application remains a separate runtime; follow [Install and test from source](#install-and-test-from-source) for the current development build.
+
 ## What Mastery Ledger is
 
 Mastery Ledger is a local-first learning workspace. Give it documents, websites, video, audio, subtitles, or a topic to research. Its workflow organizes those sources, records provenance, checks generated claims, builds a navigable knowledge wiki, creates exam-style assessments, and schedules the same knowledge for increasingly distant review.
@@ -161,7 +186,21 @@ npm.cmd run build
 
 ### 5. Install the Codex skill adapter
 
-The application and `$mastery-ledger` skill are separate install surfaces. Install the skill from this repository with the system skill installer:
+The application and `$mastery-ledger` skill are separate install surfaces. The recommended global Codex installation is:
+
+```powershell
+npx skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y --copy
+```
+
+Verify, update, or remove the installation with:
+
+```powershell
+npx skills list -g -a codex
+npx skills update mastery-ledger -g -y
+npx skills remove mastery-ledger -g -a codex -y
+```
+
+For users who prefer Codex's bundled system installer instead of the third-party `npx` CLI:
 
 ```powershell
 python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py" `
