@@ -17,10 +17,12 @@ REQUIRED_FILES = [
     "study-guide.md",
     "concept-map.md",
     "glossary.md",
-    "question-bank.json",
-    "learner-progress.json",
+    "wiki/wiki.json",
+    "questions/question-bank.json",
+    "progress/learner-progress.json",
 ]
 QUESTION_TYPES = {"free-recall", "multiple-choice", "application", "calculation", "explain", "compare", "synthesis"}
+RELATION_TYPES = {"prerequisite_of", "supports", "deep_dive_of", "adjacent_to", "example_of", "related_to"}
 
 
 def normalized(value: str) -> str:
@@ -117,6 +119,66 @@ def validate_question_bank(
     return errors, warnings
 
 
+def validate_wiki(
+    root: Path, payload: dict[str, Any], *, source_ids: set[str], learner_concept_ids: set[str]
+) -> tuple[list[str], list[str], set[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    if payload.get("schema_version") != "wiki-v1":
+        errors.append("wiki/wiki.json schema_version must be wiki-v1")
+    concepts = payload.get("concepts")
+    if not isinstance(concepts, list):
+        return ["wiki/wiki.json must contain a concepts list"], warnings, set()
+    concept_ids: set[str] = set()
+    for index, concept in enumerate(concepts):
+        prefix = f"wiki concepts[{index}]"
+        if not isinstance(concept, dict) or not str(concept.get("concept_id", "")).strip():
+            errors.append(f"{prefix}.concept_id is required")
+            continue
+        concept_id = str(concept["concept_id"])
+        if concept_id in concept_ids:
+            errors.append(f"Duplicate wiki concept_id: {concept_id}")
+        concept_ids.add(concept_id)
+        if not str(concept.get("title", "")).strip() or not str(concept.get("summary", "")).strip():
+            errors.append(f"{prefix} requires title and summary")
+        page_path = concept.get("page_path")
+        if page_path:
+            candidate = (root / str(page_path)).resolve(strict=False)
+            try:
+                candidate.relative_to(root.resolve(strict=False))
+            except ValueError:
+                errors.append(f"{prefix}.page_path escapes the course folder")
+            else:
+                if candidate.suffix.casefold() != ".md" or not candidate.is_file() or candidate.is_symlink():
+                    errors.append(f"{prefix}.page_path must resolve to a regular Markdown file")
+        refs = concept.get("source_refs", [])
+        if not isinstance(refs, list):
+            errors.append(f"{prefix}.source_refs must be a list")
+        else:
+            for ref_index, ref in enumerate(refs):
+                errors.extend(validate_source_ref(ref, source_ids, f"{prefix}.source_refs[{ref_index}]"))
+    for missing in sorted(learner_concept_ids - concept_ids):
+        warnings.append(f"Learner concept has no wiki page: {missing}")
+    relationships = payload.get("relationships", [])
+    if not isinstance(relationships, list):
+        errors.append("wiki/wiki.json relationships must be a list")
+    else:
+        for index, edge in enumerate(relationships):
+            prefix = f"wiki relationships[{index}]"
+            if not isinstance(edge, dict):
+                errors.append(f"{prefix} must be an object")
+                continue
+            source = str(edge.get("from", ""))
+            target = str(edge.get("to", ""))
+            if source not in concept_ids or target not in concept_ids:
+                errors.append(f"{prefix} must reference two known concept IDs")
+            if edge.get("kind") not in RELATION_TYPES:
+                errors.append(f"{prefix}.kind must be one of {sorted(RELATION_TYPES)}")
+            if edge.get("status") not in {"approved", "provisional"}:
+                errors.append(f"{prefix}.status must be approved or provisional")
+    return errors, warnings, concept_ids
+
+
 def validate_workspace(root: Path) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
@@ -130,10 +192,10 @@ def validate_workspace(root: Path) -> tuple[list[str], list[str]]:
     if not source_ids:
         warnings.append("No source IDs found in source-manifest.yaml")
 
-    progress = json.loads((root / "learner-progress.json").read_text(encoding="utf-8"))
+    progress = json.loads((root / "progress" / "learner-progress.json").read_text(encoding="utf-8"))
     concepts = progress.get("concepts")
     if not isinstance(concepts, list):
-        errors.append("learner-progress.json must contain a concepts list")
+        errors.append("progress/learner-progress.json must contain a concepts list")
         concept_ids: set[str] = set()
     else:
         concept_ids = set()
@@ -150,11 +212,21 @@ def validate_workspace(root: Path) -> tuple[list[str], list[str]]:
                 if not isinstance(value, (int, float)) or not 0 <= float(value) <= 1:
                     errors.append(f"Concept {concept_id} has invalid {field}")
 
-    question_payload = json.loads((root / "question-bank.json").read_text(encoding="utf-8"))
+    wiki_payload = json.loads((root / "wiki" / "wiki.json").read_text(encoding="utf-8"))
+    wiki_errors, wiki_warnings, wiki_concept_ids = validate_wiki(
+        root,
+        wiki_payload,
+        source_ids=source_ids,
+        learner_concept_ids=concept_ids,
+    )
+    errors.extend(wiki_errors)
+    warnings.extend(wiki_warnings)
+
+    question_payload = json.loads((root / "questions" / "question-bank.json").read_text(encoding="utf-8"))
     question_errors, question_warnings = validate_question_bank(
         question_payload,
         source_ids=source_ids,
-        concept_ids=concept_ids,
+        concept_ids=wiki_concept_ids or concept_ids,
     )
     errors.extend(question_errors)
     warnings.extend(question_warnings)

@@ -1,0 +1,13 @@
+{
+  "schema_version": "completion-envelope-v1",
+  "task_id": "TASK-001",
+  "run_id": "RUN-001",
+  "role": "research-worker",
+  "status": "submitted",
+  "summary": "Short observable summary of completed work.",
+  "output_path": ".work/orchestration/reports/REPORT-001.json",
+  "artifacts": [".work/orchestration/reports/REPORT-001.json"],
+  "blockers": [],
+  "next_actions": ["Route the submitted report to contradiction review."],
+  "completed_at": "2026-07-19T00:00:00Z"
+}

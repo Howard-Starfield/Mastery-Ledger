@@ -8,10 +8,11 @@ import {
   type SourceIntakePayload,
   type SourceType,
 } from './api'
+import type { WorkspaceScreen } from './KnowledgeWiki'
 
 type SourceInboxProps = {
   workspaceName: string
-  onExit: () => void
+  onNavigate: (screen: WorkspaceScreen) => void
 }
 
 const sourceKinds: Array<{ value: SourceType; label: string; detail: string }> = [
@@ -50,7 +51,7 @@ function jobFor(sourceId: string, jobs: IngestionJob[]) {
   return jobs.find((job) => job.source_id === sourceId)
 }
 
-export default function SourceInbox({ workspaceName, onExit }: SourceInboxProps) {
+export default function SourceInbox({ workspaceName, onNavigate }: SourceInboxProps) {
   const [data, setData] = useState<SourceInboxResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -134,15 +135,17 @@ export default function SourceInbox({ workspaceName, onExit }: SourceInboxProps)
   return (
     <main className="source-app">
       <header className="source-topbar">
-        <button type="button" className="source-wordmark" onClick={onExit}><span>ML</span><strong>Mastery Ledger</strong></button>
+        <button type="button" className="source-wordmark" onClick={() => onNavigate('exams')}><span>ML</span><strong>Mastery Ledger</strong></button>
         <div className="workspace-crumb"><span>Workspace</span><b>/</b><strong>{workspaceName}</strong><b>/</b><span>Source Inbox</span></div>
         <button type="button" className="topbar-action" onClick={() => refresh()} disabled={loading}><span className={loading ? 'refresh-glyph is-spinning' : 'refresh-glyph'}>↻</span>{loading ? 'Scanning' : 'Rescan'}</button>
       </header>
 
       <aside className="source-nav">
         <nav aria-label="Primary navigation">
-          <button type="button" onClick={onExit}><span>▦</span>Exams</button>
+          <button type="button" onClick={() => onNavigate('exams')}><span>▦</span>Exams</button>
           <button type="button" className="is-active"><span>▰</span>Sources</button>
+          <button type="button" onClick={() => onNavigate('knowledge')}><span>◇</span>Knowledge</button>
+          <button type="button" onClick={() => onNavigate('activity')}><span>≡</span>Activity</button>
         </nav>
         <div className="source-capabilities">
           <p>Runtime capabilities</p>

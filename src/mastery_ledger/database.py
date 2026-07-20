@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from mastery_ledger.config import database_path
-from mastery_ledger.models import OnboardingRequest, WorkspaceState
+from mastery_ledger.models import OnboardingRequest, WorkspaceRepairRequest, WorkspaceState
 
 SCHEMA_VERSION = "1"
 
@@ -402,6 +402,45 @@ def save_onboarding(request: OnboardingRequest, workspace_path: Path) -> Workspa
     return WorkspaceState(
         workspace_id=workspace_id,
         name=request.workspace_name.strip(),
+        path=str(workspace_path),
+        available=True,
+        writable=True,
+    )
+
+
+def repair_active_workspace(
+    request: WorkspaceRepairRequest, workspace_path: Path
+) -> WorkspaceState:
+    initialize_database()
+    timestamp = utc_now()
+    with closing(connect()) as connection:
+        active = connection.execute(
+            "SELECT workspace_id, name FROM workspaces WHERE active = 1 LIMIT 1"
+        ).fetchone()
+        if active is None:
+            raise DatabaseReadError("No active workspace is available to repair.")
+        existing = connection.execute(
+            "SELECT workspace_id FROM workspaces WHERE path = ? LIMIT 1",
+            (str(workspace_path),),
+        ).fetchone()
+        name = request.workspace_name.strip()
+        if existing and existing["workspace_id"] != active["workspace_id"]:
+            workspace_id = existing["workspace_id"]
+            connection.execute("UPDATE workspaces SET active = 0")
+            connection.execute(
+                "UPDATE workspaces SET name = ?, active = 1, last_used_at = ? WHERE workspace_id = ?",
+                (name, timestamp, workspace_id),
+            )
+        else:
+            workspace_id = active["workspace_id"]
+            connection.execute(
+                "UPDATE workspaces SET name = ?, path = ?, last_used_at = ? WHERE workspace_id = ?",
+                (name, str(workspace_path), timestamp, workspace_id),
+            )
+        connection.commit()
+    return WorkspaceState(
+        workspace_id=str(workspace_id),
+        name=name,
         path=str(workspace_path),
         available=True,
         writable=True,

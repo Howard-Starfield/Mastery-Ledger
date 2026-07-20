@@ -10,7 +10,8 @@ input_source_ids: []
 input_artifacts: []
 source_limit: 5
 dependencies: []
-output_path: orchestration/reports/REPORT-001.json
+output_path: .work/orchestration/reports/REPORT-001.json
+completion_path: .work/orchestration/completions/TASK-001.json
 required_schema: evidence-packet-v1
 reviewer_role: citation-verifier
 acceptance_criteria:

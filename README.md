@@ -2,7 +2,7 @@
 
 Turn documents, websites, video, audio, and researched topics into source-grounded courses, focused exams, and long-term review records.
 
-> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, Focused Question exams, durable attempts, scheduled reviews, concept evidence, versioned curve settings, a durable Source Inbox, and the Codex skill adapter. Knowledge Wiki and Evidence & Activity remain under development; signed distribution remains a release gate.
+> **Project status:** The developer preview now implements onboarding and repair, Source Inbox ingestion, Knowledge Wiki, Evidence & Activity, Focused Question exams, durable attempts, scheduled reviews, versioned curve settings, and the Codex skill adapter with executable research guards. OS-signed installers remain the release gate.
 
 ![Mastery Ledger Exam Ledger dashboard](design-mockups/mastery-ledger-dashboard.png)
 
@@ -83,6 +83,8 @@ Mastery Ledger has two cooperating layers: a local application for learner-facin
 | Video and audio processing | Uses the `yt-dlp` Python API, probes one public item, prefers human then automatic captions, and permits local `faster-whisper` transcription only after explicit approval and model configuration | Application preview + skill scripts |
 | Research orchestration | Splits independent research into bounded tasks, routes completed reports through verification, and prevents reviewers from running before their dependencies | Codex skill workflow |
 | Evidence and contradiction control | Separates claims, sources, contradictions, gaps, verification decisions, and approved evidence before learner-facing synthesis | Codex skill workflow |
+| Knowledge Wiki | Browses approved and derived concepts, relationships, learner proficiency, contradictions, page Markdown, and exact source locators | Application preview + Codex skill artifacts |
+| Evidence & Activity | Projects approved and rejected claims, contradictions, gaps, and observable action events without exposing hidden reasoning | Application preview |
 | Course and assessment generation | Builds source-grounded study guides, knowledge pages, question banks, and exam definitions from approved evidence | Codex skill workflow |
 | Citation validation | Validates source IDs, structured locators, support targets, answer explanations, and evidence packets before publication | Skill scripts |
 | Mastery records | Persists attempts, restores interrupted sessions, updates each question's interval, and records idempotent concept evidence | Application preview |
@@ -112,10 +114,9 @@ Onboarding belongs to the application. The skill can detect that setup is requir
 
 ## What is next
 
-- **Knowledge Wiki** — browse approved concepts, relationships, contradictions, and exact source locations.
-- **Evidence & Activity** — inspect source decisions, worker handoffs, rejected claims, and machine-readable action events.
-- **Workflow guardrails** — extend the implemented ingestion isolation and action ledger to research-agent completion envelopes and final publication.
-- **Stable distribution** — publish tagged, checksummed application releases and signed installers.
+- **Stable distribution** — exercise the tagged artifact workflow, then add maintainer-controlled Windows/macOS signing and installer jobs.
+- **Model management** — add an application-owned consent screen and managed cache before enabling local ASR model downloads.
+- **Broader acceptance** — test large real-world course libraries and accessibility workflows across supported operating systems.
 
 ## Application architecture
 
@@ -123,12 +124,13 @@ The accepted standalone stack is a Python **FastAPI + SQLite** runtime with a **
 
 Exact resolved Python graphs are recorded in `requirements/core.lock` and `requirements/transcription.lock`. The latter is optional because local ASR is intentionally not installed or model-configured during ordinary onboarding.
 
-First-run onboarding belongs to the application because it validates and persists workspace, privacy, accessibility, dependency, and model-download choices. For an operational request, the optional Codex skill runs the read-only `mastery-ledger doctor --json`; an `onboarding_required` result launches the fixed local onboarding command once. A missing application is never downloaded or installed automatically. The skill passes proposed learning context without maintaining a second configuration system.
+First-run onboarding belongs to the application because it validates and persists workspace, privacy, accessibility, dependency, and model-download choices. For an operational request, the optional Codex skill runs the read-only `mastery-ledger doctor --json --skill-version 0.1.0`; an `onboarding_required` result launches the fixed local onboarding command once, while `workspace_unavailable` launches explicit repair. A missing application is never downloaded or installed automatically. The skill passes proposed learning context without maintaining a second configuration system.
 
 ### Implemented application slice
 
-- Read-only, versioned `mastery-ledger doctor --json` output.
+- Read-only, versioned `mastery-ledger doctor --json --skill-version 0.1.0` compatibility output.
 - Idempotent `mastery-ledger onboard --open --json` loopback launch.
+- Explicit `mastery-ledger repair --open --json` launch, native folder chooser, and settings-preserving workspace reconnection.
 - Session-protected FastAPI endpoints bound to `127.0.0.1`.
 - SQLite-backed workspace registry and onboarding preferences.
 - Absolute-path validation and atomic first-workspace creation.
@@ -149,11 +151,14 @@ First-run onboarding belongs to the application because it validates and persist
 - Recoverable ingestion worker with restart recovery, `.work/ingestion` staging, atomic promotion, and observable JSONL events.
 - Local document, SRT/VTT, and media ingestion; public-web extraction; and subtitle-first remote video processing through the `yt-dlp` Python API.
 - Canonical `source-manifest.yaml`, `source/SRC-*.md`, `source/media/SRC-*/`, and `logs/events.jsonl` course artifacts with legacy-manifest read compatibility.
+- Knowledge Wiki concept index and pages with relationship navigation, learner state, contradiction counts, and a collated grounding ledger.
+- Evidence Ledger and Activity Feed over portable evidence JSON and safe observable JSONL action fields.
+- Canonical `wiki-v1`, completion-envelope, runtime-compatibility, and `.work/orchestration` skill artifacts with executable dependency-order validation.
 - Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
 
 ## Install and test the preview
 
-The onboarding, workspace dashboard, and Focused Question slices are ready for developer testing. This is not yet a signed learner release; completing onboarding shows a setup receipt with an action that opens Exam Ledger.
+The complete repository-controlled preview is ready for developer testing. This is not yet an OS-signed learner release; completing onboarding shows a setup receipt with an action that opens Exam Ledger.
 
 ### 1. Install the local application
 
@@ -231,12 +236,16 @@ onboarding_required
 - The default curve includes `1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584` days.
 - No ASR model, FFmpeg binary, or source media is downloaded during onboarding.
 - A second `mastery-ledger doctor --json` reports the saved workspace and `ready` status.
+- Removing or moving the registered folder reports `workspace_unavailable`; `mastery-ledger repair --open --json` opens explicit reconnection without changing learning settings.
 - The Exam Ledger dashboard discovers only exams whose canonical `exam.json` status is `ready`.
 - Search and course filters operate within the internally scrollable Ready Exams register.
 - Due totals and Ownership Curve counts match each course's `progress/review-queue.json` records.
 - Source Inbox preserves existing legacy manifest records, writes a pending receipt before processing, and shows queued, running, complete, failed, or cancelled durable jobs.
 - Local documents are processed from `.work/ingestion`, promoted to `source/SRC-*.md` plus `source/media/SRC-*/`, and leave no successful staging directory behind.
 - Remote videos are probed without credentials or user configuration, prefer human captions over automatic captions, and do not download media unless transcription is approved and a local ASR model is configured.
+- Knowledge Wiki renders canonical pages and derives a useful concept index when optional wiki artifacts are absent.
+- Evidence & Activity displays decisions, exact artifact/source IDs, contradictions, and malformed-log warnings without passing unknown or private reasoning fields through the API.
+- The orchestration validator exposes only dependency-ready task IDs and blocks contradiction or citation reviewers until their prerequisite completion envelopes are submitted.
 
 For an isolated manual run that does not touch the normal per-user registry or course location, set these variables in the same terminal before running `doctor` or `onboard`:
 
@@ -306,7 +315,7 @@ Remove the development application installation with:
 uv tool uninstall mastery-ledger
 ```
 
-The official release page will not be recommended by the skill until a compatible signed artifact and checksum manifest exist.
+Tagged releases automatically build checksummed, provenance-attested Python artifacts. See [RELEASE.md](RELEASE.md). The skill will not describe the release as a signed learner-ready installer until maintainer-controlled OS signing is configured.
 
 ## Repository map
 
@@ -319,6 +328,8 @@ tests/                                   application contract tests
 design-mockups/                          dashboard and exam-interface concepts
 mastery-ledger/                         installable skill prototype
 MASTERY_LEDGER_DESIGN_DECISIONS.md      architecture decision record
+RELEASE.md                              release gates, checksums, attestations, and signing boundary
+.github/workflows/                      cross-platform CI and tagged artifact release
 LLM Wiki.md                              original knowledge-wiki concept notes
 LICENSE                                  MIT license
 ```

@@ -39,14 +39,21 @@ def main() -> int:
 
     target.mkdir(parents=True, exist_ok=True)
     for directory in (
-        "sources",
-        "source-notes",
-        "orchestration/tasks",
-        "orchestration/reports",
-        "orchestration/reviews",
+        "source/media",
+        "wiki/pages",
+        "questions",
+        "progress",
+        "exams",
+        "attempts",
+        "logs",
         "evidence",
-        "drafts",
-        "sessions",
+        ".work/ingestion",
+        ".work/orchestration/tasks",
+        ".work/orchestration/reports",
+        ".work/orchestration/reviews",
+        ".work/orchestration/completions",
+        ".work/drafts",
+        ".work/scratch",
     ):
         (target / directory).mkdir(parents=True, exist_ok=True)
 
@@ -54,8 +61,12 @@ def main() -> int:
         "study.yaml": "study.yaml",
         "source-manifest.yaml": "source-manifest.yaml",
         "study-guide.md": "study-guide.md",
-        "question-bank.json": "question-bank.json",
-        "learner-progress.json": "learner-progress.json",
+        "question-bank.json": "questions/question-bank.json",
+        "learner-progress.json": "progress/learner-progress.json",
+        "wiki.json": "wiki/wiki.json",
+        "wiki-page.md": "wiki/pages/concept-id.md",
+        "run-plan.yaml": ".work/orchestration/run-plan.yaml",
+        "task-brief.yaml": ".work/orchestration/task-template.yaml",
     }
     for source_name, target_name in mapping.items():
         text = (assets / source_name).read_text(encoding="utf-8")

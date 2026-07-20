@@ -1,0 +1,22 @@
+# Release process
+
+Mastery Ledger has two release surfaces: the Python application and the `mastery-ledger/` Codex skill. They share version `0.1.0` and communicate through the versioned `doctor-v1` contract.
+
+## Automated gates
+
+Every push and pull request runs the Python and skill contract suite on Python 3.11 and 3.12 across Windows and Ubuntu. It also installs the locked frontend dependencies, runs Vitest, rebuilds the Vite bundle, and rejects source changes that do not include the matching bundled assets.
+
+A tag matching `v*` starts the release workflow. The workflow requires the tag to equal the version in `pyproject.toml`, reruns tests, builds the wheel and source distribution, archives the matching Codex skill, creates `SHA256SUMS.txt`, records GitHub artifact attestations, uploads the immutable workflow artifact, and creates the GitHub release.
+
+## Maintainer checklist
+
+1. Update the application version, the skill version in `mastery-ledger/assets/runtime-compatibility.json`, and any fixed skill command together.
+2. Regenerate `requirements/core.lock` and `requirements/transcription.lock` when Python dependency ranges change.
+3. Run the commands in the README's automated-check section from a clean checkout.
+4. Commit and push the release candidate; wait for CI to pass.
+5. Create and push the matching annotated version tag, such as `v0.1.0`.
+6. Verify the release's checksums and GitHub artifact attestation before recommending it.
+
+## Signing boundary
+
+The repository can produce checksummed, provenance-attested Python artifacts without private credentials. It cannot produce a trusted OS installer signature by itself. Windows Authenticode and macOS notarization require maintainer-controlled signing identities and protected CI secrets. Until those credentials and installer jobs are configured, releases remain developer previews and the skill must not describe them as signed learner-ready installers.

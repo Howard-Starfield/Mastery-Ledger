@@ -18,7 +18,8 @@ artifact_paths:
   study_guide: study-guide.md
   concept_map: concept-map.md
   glossary: glossary.md
-  question_bank: question-bank.json
-  learner_progress: learner-progress.json
+  question_bank: questions/question-bank.json
+  learner_progress: progress/learner-progress.json
+  knowledge_wiki: wiki/wiki.json
 created_at: "2026-07-19T00:00:00Z"
 updated_at: "2026-07-19T00:00:00Z"

@@ -4,6 +4,7 @@ import os
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Callable
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -12,8 +13,10 @@ from fastapi.staticfiles import StaticFiles
 from mastery_ledger.config import bundled_web_dir, default_workspace_path
 from mastery_ledger.dashboard import build_dashboard
 from mastery_ledger.database import (
+    DatabaseReadError,
     get_job,
     initialize_database,
+    repair_active_workspace,
     request_job_cancellation,
     retry_job,
     save_onboarding,
@@ -26,13 +29,19 @@ from mastery_ledger.exam_service import (
     ExamSessionStore,
     ExamValidationError,
 )
+from mastery_ledger.folder_picker import pick_folder
 from mastery_ledger.ingestion_worker import IngestionWorker
+from mastery_ledger.knowledge_service import evidence_activity, knowledge_wiki
 from mastery_ledger.models import (
     ApplicationSettings,
     DashboardResult,
     DoctorResult,
+    EvidenceActivityResult,
     ExamAttemptStart,
     ExamCompletion,
+    FolderPickerRequest,
+    FolderPickerResult,
+    KnowledgeWikiResult,
     OnboardingRequest,
     OnboardingResult,
     QuestionFeedback,
@@ -43,6 +52,8 @@ from mastery_ledger.models import (
     SourceIntakeRequest,
     SourceIntakeResult,
     WorkspaceState,
+    WorkspaceRepairRequest,
+    WorkspaceRepairResult,
     WorkspaceValidationRequest,
     WorkspaceValidationResult,
 )
@@ -70,6 +81,7 @@ def create_app(
     session_token: str | None = None,
     web_dir: Path | None = None,
     start_ingestion_worker: bool = True,
+    folder_picker: Callable[[str | None], FolderPickerResult] = pick_folder,
 ) -> FastAPI:
     token = session_token or os.environ.get("MASTERY_LEDGER_SESSION_TOKEN") or secrets.token_urlsafe(32)
     frontend = web_dir or bundled_web_dir()
@@ -148,6 +160,22 @@ def create_app(
     )
     def sources() -> SourceInboxResult:
         return source_inbox(ready_workspace())
+
+    @app.get(
+        "/api/v1/knowledge",
+        response_model=KnowledgeWikiResult,
+        dependencies=[Depends(require_session)],
+    )
+    def knowledge() -> KnowledgeWikiResult:
+        return knowledge_wiki(ready_workspace())
+
+    @app.get(
+        "/api/v1/evidence-activity",
+        response_model=EvidenceActivityResult,
+        dependencies=[Depends(require_session)],
+    )
+    def evidence_and_activity() -> EvidenceActivityResult:
+        return evidence_activity(ready_workspace())
 
     @app.post(
         "/api/v1/sources",
@@ -337,6 +365,29 @@ def create_app(
         return validate_workspace(request.path)
 
     @app.post(
+        "/api/v1/system/pick-folder",
+        response_model=FolderPickerResult,
+        dependencies=[Depends(require_session)],
+    )
+    def choose_workspace_folder(request: FolderPickerRequest) -> FolderPickerResult:
+        return folder_picker(request.initial_path)
+
+    @app.post(
+        "/api/v1/workspaces/repair",
+        response_model=WorkspaceRepairResult,
+        dependencies=[Depends(require_session)],
+    )
+    def repair_workspace(request: WorkspaceRepairRequest) -> WorkspaceRepairResult:
+        validation = validate_workspace(request.workspace_path, create=True)
+        if not validation.valid:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=validation.message)
+        try:
+            workspace = repair_active_workspace(request, Path(validation.path))
+        except DatabaseReadError as error:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        return WorkspaceRepairResult(workspace=workspace)
+
+    @app.post(
         "/api/v1/onboarding/complete",
         response_model=OnboardingResult,
         dependencies=[Depends(require_session)],
@@ -353,6 +404,21 @@ def create_app(
         if not secrets.compare_digest(bootstrap_token, token):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
         response = RedirectResponse(url="/onboarding", status_code=status.HTTP_303_SEE_OTHER)
+        response.set_cookie(
+            SESSION_COOKIE,
+            token,
+            httponly=True,
+            samesite="strict",
+            secure=False,
+            path="/",
+        )
+        return response
+
+    @app.get("/bootstrap/{bootstrap_token}/repair", include_in_schema=False)
+    def bootstrap_repair(bootstrap_token: str) -> Response:
+        if not secrets.compare_digest(bootstrap_token, token):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
         response.set_cookie(
             SESSION_COOKIE,
             token,

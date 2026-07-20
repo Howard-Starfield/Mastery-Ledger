@@ -25,12 +25,15 @@ Create:
 - `study-guide.md`
 - `concept-map.md`
 - `glossary.md`
-- `question-bank.json`
-- `learner-progress.json`
+- `wiki/wiki.json` and approved Markdown pages under `wiki/pages/`
+- `questions/question-bank.json`
+- `progress/learner-progress.json`
 - `evidence/contradictions.json`
 - `evidence/gaps.json`
 
 Use templates from `assets/`.
+
+Keep all drafts, worker reports, reviewer notes, temporary extraction, and scratch files under `.work/`. Only the main agent may promote approved wiki, evidence, question, exam, and learner-state artifacts into their canonical course folders.
 
 ## Study-guide shape
 

@@ -1,0 +1,7 @@
+{
+  "schema_version": "runtime-compatibility-v1",
+  "skill_version": "0.1.0",
+  "supported_application_contract": "doctor-v1",
+  "application_command": "mastery-ledger doctor --json --skill-version 0.1.0",
+  "compatible_application_range": ">=0.1.0,<0.2.0"
+}

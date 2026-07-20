@@ -8,7 +8,7 @@ sources:
     provider: local
     source_type: local_document
     original_location: /absolute/path/to/source.md
-    local_path: sources/SRC-001/source.md
+    local_path: source/media/SRC-001/source.md
     publication_date: null
     subject_date: null
     retrieved_at: "2026-07-19T00:00:00Z"

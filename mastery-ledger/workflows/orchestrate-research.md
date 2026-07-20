@@ -31,6 +31,8 @@ The main agent owns:
 
 Workers never approve their own output and never edit final learner-facing artifacts.
 
+Use a completion router as the receptionist for worker returns. It checks completion envelopes and presents a sorted inbox to the main agent; it has no authority to approve evidence or bypass dependencies.
+
 ## Two-pass decomposition
 
 ### Pass A: corpus mapping
@@ -40,6 +42,14 @@ Use one mapper to propose concept IDs, prerequisite edges, source coverage, ambi
 ### Pass B: bounded investigation
 
 Create tasks by independent concept group, source subset, or verification function. Parallelize only tasks without dependencies.
+
+### Pass C: contradiction-first review
+
+After every source extractor and research worker in the run has submitted, route their reports together to one contradiction reviewer. Reject, narrow, or mark disputed material here. Do not start citation verification while any extraction, research, or contradiction task is unfinished.
+
+### Pass D: final citation verification
+
+Run citation verification only on the claims retained after contradiction review. This is the final worker phase before the main agent approves evidence, which avoids reopening locators for material already rejected as contradictory, stale, duplicated, or out of scope.
 
 ## Task rules
 
@@ -53,8 +63,11 @@ Every task must declare the fields in `assets/task-brief.yaml` and must have:
 - required report schema;
 - named reviewer role;
 - acceptance criteria.
+- a unique completion-envelope path under `.work/orchestration/completions/`.
 
 Never assign two workers to the same output path. Do not expose the entire corpus when a bounded subset is sufficient.
+
+All output, completion, review, draft, and scratch paths must be relative descendants of `.work/`. A worker that writes outside its assigned paths is rejected. Final course artifacts are promoted only by the main agent after approval and validation.
 
 ## Worker prompt recipe
 
@@ -79,6 +92,17 @@ Alternative states: `CHANGES_REQUIRED`, `REJECTED`, `BLOCKED`, `SUPERSEDED`.
 
 A citation verifier may mark `VERIFIED`; only the main agent may mark `APPROVED`.
 
+## Executable dispatch gate
+
+Before spawning any task, and again whenever a completion arrives, run:
+
+```bash
+python scripts/validate_orchestration.py studies/my-study/.work/orchestration/run-plan.yaml \
+  --course-root studies/my-study
+```
+
+Dispatch only task IDs listed in `ready_task_ids`. A citation verifier will not appear there until every extraction, research, and contradiction-review task has submitted. A task marked submitted without a matching `completion-envelope-v1` record fails validation. The main agent updates task state and reruns this gate; workers and the completion router never infer readiness themselves.
+
 ## Cost controls
 
 Stop and ask the user before expanding when:
@@ -98,3 +122,6 @@ The phase is complete only when:
 - reports exist for completed tasks;
 - failed tasks have a recovery decision;
 - submitted reports are routed to evidence verification.
+- every submitted task has a matching completion envelope;
+- contradiction review finished before citation verification;
+- the orchestration validator reports no path, dependency, cycle, or phase-order error.

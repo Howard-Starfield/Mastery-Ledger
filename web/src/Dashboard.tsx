@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { applicationApi, type DashboardExam, type DashboardResult } from './api'
 import CurveSettings from './CurveSettings'
+import EvidenceActivity from './EvidenceActivity'
 import ExamRunner from './ExamRunner'
+import KnowledgeWiki, { type WorkspaceScreen } from './KnowledgeWiki'
 import SourceInbox from './SourceInbox'
 
 type DashboardProps = {
@@ -13,8 +15,9 @@ const navItems = [
   { label: 'Home', icon: 'grid' },
   { label: 'Due now', icon: 'clock' },
   { label: 'Exams', icon: 'paper', active: true },
-  { label: 'Courses', icon: 'book' },
+  { label: 'Knowledge', icon: 'book' },
   { label: 'Sources', icon: 'folder' },
+  { label: 'Activity', icon: 'activity' },
 ]
 
 function Icon({ name }: { name: string }) {
@@ -24,6 +27,7 @@ function Icon({ name }: { name: string }) {
     paper: <><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v5h4M9 12h7M9 16h7" /></>,
     book: <><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H12v18H7.5A3.5 3.5 0 0 0 4 23z" /><path d="M20 5.5A3.5 3.5 0 0 0 16.5 2H12v18h4.5A3.5 3.5 0 0 1 20 23z" /></>,
     folder: <path d="M3 6h7l2 2h9v11H3z" />,
+    activity: <><path d="M5 6h14M5 12h14M5 18h14" /><circle cx="8" cy="6" r="1" /><circle cx="16" cy="12" r="1" /><circle cx="10" cy="18" r="1" /></>,
   }
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>
 }
@@ -65,7 +69,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [activeExam, setActiveExam] = useState<DashboardExam | null>(null)
   const [activeReview, setActiveReview] = useState(false)
   const [curveSettingsOpen, setCurveSettingsOpen] = useState(false)
-  const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [workspaceScreen, setWorkspaceScreen] = useState<WorkspaceScreen>('exams')
 
   const refresh = () => {
     setLoading(true)
@@ -97,9 +101,9 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   if (activeReview) {
     return <ExamRunner reviewMode onExit={() => { setActiveReview(false); refresh() }} />
   }
-  if (sourcesOpen) {
-    return <SourceInbox workspaceName={data?.workspace.name ?? workspaceName} onExit={() => { setSourcesOpen(false); refresh() }} />
-  }
+  if (workspaceScreen === 'sources') return <SourceInbox workspaceName={data?.workspace.name ?? workspaceName} onNavigate={setWorkspaceScreen} />
+  if (workspaceScreen === 'knowledge') return <KnowledgeWiki workspaceName={data?.workspace.name ?? workspaceName} onNavigate={setWorkspaceScreen} />
+  if (workspaceScreen === 'activity') return <EvidenceActivity workspaceName={data?.workspace.name ?? workspaceName} onNavigate={setWorkspaceScreen} />
 
   return (
     <main className="ledger-app">
@@ -118,7 +122,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
       <aside className="ledger-nav">
         <nav aria-label="Primary navigation">
           {navItems.map((item) => (
-            <button key={item.label} type="button" className={item.active ? 'is-active' : ''} disabled={!item.active && item.label !== 'Sources'} onClick={() => item.label === 'Sources' && setSourcesOpen(true)}>
+            <button key={item.label} type="button" className={item.active ? 'is-active' : ''} disabled={!item.active && !['Sources', 'Knowledge', 'Activity'].includes(item.label)} onClick={() => { if (item.label === 'Sources') setWorkspaceScreen('sources'); if (item.label === 'Knowledge') setWorkspaceScreen('knowledge'); if (item.label === 'Activity') setWorkspaceScreen('activity') }}>
               <Icon name={item.icon} />
               <span>{item.label}</span>
               {item.label === 'Due now' && Boolean(data?.due_now) && <em>{data?.due_now}</em>}

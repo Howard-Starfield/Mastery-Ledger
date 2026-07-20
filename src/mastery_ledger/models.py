@@ -30,6 +30,8 @@ class DoctorResult(BaseModel):
         "runtime_error",
     ]
     app_version: str
+    skill_version: str | None = None
+    compatible_skill_range: str = ">=0.1.0,<0.2.0"
     skill_compatible: bool = True
     onboarding_required: bool
     active_workspace: WorkspaceState | None = None
@@ -49,6 +51,28 @@ class WorkspaceValidationResult(BaseModel):
     writable: bool
     will_create: bool
     message: str
+
+
+class FolderPickerRequest(BaseModel):
+    initial_path: str | None = Field(default=None, max_length=4096)
+
+
+class FolderPickerResult(BaseModel):
+    schema_version: Literal["folder-picker-v1"] = "folder-picker-v1"
+    status: Literal["selected", "cancelled", "unavailable"]
+    path: str | None = None
+    message: str | None = None
+
+
+class WorkspaceRepairRequest(BaseModel):
+    workspace_path: str = Field(min_length=1, max_length=4096)
+    workspace_name: str = Field(min_length=1, max_length=120)
+
+
+class WorkspaceRepairResult(BaseModel):
+    schema_version: Literal["workspace-repair-v1"] = "workspace-repair-v1"
+    status: Literal["complete"] = "complete"
+    workspace: WorkspaceState
 
 
 class OnboardingRequest(BaseModel):
@@ -332,3 +356,96 @@ class SourceIntakeResult(BaseModel):
     course_id: str
     source_id: str
     job: IngestionJobView
+
+
+class WikiSourceReference(BaseModel):
+    source_id: str
+    title: str
+    locator_label: str
+    support_strength: Literal["direct", "partial", "contextual"] = "contextual"
+    href: str | None = None
+
+
+class WikiRelationship(BaseModel):
+    course_id: str
+    course_title: str
+    from_concept_id: str
+    to_concept_id: str
+    kind: str
+    status: Literal["approved", "provisional"] = "provisional"
+
+
+class WikiConcept(BaseModel):
+    course_id: str
+    course_title: str
+    concept_id: str
+    title: str
+    summary: str
+    status: str = "unseen"
+    proficiency_score: float = Field(default=0, ge=0, le=1)
+    attempt_count: int = Field(default=0, ge=0)
+    next_review_at: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    prerequisites: list[str] = Field(default_factory=list)
+    related: list[str] = Field(default_factory=list)
+    sources: list[WikiSourceReference] = Field(default_factory=list)
+    contradiction_count: int = Field(default=0, ge=0)
+    page_markdown: str | None = None
+    page_path: str | None = None
+
+
+class WikiCourse(BaseModel):
+    course_id: str
+    title: str
+    concept_count: int = Field(ge=0)
+    relationship_count: int = Field(ge=0)
+    contradiction_count: int = Field(ge=0)
+
+
+class KnowledgeWikiResult(BaseModel):
+    schema_version: Literal["knowledge-wiki-v1"] = "knowledge-wiki-v1"
+    courses: list[WikiCourse] = Field(default_factory=list)
+    concepts: list[WikiConcept] = Field(default_factory=list)
+    relationships: list[WikiRelationship] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class EvidenceItem(BaseModel):
+    item_id: str
+    course_id: str
+    course_title: str
+    kind: Literal["approved_claim", "contradiction", "gap", "rejected_claim"]
+    status: str
+    title: str
+    summary: str
+    source_ids: list[str] = Field(default_factory=list)
+    concept_ids: list[str] = Field(default_factory=list)
+    locator_labels: list[str] = Field(default_factory=list)
+    artifact_path: str
+
+
+class ActivityEvent(BaseModel):
+    event_id: str
+    course_id: str
+    course_title: str
+    timestamp: str
+    action: str
+    actor: str
+    status: str
+    summary: str
+    artifacts: list[str] = Field(default_factory=list)
+    source_id: str | None = None
+    job_id: str | None = None
+    decision: str | None = None
+    justification: str | None = None
+
+
+class EvidenceActivityResult(BaseModel):
+    schema_version: Literal["evidence-activity-v1"] = "evidence-activity-v1"
+    evidence: list[EvidenceItem] = Field(default_factory=list)
+    events: list[ActivityEvent] = Field(default_factory=list)
+    approved_count: int = Field(default=0, ge=0)
+    contradiction_count: int = Field(default=0, ge=0)
+    gap_count: int = Field(default=0, ge=0)
+    rejected_count: int = Field(default=0, ge=0)
+    warnings: list[str] = Field(default_factory=list)

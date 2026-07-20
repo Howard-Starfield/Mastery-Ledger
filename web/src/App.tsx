@@ -10,6 +10,7 @@ import {
   type WorkspaceValidation,
 } from './api'
 import Dashboard from './Dashboard'
+import WorkspaceRepair from './WorkspaceRepair'
 import { formatReviewIntervals, parseReviewIntervals } from './reviewIntervals'
 
 const steps = [
@@ -146,6 +147,20 @@ function OnboardingApp() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Workspace validation failed.')
       return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const chooseWorkspace = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const selection = await onboardingApi.pickFolder(form.workspacePath || null)
+      if (selection.status === 'selected' && selection.path) update('workspacePath', selection.path)
+      else if (selection.status === 'unavailable') setError(selection.message ?? 'The native folder chooser is unavailable. Enter an absolute path instead.')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The folder chooser could not open.')
     } finally {
       setBusy(false)
     }
@@ -333,6 +348,9 @@ function OnboardingApp() {
                     <button type="button" onClick={() => defaults && update('workspacePath', defaults.workspace_path)}>
                       Suggested
                     </button>
+                    <button type="button" onClick={chooseWorkspace} disabled={busy}>
+                      Browse…
+                    </button>
                   </div>
                   <small>Nothing will be placed inside the installed skill directory.</small>
                 </label>
@@ -502,6 +520,10 @@ function App() {
 
   if (status.status === 'ready' && status.active_workspace) {
     return <Dashboard workspaceName={status.active_workspace.name} />
+  }
+
+  if (status.status === 'workspace_unavailable' && status.active_workspace) {
+    return <WorkspaceRepair workspace={status.active_workspace} onComplete={() => applicationApi.status().then(setStatus).catch((cause: Error) => setStatusError(cause.message))} />
   }
 
   return <OnboardingApp />

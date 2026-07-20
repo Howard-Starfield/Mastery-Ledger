@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import re
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -33,6 +35,10 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "references" / "quality-rubric.md",
             ROOT / "references" / "runtime-portability.md",
             ROOT / "references" / "linkvault-connector.md",
+            ROOT / "assets" / "wiki.json",
+            ROOT / "assets" / "wiki-page.md",
+            ROOT / "assets" / "completion-envelope.json",
+            ROOT / "assets" / "runtime-compatibility.json",
         ]
         missing = [str(path.relative_to(ROOT)) for path in required if not path.exists()]
         self.assertEqual([], missing, f"Missing required files: {missing}")
@@ -52,6 +58,20 @@ class SkillStructureTests(unittest.TestCase):
         metadata = (ROOT / "agents" / "openai.yaml").read_text(encoding="utf-8")
         self.assertIn('display_name: "Mastery Ledger"', metadata)
         self.assertIn("$mastery-ledger", metadata)
+
+    def test_runtime_compatibility_asset_matches_application_version(self) -> None:
+        compatibility = json.loads(
+            (ROOT / "assets" / "runtime-compatibility.json").read_text(encoding="utf-8")
+        )
+        package = tomllib.loads((ROOT.parent / "pyproject.toml").read_text(encoding="utf-8"))
+        version = package["project"]["version"]
+        self.assertEqual(version, compatibility["skill_version"])
+        self.assertEqual(
+            f"mastery-ledger doctor --json --skill-version {version}",
+            compatibility["application_command"],
+        )
+        workflow = (ROOT / "workflows" / "runtime-onboarding.md").read_text(encoding="utf-8")
+        self.assertIn(compatibility["application_command"], workflow)
 
     def test_linkvault_is_isolated_to_optional_connector(self) -> None:
         allowed = {
@@ -76,6 +96,16 @@ class SkillStructureTests(unittest.TestCase):
         self.assertNotIn(".claude/skills", content)
         self.assertNotIn(".codex/skills", content)
         self.assertNotIn("confirmed_by", content)
+
+    def test_course_initializer_uses_canonical_clean_layout(self) -> None:
+        content = (ROOT / "scripts" / "init_study.py").read_text(encoding="utf-8")
+        self.assertIn('"source/media"', content)
+        self.assertIn('"wiki/pages"', content)
+        self.assertIn('".work/orchestration/tasks"', content)
+        self.assertIn('"questions/question-bank.json"', content)
+        self.assertIn('"progress/learner-progress.json"', content)
+        self.assertNotIn('"source-notes"', content)
+        self.assertNotIn('"orchestration/tasks"', content)
 
     def test_direct_references_resolve(self) -> None:
         content = (ROOT / "SKILL.md").read_text(encoding="utf-8")

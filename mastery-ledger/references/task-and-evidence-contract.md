@@ -19,7 +19,8 @@ concept_ids: [policy-gradient, reinforce]
 input_source_ids: []
 source_limit: 5
 dependencies: [TASK-000]
-output_path: orchestration/reports/REPORT-001.json
+output_path: .work/orchestration/reports/REPORT-001.json
+completion_path: .work/orchestration/completions/TASK-001.json
 required_schema: evidence-packet-v1
 reviewer_role: citation-verifier
 acceptance_criteria:
@@ -27,6 +28,8 @@ acceptance_criteria:
   - Contradictions and gaps are preserved
 status: planned
 ```
+
+Every worker writes only its assigned output plus one `completion-envelope-v1` JSON record shaped like `assets/completion-envelope.json`. The envelope contains an observable summary, artifacts, blockers, and next actions; it must not contain prompts, hidden reasoning, scratch notes, or chain-of-thought. Scratch work remains under `.work/scratch/` and is never promoted.
 
 ## Evidence packet
 

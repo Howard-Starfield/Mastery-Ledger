@@ -86,6 +86,116 @@ class EvidenceAndMasteryTests(unittest.TestCase):
         self.assertEqual([], errors)
         self.assertEqual(["CLM-1"], [item["claim_id"] for item in merged])
 
+    def test_orchestration_gate_orders_contradictions_before_final_citations(self) -> None:
+        tool = load_module("validate_orchestration", "scripts/validate_orchestration.py")
+        tasks = [
+            {
+                "task_id": "TASK-RESEARCH",
+                "role": "research-worker",
+                "status": "submitted",
+                "dependencies": [],
+                "output_path": ".work/orchestration/reports/research.json",
+                "completion_path": ".work/orchestration/completions/research.json",
+            },
+            {
+                "task_id": "TASK-CONTRADICTIONS",
+                "role": "contradiction-reviewer",
+                "status": "planned",
+                "dependencies": ["TASK-RESEARCH"],
+                "output_path": ".work/orchestration/reports/contradictions.json",
+                "completion_path": ".work/orchestration/completions/contradictions.json",
+            },
+            {
+                "task_id": "TASK-CITATIONS",
+                "role": "citation-verifier",
+                "status": "planned",
+                "dependencies": ["TASK-CONTRADICTIONS"],
+                "output_path": ".work/orchestration/reviews/citations.json",
+                "completion_path": ".work/orchestration/completions/citations.json",
+            },
+        ]
+        errors, warnings, ready = tool.validate_plan({"task_graph": tasks})
+        self.assertEqual([], errors)
+        self.assertEqual([], warnings)
+        self.assertEqual(["TASK-CONTRADICTIONS"], ready)
+
+        tasks[1]["status"] = "submitted"
+        errors, _, ready = tool.validate_plan({"task_graph": tasks})
+        self.assertEqual([], errors)
+        self.assertEqual(["TASK-CITATIONS"], ready)
+
+    def test_orchestration_gate_rejects_early_verifier_and_workspace_clutter(self) -> None:
+        tool = load_module("validate_orchestration_invalid", "scripts/validate_orchestration.py")
+        tasks = [
+            {
+                "task_id": "TASK-RESEARCH",
+                "role": "research-worker",
+                "status": "in_progress",
+                "dependencies": [],
+                "output_path": "reports/research.json",
+                "completion_path": ".work/orchestration/completions/research.json",
+            },
+            {
+                "task_id": "TASK-CITATIONS",
+                "role": "citation-verifier",
+                "status": "in_progress",
+                "dependencies": ["TASK-RESEARCH"],
+                "output_path": ".work/orchestration/reviews/citations.json",
+                "completion_path": ".work/orchestration/completions/citations.json",
+            },
+        ]
+        errors, _, ready = tool.validate_plan({"task_graph": tasks})
+        self.assertEqual([], ready)
+        self.assertTrue(any("under .work" in error for error in errors))
+        self.assertTrue(any("contradiction-reviewer" in error for error in errors))
+        self.assertTrue(any("before dependencies" in error for error in errors))
+
+    def test_orchestration_gate_requires_matching_completion_envelopes(self) -> None:
+        tool = load_module("validate_orchestration_envelopes", "scripts/validate_orchestration.py")
+        with tempfile.TemporaryDirectory() as directory:
+            course_root = Path(directory)
+            completion = course_root / ".work" / "orchestration" / "completions" / "research.json"
+            completion.parent.mkdir(parents=True)
+            completion.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "completion-envelope-v1",
+                        "task_id": "TASK-RESEARCH",
+                        "status": "submitted",
+                        "output_path": ".work/orchestration/reports/research.json",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            plan = {
+                "task_graph": [
+                    {
+                        "task_id": "TASK-RESEARCH",
+                        "role": "research-worker",
+                        "status": "submitted",
+                        "dependencies": [],
+                        "output_path": ".work/orchestration/reports/research.json",
+                        "completion_path": ".work/orchestration/completions/research.json",
+                    },
+                    {
+                        "task_id": "TASK-CONTRADICTIONS",
+                        "role": "contradiction-reviewer",
+                        "status": "planned",
+                        "dependencies": ["TASK-RESEARCH"],
+                        "output_path": ".work/orchestration/reports/contradictions.json",
+                        "completion_path": ".work/orchestration/completions/contradictions.json",
+                    },
+                ]
+            }
+            errors, _, ready = tool.validate_plan(plan, course_root=course_root)
+            self.assertEqual([], errors)
+            self.assertEqual(["TASK-CONTRADICTIONS"], ready)
+
+            completion.write_text("{}", encoding="utf-8")
+            errors, _, ready = tool.validate_plan(plan, course_root=course_root)
+            self.assertEqual([], ready)
+            self.assertTrue(any("completion-envelope-v1" in error for error in errors))
+
     def test_mastery_update_is_bounded_and_assistance_sensitive(self) -> None:
         tool = load_module("update_mastery", "scripts/update_mastery.py")
         current = {

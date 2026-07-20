@@ -1,0 +1,18 @@
+{
+  "schema_version": "wiki-v1",
+  "course_id": "STUDY-001",
+  "updated_at": "2026-07-19T00:00:00Z",
+  "concepts": [
+    {
+      "concept_id": "concept-id",
+      "title": "Concept title",
+      "summary": "A short approved synthesis grounded in the listed source references.",
+      "page_path": "wiki/pages/concept-id.md",
+      "tags": [],
+      "prerequisites": [],
+      "related": [],
+      "source_refs": []
+    }
+  ],
+  "relationships": []
+}

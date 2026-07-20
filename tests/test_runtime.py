@@ -7,10 +7,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mastery_ledger.app import create_app
+from mastery_ledger import cli
 from mastery_ledger.cli import main
 from mastery_ledger.config import database_path
 from mastery_ledger.ingestion_worker import IngestionWorker
-from mastery_ledger.models import WorkspaceState
+from mastery_ledger.models import FolderPickerResult, WorkspaceState
 from mastery_ledger.runtime import build_doctor_result, validate_workspace
 
 
@@ -30,6 +31,22 @@ def test_doctor_is_read_only_before_onboarding(runtime_home: Path) -> None:
     assert result.action == "open_onboarding"
     assert not runtime_home.exists()
     assert not database_path().exists()
+
+
+def test_doctor_enforces_the_supported_skill_version_range(runtime_home: Path) -> None:
+    compatible = build_doctor_result("0.1.0")
+    incompatible = build_doctor_result("1.0.0")
+    malformed = build_doctor_result("current")
+
+    assert compatible.status == "onboarding_required"
+    assert compatible.skill_compatible is True
+    assert compatible.skill_version == "0.1.0"
+    assert compatible.compatible_skill_range == ">=0.1.0,<0.2.0"
+    for result in (incompatible, malformed):
+        assert result.status == "incompatible"
+        assert result.skill_compatible is False
+        assert result.action == "update_application_or_skill"
+        assert result.onboarding_required is False
 
 
 def test_workspace_validation_requires_absolute_path(runtime_home: Path) -> None:
@@ -103,6 +120,60 @@ def test_api_rejects_requests_without_local_session(runtime_home: Path, tmp_path
     assert response.status_code == 401
 
 
+def test_workspace_repair_preserves_settings_and_native_picker_is_explicit(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    selected = tmp_path / "ReconnectedWorkspace"
+    app = create_app(
+        session_token="repair-session",
+        web_dir=tmp_path / "missing-web",
+        start_ingestion_worker=False,
+        folder_picker=lambda initial: FolderPickerResult(status="selected", path=str(selected)),
+    )
+    original = tmp_path / "OriginalWorkspace"
+    with TestClient(app) as client:
+        client.get("/bootstrap/repair-session", follow_redirects=False)
+        completed = client.post(
+            "/api/v1/onboarding/complete",
+            json={
+                "workspace_path": str(original),
+                "workspace_name": "Original ledger",
+                "language": "fr",
+                "processing_mode": "metadata_only",
+                "reduced_motion": True,
+                "review_intervals": [2, 5, 11],
+                "initial_source_hint": None,
+            },
+        )
+        workspace_id = completed.json()["workspace"]["workspace_id"]
+        original.rmdir()
+
+        unavailable = client.get("/api/v1/status").json()
+        assert unavailable["status"] == "workspace_unavailable"
+        assert unavailable["action"] == "repair_workspace"
+
+        picked = client.post(
+            "/api/v1/system/pick-folder",
+            json={"initial_path": str(original)},
+        )
+        assert picked.status_code == 200
+        assert picked.json()["path"] == str(selected)
+
+        repaired = client.post(
+            "/api/v1/workspaces/repair",
+            json={"workspace_path": str(selected), "workspace_name": "Reconnected ledger"},
+        )
+        assert repaired.status_code == 200
+        assert repaired.json()["workspace"]["workspace_id"] == workspace_id
+        assert repaired.json()["workspace"]["name"] == "Reconnected ledger"
+        assert selected.is_dir()
+        assert client.get("/api/v1/status").json()["status"] == "ready"
+        settings = client.get("/api/v1/settings").json()
+        assert settings["language"] == "fr"
+        assert settings["processing_mode"] == "metadata_only"
+        assert settings["review_curve"]["interval_days"] == [2, 5, 11]
+
+
 def test_health_identifies_the_local_application(runtime_home: Path, tmp_path: Path) -> None:
     app = create_app(session_token="test-session", web_dir=tmp_path / "missing-web")
 
@@ -128,15 +199,49 @@ def test_built_frontend_is_served_after_bootstrap(runtime_home: Path) -> None:
     assert "<div id=\"root\"></div>" in response.text
 
 
+def test_repair_bootstrap_establishes_session_and_routes_to_application(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    app = create_app(session_token="repair-session", web_dir=tmp_path / "missing-web")
+
+    with TestClient(app) as client:
+        response = client.get("/bootstrap/repair-session/repair", follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == "/"
+        assert client.get("/api/v1/status").status_code == 200
+
+
 def test_doctor_cli_emits_one_json_object(runtime_home: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    exit_code = main(["doctor", "--json"])
+    exit_code = main(["doctor", "--json", "--skill-version", "0.1.0"])
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
 
     assert exit_code == 0
     assert payload["schema_version"] == "doctor-v1"
     assert payload["status"] == "onboarding_required"
+    assert payload["skill_version"] == "0.1.0"
     assert captured.err == ""
+
+
+def test_repair_cli_uses_fixed_workspace_repair_launcher(
+    runtime_home: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        cli,
+        "launch_workspace_repair",
+        lambda *, open_browser: {
+            "schema_version": "workspace-repair-launch-v1",
+            "status": "launched",
+            "opened": open_browser,
+            "pid": 123,
+            "url": "http://127.0.0.1:8765/",
+        },
+    )
+
+    assert main(["repair", "--open", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "workspace-repair-launch-v1"
+    assert payload["opened"] is True
 
 
 def test_dashboard_discovers_ready_exams_and_review_queue(
@@ -931,3 +1036,192 @@ def test_source_job_can_be_cancelled_and_requeued(
         requeued = client.get("/api/v1/sources").json()
         assert requeued["jobs"][0]["state"] == "queued"
         assert requeued["sources"][0]["processing_status"] == "queued"
+
+
+def test_knowledge_wiki_and_evidence_activity_project_portable_artifacts(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    app = create_app(
+        session_token="knowledge-session",
+        web_dir=tmp_path / "missing-web",
+        start_ingestion_worker=False,
+    )
+    workspace = tmp_path / "KnowledgeWorkspace"
+    with TestClient(app) as client:
+        client.get("/bootstrap/knowledge-session", follow_redirects=False)
+        client.post(
+            "/api/v1/onboarding/complete",
+            json={
+                "workspace_path": str(workspace),
+                "workspace_name": "Knowledge workspace",
+                "language": "en",
+                "processing_mode": "local_only",
+                "reduced_motion": False,
+                "review_intervals": [1, 3, 7],
+                "initial_source_hint": None,
+            },
+        )
+        course = workspace / "courses" / "biology"
+        (course / "wiki" / "pages").mkdir(parents=True)
+        (course / "progress").mkdir()
+        (course / "questions").mkdir()
+        (course / "evidence").mkdir()
+        (course / "logs").mkdir()
+        (course / "course.yaml").write_text(
+            "schema_version: course-v1\ncourse_id: COURSE-BIO\ntitle: Cell Biology\n",
+            encoding="utf-8",
+        )
+        (course / "source-manifest.yaml").write_text(
+            "schema_version: source-manifest-v1\ncourse_id: COURSE-BIO\nsources:\n"
+            "  - source_id: SRC-TEXT\n    title: Cell handbook\n"
+            "    source_type: local_document\n    original_location: C:/notes/cell.md\n"
+            "    rights_basis: user_owned\n    language: en\n    processing_status: ready\n",
+            encoding="utf-8",
+        )
+        (course / "wiki" / "pages" / "atp.md").write_text(
+            "# ATP\n\nATP transfers chemical energy between cellular reactions.\n",
+            encoding="utf-8",
+        )
+        (course / "wiki" / "wiki.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "wiki-v1",
+                    "concepts": [
+                        {
+                            "concept_id": "atp",
+                            "title": "ATP",
+                            "summary": "The cell's immediate energy-transfer molecule.",
+                            "page_path": "wiki/pages/atp.md",
+                            "tags": ["energy"],
+                            "source_refs": [
+                                {
+                                    "source_id": "SRC-TEXT",
+                                    "locator": {"kind": "heading", "value": "ATP", "label": "ATP section"},
+                                    "support_strength": "direct",
+                                }
+                            ],
+                        },
+                        {"concept_id": "cellular-respiration", "title": "Cellular respiration"},
+                    ],
+                    "relationships": [
+                        {
+                            "from": "cellular-respiration",
+                            "to": "atp",
+                            "kind": "supports",
+                            "status": "approved",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (course / "progress" / "learner-progress.json").write_text(
+            json.dumps(
+                {
+                    "concepts": [
+                        {
+                            "concept_id": "atp",
+                            "status": "learning",
+                            "proficiency_score": 0.75,
+                            "attempt_count": 4,
+                            "next_review_at": "2026-07-21T00:00:00Z",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        (course / "questions" / "question-bank.json").write_text(
+            json.dumps({"questions": [{"question_id": "Q-1", "concept_ids": ["atp"]}]}),
+            encoding="utf-8",
+        )
+        (course / "evidence" / "review.json").write_text(
+            json.dumps(
+                {
+                    "claims": [
+                        {
+                            "claim_id": "CLAIM-1",
+                            "claim": "ATP transfers energy.",
+                            "verification_status": "approved",
+                            "concept_ids": ["atp"],
+                            "source_refs": [
+                                {
+                                    "source_id": "SRC-TEXT",
+                                    "locator": {"label": "ATP section"},
+                                }
+                            ],
+                        },
+                        {
+                            "claim_id": "CLAIM-2",
+                            "claim": "ATP stores energy forever.",
+                            "verification_status": "rejected",
+                        },
+                    ],
+                    "contradictions": [
+                        {
+                            "contradiction_id": "CONTRA-1",
+                            "summary": "Two sources disagree about ATP yield.",
+                            "concept_ids": ["atp"],
+                        }
+                    ],
+                    "unresolved_questions": [
+                        {"gap_id": "GAP-1", "question": "Which yield convention is in scope?"}
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (course / "evidence" / "contradictions.json").write_text(
+            json.dumps(
+                {
+                    "contradictions": [
+                        {"contradiction_id": "CONTRA-1", "concept_ids": ["atp"]}
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        (course / "logs" / "events.jsonl").write_text(
+            json.dumps(
+                {
+                    "event_id": "EVT-1",
+                    "timestamp": "2026-07-20T10:00:00Z",
+                    "action": "evidence.claim.approved",
+                    "actor": "citation-verifier",
+                    "status": "complete",
+                    "summary": "Approved one directly supported claim.",
+                    "decision": "approve",
+                    "justification": "The locator directly supports the bounded claim.",
+                    "private_reasoning": "must never cross the API boundary",
+                    "artifacts": ["evidence/review.json"],
+                }
+            )
+            + "\nnot-json\n",
+            encoding="utf-8",
+        )
+
+        wiki = client.get("/api/v1/knowledge")
+        assert wiki.status_code == 200
+        wiki_payload = wiki.json()
+        assert wiki_payload["schema_version"] == "knowledge-wiki-v1"
+        assert wiki_payload["courses"][0]["concept_count"] == 2
+        atp = next(item for item in wiki_payload["concepts"] if item["concept_id"] == "atp")
+        assert atp["proficiency_score"] == 0.75
+        assert atp["page_path"] == "wiki/pages/atp.md"
+        assert atp["sources"][0]["locator_label"] == "ATP section"
+        assert atp["contradiction_count"] == 1
+        assert wiki_payload["relationships"][0]["course_id"] == "COURSE-BIO"
+        assert wiki_payload["relationships"][0]["status"] == "approved"
+
+        audit = client.get("/api/v1/evidence-activity")
+        assert audit.status_code == 200
+        audit_payload = audit.json()
+        assert audit_payload["approved_count"] == 1
+        assert audit_payload["rejected_count"] == 1
+        assert audit_payload["contradiction_count"] == 1
+        assert audit_payload["gap_count"] == 1
+        rejected = next(item for item in audit_payload["evidence"] if item["kind"] == "rejected_claim")
+        assert rejected["status"] == "rejected"
+        assert audit_payload["events"][0]["decision"] == "approve"
+        assert "private_reasoning" not in audit_payload["events"][0]
+        assert audit_payload["warnings"]

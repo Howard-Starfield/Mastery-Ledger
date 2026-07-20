@@ -20,6 +20,13 @@ export interface WorkspaceValidation {
   message: string
 }
 
+export interface FolderPickerResult {
+  schema_version: 'folder-picker-v1'
+  status: 'selected' | 'cancelled' | 'unavailable'
+  path: string | null
+  message: string | null
+}
+
 export interface OnboardingPayload {
   workspace_path: string
   workspace_name: string
@@ -196,6 +203,93 @@ export interface SourceIntakePayload {
   allow_transcription: boolean
 }
 
+export interface WikiSourceReference {
+  source_id: string
+  title: string
+  locator_label: string
+  support_strength: 'direct' | 'partial' | 'contextual'
+  href: string | null
+}
+
+export interface WikiConcept {
+  course_id: string
+  course_title: string
+  concept_id: string
+  title: string
+  summary: string
+  status: string
+  proficiency_score: number
+  attempt_count: number
+  next_review_at: string | null
+  tags: string[]
+  prerequisites: string[]
+  related: string[]
+  sources: WikiSourceReference[]
+  contradiction_count: number
+  page_markdown: string | null
+  page_path: string | null
+}
+
+export interface WikiRelationship {
+  course_id: string
+  course_title: string
+  from_concept_id: string
+  to_concept_id: string
+  kind: string
+  status: 'approved' | 'provisional'
+}
+
+export interface KnowledgeWikiResult {
+  schema_version: 'knowledge-wiki-v1'
+  courses: Array<{ course_id: string; title: string; concept_count: number; relationship_count: number; contradiction_count: number }>
+  concepts: WikiConcept[]
+  relationships: WikiRelationship[]
+  warnings: string[]
+}
+
+export type EvidenceKind = 'approved_claim' | 'contradiction' | 'gap' | 'rejected_claim'
+
+export interface EvidenceItem {
+  item_id: string
+  course_id: string
+  course_title: string
+  kind: EvidenceKind
+  status: string
+  title: string
+  summary: string
+  source_ids: string[]
+  concept_ids: string[]
+  locator_labels: string[]
+  artifact_path: string
+}
+
+export interface ActivityEvent {
+  event_id: string
+  course_id: string
+  course_title: string
+  timestamp: string
+  action: string
+  actor: string
+  status: string
+  summary: string
+  artifacts: string[]
+  source_id: string | null
+  job_id: string | null
+  decision: string | null
+  justification: string | null
+}
+
+export interface EvidenceActivityResult {
+  schema_version: 'evidence-activity-v1'
+  evidence: EvidenceItem[]
+  events: ActivityEvent[]
+  approved_count: number
+  contradiction_count: number
+  gap_count: number
+  rejected_count: number
+  warnings: string[]
+}
+
 export interface ExamOption {
   option_id: string
   text: string
@@ -294,6 +388,11 @@ export const onboardingApi = {
       method: 'POST',
       body: JSON.stringify({ path }),
     }),
+  pickFolder: (initialPath: string | null) =>
+    request<FolderPickerResult>('/api/v1/system/pick-folder', {
+      method: 'POST',
+      body: JSON.stringify({ initial_path: initialPath }),
+    }),
   complete: (payload: OnboardingPayload) =>
     request<OnboardingResult>('/api/v1/onboarding/complete', {
       method: 'POST',
@@ -311,6 +410,13 @@ export const applicationApi = {
       body: JSON.stringify(payload),
     }),
   sources: () => request<SourceInboxResult>('/api/v1/sources'),
+  knowledge: () => request<KnowledgeWikiResult>('/api/v1/knowledge'),
+  evidenceActivity: () => request<EvidenceActivityResult>('/api/v1/evidence-activity'),
+  repairWorkspace: (workspacePath: string, workspaceName: string) =>
+    request<{ schema_version: 'workspace-repair-v1'; status: 'complete'; workspace: OnboardingResult['workspace'] }>('/api/v1/workspaces/repair', {
+      method: 'POST',
+      body: JSON.stringify({ workspace_path: workspacePath, workspace_name: workspaceName }),
+    }),
   addSource: (payload: SourceIntakePayload) =>
     request<{ schema_version: 'source-intake-v1'; course_id: string; source_id: string; job: IngestionJob }>(
       '/api/v1/sources',

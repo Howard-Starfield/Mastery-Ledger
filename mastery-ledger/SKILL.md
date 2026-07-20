@@ -60,6 +60,8 @@ The main agent must:
 - show the learner a scope card and blast-radius map;
 - obtain approval before material expansion or additional workers;
 - assign bounded tasks with unique output paths;
+- keep every worker output, completion envelope, draft, and scratch path under the course `.work/` boundary;
+- run the executable orchestration readiness gate before spawning dependent reviewers;
 - verify or reject worker reports;
 - synthesize approved evidence rather than concatenate reports;
 - keep learner-facing tutoring single-agent for continuity.

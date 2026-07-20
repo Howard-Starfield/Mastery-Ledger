@@ -11,7 +11,7 @@ Run:
 ```bash
 python scripts/validate_evidence.py \
   --source-manifest studies/my-study/source-manifest.yaml \
-  orchestration/reports/REPORT-001.json
+  .work/orchestration/reports/REPORT-001.json
 ```
 
 Structural validation checks IDs, confidence bounds, source references, and locators. It does not decide whether a claim is true.
@@ -57,8 +57,8 @@ After main-agent approval:
 
 ```bash
 python scripts/aggregate_approved_evidence.py \
-  --reports-dir orchestration/reports \
-  --reviews-dir orchestration/reviews \
+  --reports-dir .work/orchestration/reports \
+  --reviews-dir .work/orchestration/reviews \
   --output evidence/approved-claims.json
 ```
 

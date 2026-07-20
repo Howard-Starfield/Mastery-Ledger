@@ -97,7 +97,12 @@ def _spawn_server(port: int, token: str) -> subprocess.Popen[bytes]:
     return subprocess.Popen(command, **kwargs)
 
 
-def launch_onboarding(*, open_browser: bool) -> dict[str, Any]:
+def _launch_application(*, open_browser: bool, purpose: str) -> dict[str, Any]:
+    if purpose not in {"onboarding", "workspace-repair"}:
+        raise ValueError(f"Unsupported application launch purpose: {purpose}")
+    schema_version = f"{purpose}-launch-v1"
+    command_name = "onboard" if purpose == "onboarding" else "repair"
+    destination = "onboarding" if purpose == "onboarding" else "workspace repair"
     existing = _read_server_state()
     status_value = "launched"
     if existing and _server_is_healthy(int(existing["port"])):
@@ -117,30 +122,42 @@ def launch_onboarding(*, open_browser: bool) -> dict[str, Any]:
         if not _wait_for_server(port):
             server_state_path().unlink(missing_ok=True)
             return {
-                "schema_version": "onboarding-launch-v1",
+                "schema_version": schema_version,
                 "status": "needs_user_action",
                 "opened": False,
-                "message": "The local application did not start. Run mastery-ledger onboard --open --json again.",
+                "message": f"The local application did not start. Run mastery-ledger {command_name} --open --json again.",
             }
 
-    bootstrap_url = f"http://127.0.0.1:{state['port']}/bootstrap/{state['session_token']}"
+    bootstrap_suffix = "" if purpose == "onboarding" else "/repair"
+    bootstrap_url = (
+        f"http://127.0.0.1:{state['port']}/bootstrap/{state['session_token']}"
+        f"{bootstrap_suffix}"
+    )
     opened = bool(webbrowser.open(bootstrap_url, new=2)) if open_browser else False
     if open_browser and not opened:
         return {
-            "schema_version": "onboarding-launch-v1",
+            "schema_version": schema_version,
             "status": "needs_user_action",
             "opened": False,
             "pid": state["pid"],
-            "url": f"http://127.0.0.1:{state['port']}/onboarding",
-            "message": "The application started, but the browser could not be opened. Rerun the onboarding command.",
+            "url": f"http://127.0.0.1:{state['port']}/{'' if purpose == 'workspace-repair' else 'onboarding'}",
+            "message": f"The application started, but the browser could not be opened. Rerun the {destination} command.",
         }
     return {
-        "schema_version": "onboarding-launch-v1",
+        "schema_version": schema_version,
         "status": status_value,
         "opened": opened,
         "pid": state["pid"],
-        "url": f"http://127.0.0.1:{state['port']}/onboarding",
+        "url": f"http://127.0.0.1:{state['port']}/{'' if purpose == 'workspace-repair' else 'onboarding'}",
     }
+
+
+def launch_onboarding(*, open_browser: bool) -> dict[str, Any]:
+    return _launch_application(open_browser=open_browser, purpose="onboarding")
+
+
+def launch_workspace_repair(*, open_browser: bool) -> dict[str, Any]:
+    return _launch_application(open_browser=open_browser, purpose="workspace-repair")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -149,10 +166,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = subparsers.add_parser("doctor", help="Inspect runtime and onboarding state")
     doctor.add_argument("--json", action="store_true", dest="as_json")
+    doctor.add_argument("--skill-version")
 
     onboard = subparsers.add_parser("onboard", help="Start the local onboarding application")
     onboard.add_argument("--open", action="store_true", dest="open_browser")
     onboard.add_argument("--json", action="store_true", dest="as_json")
+
+    repair = subparsers.add_parser("repair", help="Open the workspace repair application")
+    repair.add_argument("--open", action="store_true", dest="open_browser")
+    repair.add_argument("--json", action="store_true", dest="as_json")
 
     serve = subparsers.add_parser("serve", help="Run the loopback web application")
     serve.add_argument("--port", type=int, default=8765)
@@ -162,7 +184,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "doctor":
-        result = build_doctor_result().model_dump(mode="json")
+        result = build_doctor_result(args.skill_version).model_dump(mode="json")
         if args.as_json:
             _json_print(result)
         else:
@@ -175,6 +197,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             _json_print(result)
         else:
             print(result.get("message") or f"Mastery Ledger onboarding: {result['status']}")
+        return 0 if result["status"] in {"launched", "already_running"} else 2
+
+    if args.command == "repair":
+        result = launch_workspace_repair(open_browser=args.open_browser)
+        if args.as_json:
+            _json_print(result)
+        else:
+            print(result.get("message") or f"Mastery Ledger workspace repair: {result['status']}")
         return 0 if result["status"] in {"launched", "already_running"} else 2
 
     if args.command == "serve":

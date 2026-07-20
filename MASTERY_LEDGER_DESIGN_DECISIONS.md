@@ -1427,7 +1427,7 @@ Produce two release artifacts from the same version:
 1. **Mastery Ledger application/runtime** — installed once and usable without Codex. It owns the web app, course workspace, scheduler, Python environment, yt-dlp integration, transcription, logs, and local API/CLI.
 2. **Mastery Ledger skill adapter** — optional and lightweight. It teaches Codex when and how to call the installed runtime, how to ask intake questions, and how to interpret structured results. It does not contain the web application, third-party packages, models, native binaries, or generated course data.
 
-The skill may be bundled as an optional component of the application installer or installed separately from the same release. In either case, the skill first runs `mastery-ledger doctor --json`. If the application runtime is absent or incompatible, return `needs_user_action` with the official installer location. Do not make the skill clone a repository, run an unpinned package installation, or assemble its own competing runtime.
+The skill may be bundled as an optional component of the application installer or installed separately from the same release. In either case, the skill first runs `mastery-ledger doctor --json --skill-version 0.1.0`. If the application runtime is absent or incompatible, return `needs_user_action` with the official installer location. Do not make the skill clone a repository, run an unpinned package installation, or assemble its own competing runtime.
 
 ### Installation and onboarding boundary
 
@@ -1524,7 +1524,7 @@ CLI operations:
   mastery-ledger build-exam
   mastery-ledger review
   mastery-ledger serve
-  mastery-ledger doctor --json
+  mastery-ledger doctor --json --skill-version 0.1.0
 ```
 
 Keep one main skill initially:
@@ -1588,7 +1588,7 @@ The standalone application is the canonical owner of onboarding because onboardi
 6. the initial review-curve profile, with safe defaults and later editing;
 7. an invitation to add the first source now or continue to an empty dashboard.
 
-The skill is an adapter, not a second onboarding implementation. At the beginning of a run it calls `mastery-ledger doctor --json` when the runtime is available. If the runtime reports `onboarding_required`, the skill launches the application's documented onboarding entry point when the runtime supports it, or tells the learner how to open the application. It may pass user-provided source URLs, learning goals, or a proposed workspace path as onboarding hints, but the application must display, validate, and confirm them before persistence.
+The skill is an adapter, not a second onboarding implementation. At the beginning of a run it calls `mastery-ledger doctor --json --skill-version 0.1.0` when the runtime is available. If the runtime reports `onboarding_required`, the skill launches the application's documented onboarding entry point. If it reports `workspace_unavailable`, the skill invokes the fixed repair launcher. It may pass user-provided source URLs, learning goals, or a proposed workspace path as onboarding hints, but the application must display, validate, and confirm them before persistence.
 
 If the application runtime is unavailable, the skill returns `needs_user_action` with installation guidance. A limited file-only fallback may ask for an output folder for the current run, but it must label that folder provisional and must not pretend it completed application onboarding or write the application registry itself.
 
@@ -1596,13 +1596,13 @@ If the application runtime is unavailable, the skill returns `needs_user_action`
 
 Keep the root `SKILL.md` as a router and put the exact state machine, JSON shapes, commands, install boundary, and fallback rules in `workflows/runtime-onboarding.md`. This is a conditionally loaded workflow, not a second skill: creating a separate onboarding skill would introduce overlapping triggers and another product identity without providing an independent learner capability.
 
-`mastery-ledger doctor --json` is read-only. It never opens the browser, installs or updates packages, writes a workspace, or downloads a model. For operational course, ingestion, exam, or review requests, the skill interprets its versioned result:
+`mastery-ledger doctor --json --skill-version 0.1.0` is read-only. It never opens the browser, installs or updates packages, writes a workspace, or downloads a model. For operational course, ingestion, exam, or review requests, the skill interprets its versioned result:
 
 | Doctor result | Behavior |
 | --- | --- |
 | `ready` | Continue the requested workflow |
 | `onboarding_required` | State that first-time setup is needed, then invoke the fixed `mastery-ledger onboard --open --json` command once |
-| `workspace_unavailable` | Open application workspace repair when implemented; never silently relocate data |
+| `workspace_unavailable` | Invoke `mastery-ledger repair --open --json`; never silently relocate data |
 | `incompatible` | Stop and offer only the verified official update action |
 | invalid result or runtime error | Stop and report the observable error |
 | launcher not found | Classify as `not_installed`; do not attempt a substitute installation |
@@ -1617,7 +1617,7 @@ The installer owns the application and locked Python environment, including `yt-
 
 ```text
 Application launch or skill invocation
-  -> mastery-ledger doctor --json
+  -> mastery-ledger doctor --json --skill-version 0.1.0
   -> configured: open the active workspace dashboard
   -> onboarding required: open application onboarding
        -> validate and save workspace
@@ -1657,8 +1657,13 @@ The first executable slice implements:
 - learner-facing Source Inbox intake, status filtering, and job polling;
 - local document/subtitle/media ingestion plus public web and subtitle-first remote video extraction;
 - `.work/ingestion` isolation, atomic source promotion, canonical source manifests, and observable JSONL action events.
+- Knowledge Wiki and Evidence & Activity projections over portable course artifacts;
+- native folder selection and explicit settings-preserving workspace repair;
+- application/skill compatibility-range enforcement through the versioned doctor command;
+- canonical wiki, completion-envelope, and `.work/orchestration` layouts with executable dependency readiness checks;
+- cross-platform CI plus tagged wheel, source, skill archive, checksum, and provenance-attestation workflows.
 
-The following remain release gates rather than completed functionality: signed installers and release manifests, application/skill compatibility-range enforcement, native folder-picker integration, workspace repair UI, Knowledge Wiki and Evidence/Activity surfaces, and research-agent completion-envelope enforcement in the application runtime.
+The repository-controlled preview now includes compatibility-range enforcement, native folder selection, explicit workspace repair, Knowledge Wiki, Evidence & Activity, and executable completion-envelope ordering for skill-orchestrated research. Tagged builds produce checksums and artifact attestations. Maintainer-controlled OS installer signing and notarization remain external release gates.
 
 ### Item 12 implementation references
 
@@ -1689,7 +1694,7 @@ This is a third-party open installer maintained by Vercel Labs, not a native Ope
 
 Do not publish a custom Mastery Ledger npm installer merely to wrap these existing mechanisms. It would create another package, release channel, and supply-chain surface without improving discovery. Reconsider a dedicated installer only when the standalone application has signed releases and can coordinate application and skill compatibility as one verified installation experience.
 
-Installing the skill never implies that the standalone application is installed. The skill must still run `mastery-ledger doctor --json` and follow the missing-runtime contract.
+Installing the skill never implies that the standalone application is installed. The skill must still run `mastery-ledger doctor --json --skill-version 0.1.0` and follow the missing-runtime contract.
 
 ### Item 13 accepted decision
 
@@ -1703,9 +1708,9 @@ The application package can be installed directly from the official GitHub repos
 uv tool install "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
 ```
 
-This path was verified in an isolated tool directory: `uv` resolved and built the package, installed the `mastery-ledger` executable, and `mastery-ledger doctor --json` returned the expected `doctor-v1` `onboarding_required` response. The bundled React assets were available without Node.js.
+This path was verified in an isolated tool directory: `uv` resolved and built the package, installed the `mastery-ledger` executable, and `mastery-ledger doctor --json --skill-version 0.1.0` returned the expected `doctor-v1` `onboarding_required` response. The bundled React assets were available without Node.js.
 
-Treat this as a development-preview channel, not a signed release. The `main` reference is mutable, the source distribution is built on the learner's machine, and no checksum manifest currently freezes the complete dependency graph. The README must label those limits instead of presenting the command as a production installer.
+Treat this as a development-preview channel, not a signed release. The `main` reference is mutable and the source distribution is built on the learner's machine. Tagged releases now publish package checksums and GitHub artifact attestations, but those do not replace OS installer signing. The README must label those limits instead of presenting the command as a production installer.
 
 Keep the three user actions distinct:
 
@@ -1713,7 +1718,7 @@ Keep the three user actions distinct:
 2. `npx skills add ...` installs the Codex skill adapter.
 3. `mastery-ledger onboard --open --json` asks where learner-owned course data should live.
 
-The skill continues to prohibit silent application installation. When the runtime is absent, it may point the learner to the documented preview command for voluntary testing, but it must not execute that command without explicit approval or describe the preview as a signed learner release. Stable distribution remains gated on a versioned tag, immutable artifacts, checksums, compatibility metadata, and release verification.
+The skill continues to prohibit silent application installation. When the runtime is absent, it may point the learner to the documented preview command for voluntary testing, but it must not execute that command without explicit approval or describe the preview as a signed learner release. Stable learner distribution remains gated on maintainer-controlled installer signing and release verification.
 
 ### Item 14 accepted decision
 

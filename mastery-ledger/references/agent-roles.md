@@ -36,6 +36,14 @@ Independently opens cited sources and checks claim support, locator accuracy, qu
 
 It returns a review decision and exact required changes. It does not rewrite the worker’s report or approve final merge.
 
+## Contradiction reviewer
+
+Runs after all bounded extraction and research tasks for the current run have submitted. It compares their claims, source dates, definitions, assumptions, and scope; records conflicts, supersession, and unresolved gaps; and may reject material before citation verification spends tokens reopening locators. It never verifies its own source citations and never edits final learner-facing artifacts.
+
+## Completion router
+
+Acts as the receptionist between workers and the main orchestrator. It reads task briefs and `completion-envelope-v1` records, confirms that declared output paths exist, sorts submissions into ready, blocked, failed, or malformed queues, and reports those queues to the main agent. It does not inspect hidden reasoning, change report content, approve evidence, or dispatch a downstream task that the orchestration validator has not marked ready.
+
 ## Module drafter
 
 Optionally drafts one module from a frozen outline and approved evidence. It may not introduce new unsupported claims. Its output remains a draft until main-agent synthesis.
@@ -61,4 +69,5 @@ Attempts to find unsupported claims, misleading simplifications, stale facts, so
 - Initial research workers should not see one another’s conclusions unless a dependency requires it.
 - Verifiers receive the source, report, and rubric—not the expected verdict.
 - Evaluators submit recommendations; they do not silently edit approved artifacts.
+- Research and extraction workers submit independently. The contradiction reviewer runs only after their completion envelopes are accepted, and citation verification runs last, after contradiction review has rejected or retained candidate claims.
 - When no subagents are available, the main agent performs separated passes and labels the loss of independence.

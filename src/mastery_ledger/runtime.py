@@ -10,6 +10,17 @@ from mastery_ledger.config import database_path
 from mastery_ledger.database import DatabaseReadError, active_workspace
 from mastery_ledger.models import CapabilityState, DoctorResult, WorkspaceState, WorkspaceValidationResult
 
+MIN_SKILL_VERSION = (0, 1, 0)
+MAX_SKILL_VERSION = (0, 2, 0)
+COMPATIBLE_SKILL_RANGE = ">=0.1.0,<0.2.0"
+
+
+def _version_tuple(value: str) -> tuple[int, int, int] | None:
+    parts = value.split(".")
+    if len(parts) != 3 or any(not part.isdigit() for part in parts):
+        return None
+    return tuple(int(part) for part in parts)  # type: ignore[return-value]
+
 
 def _is_writable_directory(path: Path) -> bool:
     if not path.is_dir():
@@ -95,13 +106,31 @@ def capabilities() -> CapabilityState:
     )
 
 
-def build_doctor_result() -> DoctorResult:
+def build_doctor_result(skill_version: str | None = None) -> DoctorResult:
+    parsed_skill = _version_tuple(skill_version) if skill_version else None
+    if skill_version and (
+        parsed_skill is None
+        or parsed_skill < MIN_SKILL_VERSION
+        or parsed_skill >= MAX_SKILL_VERSION
+    ):
+        return DoctorResult(
+            status="incompatible",
+            app_version=__version__,
+            skill_version=skill_version,
+            compatible_skill_range=COMPATIBLE_SKILL_RANGE,
+            skill_compatible=False,
+            onboarding_required=False,
+            capabilities=capabilities(),
+            action="update_application_or_skill",
+        )
     try:
         row = active_workspace(database_path())
     except DatabaseReadError:
         return DoctorResult(
             status="runtime_error",
             app_version=__version__,
+            skill_version=skill_version,
+            compatible_skill_range=COMPATIBLE_SKILL_RANGE,
             onboarding_required=False,
             capabilities=capabilities(),
             action="inspect_runtime",
@@ -110,6 +139,8 @@ def build_doctor_result() -> DoctorResult:
         return DoctorResult(
             status="onboarding_required",
             app_version=__version__,
+            skill_version=skill_version,
+            compatible_skill_range=COMPATIBLE_SKILL_RANGE,
             onboarding_required=True,
             capabilities=capabilities(),
             action="open_onboarding",
@@ -123,10 +154,15 @@ def build_doctor_result() -> DoctorResult:
         available=validation.exists,
         writable=validation.writable,
     )
-    if not validation.valid:
+    # A registered workspace must already exist. ``validate_workspace`` treats a
+    # missing but creatable path as valid for onboarding, which is intentionally
+    # different from the runtime health contract.
+    if not validation.exists or not validation.writable:
         return DoctorResult(
             status="workspace_unavailable",
             app_version=__version__,
+            skill_version=skill_version,
+            compatible_skill_range=COMPATIBLE_SKILL_RANGE,
             onboarding_required=False,
             active_workspace=workspace,
             capabilities=capabilities(),
@@ -136,6 +172,8 @@ def build_doctor_result() -> DoctorResult:
     return DoctorResult(
         status="ready",
         app_version=__version__,
+        skill_version=skill_version,
+        compatible_skill_range=COMPATIBLE_SKILL_RANGE,
         onboarding_required=False,
         active_workspace=workspace,
         capabilities=capabilities(),

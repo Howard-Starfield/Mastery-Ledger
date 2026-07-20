@@ -60,7 +60,7 @@ Create an evaluation JSON and run:
 
 ```bash
 python scripts/update_mastery.py \
-  --state learner-progress.json \
+  --state progress/learner-progress.json \
   --evaluation session-evaluation.json
 ```
 

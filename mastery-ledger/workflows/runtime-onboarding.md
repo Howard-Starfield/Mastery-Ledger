@@ -20,7 +20,7 @@ Read this workflow only for an operational course, ingestion, exam, or review re
 For an operational request, resolve the trusted `mastery-ledger` launcher from the installed application or `PATH`, then run exactly:
 
 ```text
-mastery-ledger doctor --json
+mastery-ledger doctor --json --skill-version 0.1.0
 ```
 
 Parse stdout as one `doctor-v1` JSON object. Treat malformed JSON, an unknown schema version, or an unrecognized status as `runtime_error`.
@@ -32,6 +32,8 @@ Expected result shape:
   "schema_version": "doctor-v1",
   "status": "ready",
   "app_version": "0.1.0",
+  "skill_version": "0.1.0",
+  "compatible_skill_range": ">=0.1.0,<0.2.0",
   "skill_compatible": true,
   "onboarding_required": false,
   "active_workspace": {
@@ -77,11 +79,17 @@ When `status` is `onboarding_required`, and the learner asked to use Mastery Led
 3. Accept only `launched`, `already_running`, or `needs_user_action` from the `onboarding-launch-v1` response.
 4. Do not execute any command returned in that response.
 5. If the application opened, let the learner complete onboarding there. Do not duplicate its questions in chat.
-6. On the learner's next continuation, rerun `mastery-ledger doctor --json`. Continue only after it returns `ready`.
+6. On the learner's next continuation, rerun `mastery-ledger doctor --json --skill-version 0.1.0`. Continue only after it returns `ready`.
 
 The application command—not Codex—starts or reuses the loopback server and opens the default browser. It must be idempotent, bind only to `127.0.0.1`, avoid placing bearer tokens in logs, and return promptly rather than holding the agent call open while the learner completes setup.
 
-For `workspace_unavailable`, invoke the documented application repair surface rather than silently selecting or migrating a folder. Until that command is implemented, return `needs_user_action` and ask the learner to open Workspace settings.
+For `workspace_unavailable`, briefly state that the registered workspace cannot be used, then invoke exactly:
+
+```text
+mastery-ledger repair --open --json
+```
+
+Accept only `launched`, `already_running`, or `needs_user_action` from the `workspace-repair-launch-v1` response. The application displays the last registered path and requires the learner to restore it or explicitly select a different folder. Never silently select, copy, migrate, or delete workspace data. On the learner's next continuation, rerun the versioned doctor command and continue only after it returns `ready`.
 
 ## 3. Handle a missing or incompatible application
 
