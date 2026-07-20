@@ -1,343 +1,235 @@
 # Mastery Ledger
 
-Turn documents, websites, video, audio, and researched topics into source-grounded courses, focused exams, and long-term review records.
+Mastery Ledger is a local study tool for people who want to keep the trail from a source to a lesson, question, answer, and later review.
 
-> **Project status:** The developer preview now implements onboarding and repair, Source Inbox ingestion, Knowledge Wiki, Evidence & Activity, Focused Question exams, durable attempts, scheduled reviews, versioned curve settings, and the Codex skill adapter with executable research guards. OS-signed installers remain the release gate.
+Give it a document, link, video, audio file, subtitle file, or a topic. It creates a course in a folder you own. The local application runs the workspace, source inbox, exam screen, review queue, knowledge pages, and activity view. The optional Codex skill builds and checks course material from the same folder.
 
-![Mastery Ledger Exam Ledger dashboard](design-mockups/mastery-ledger-dashboard.png)
+![Mastery Ledger dashboard](design-mockups/mastery-ledger-dashboard.png)
 
-_Product interface direction using sample course data. The availability table below separates implemented preview behavior from planned surfaces._
+## Why it exists
 
-## Install the preview
+Most study tools remember the answer but lose the reason for it. Most chat sessions explain a topic but leave no durable course behind.
 
-Mastery Ledger currently has two intentionally separate parts: the local application and the Codex skill adapter. Install both without cloning the repository:
+Mastery Ledger keeps both.
 
-```powershell
-uv tool install "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
-npx skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y --copy
-mastery-ledger onboard --open --json
-```
+* Sources remain in the course folder, with extracted notes and locators.
+* A claim must survive evidence checks before it reaches a lesson or question.
+* An exam is a file, not custom code generated for one session.
+* Attempts and review dates stay with the course.
+* A changed source can be traced to the material and questions it affects.
 
-The commands expect [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for the Python application and `npx` from Node.js for the skill installer. The first command installs the application into an isolated per-user environment. The second installs the skill for Codex, and the third opens application-owned setup so the learner can choose where their course workspace belongs. Restart Codex after installing the skill.
-
-This is an unsigned development preview installed from the repository's moving `main` branch. It is suitable for testing, but it is not the future stable-release channel. A tagged, checksummed application release will replace this command before Mastery Ledger is presented as a learner-ready release.
-
-## Install only the Codex skill
-
-The repository already follows the standard `SKILL.md` layout and is discoverable by the open [`skills` CLI](https://github.com/vercel-labs/skills). Install the skill globally for Codex with one command:
-
-```powershell
-npx skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y --copy
-```
-
-This command installs the `mastery-ledger/` skill folder into Codex's global skill location. `--copy` avoids symlink-discovery and Windows permission problems. Start a new Codex task after installation.
-
-The `skills` CLI is an open third-party installer maintained by Vercel Labs, not an OpenAI package. To inspect the repository without installing, run:
-
-```powershell
-npx skills add Howard-Starfield/Mastery-Ledger --list
-```
-
-Codex can also use its bundled `$skill-installer`. Paste this request into Codex:
-
-```text
-Install this skill globally for Codex:
-https://github.com/Howard-Starfield/Mastery-Ledger/tree/main/mastery-ledger
-```
-
-Installing the skill does not install the standalone Mastery Ledger application. The application remains a separate runtime; follow [Install and test the preview](#install-and-test-the-preview) for the current development build.
-
-## What Mastery Ledger is
-
-Mastery Ledger is a local-first learning workspace. Give it documents, websites, video, audio, subtitles, or a topic to research. Its workflow organizes those sources, records provenance, checks generated claims, builds a navigable knowledge wiki, creates exam-style assessments, and schedules the same knowledge for increasingly distant review.
+## How the parts fit together
 
 ```mermaid
 flowchart LR
-    A["Files, links, video, audio, or a topic"] --> B["Source Inbox"]
-    B --> C["Extraction and evidence checks"]
-    C --> D["Knowledge Wiki"]
-    D --> E["Exam Ledger"]
-    E --> F["Attempts and mastery history"]
-    F --> G["1d → 3d → 7d → 14d → months → years"]
+    Learner["Learner"] --> App["Local application"]
+    Learner --> Skill["Codex skill"]
+
+    App --> Workspace["Learner chosen workspace"]
+    Skill --> Workspace
+
+    Workspace --> Sources["Sources and extracted notes"]
+    Sources --> Evidence["Evidence and approved claims"]
+    Evidence --> Course["Lessons, wiki pages, and question bank"]
+    Course --> Exam["Ready exam"]
+    Exam --> Records["Attempts, progress, and review queue"]
 ```
 
-The name **ledger** is intentional: source receipts, evidence decisions, questions, answers, and review history remain inspectable instead of disappearing after one chat.
+The application owns local setup and learner activity. The skill owns the course building workflow. Both read and write portable course files. SQLite stores the local application registry and job queue. It does not own the course itself.
 
-## Function showcase
+## The workflows
 
-Mastery Ledger has two cooperating layers: a local application for learner-facing setup and exams, and a Codex skill for source ingestion, research orchestration, evidence control, course generation, and tutoring workflows.
+### 1. Set up a workspace
 
-| Function | What it does | Availability |
-|---|---|---|
-| Guided onboarding | Selects and validates a learner-owned workspace, language, processing mode, accessibility preference, initial source, and review curve | Application preview |
-| Runtime doctor | Reports machine-readable `ready` or `onboarding_required` state without opening a browser or mutating setup | Application preview |
-| Exam Ledger dashboard | Discovers portable course manifests, ready exams, due questions, source readiness, recent courses, and Ownership Curve stages | Application preview |
-| Ready Exam register | Provides an internally scrollable, searchable, course-filtered list backed by canonical `exam.json` files | Application preview |
-| Focused Question exams | Delivers one question at a time with selectable answers, flags, navigation, timer, final submission, scoring, and review mode | Application preview |
-| Answer isolation | Keeps answer keys, explanations, and citation details out of the initial browser payload; every answer locks after one submission | Application preview |
-| Source disclosure | Shows no source details for an incorrect active answer; enables a still-collapsed citation panel after a correct answer and during final review | Application preview |
-| Scheduled reviews | Starts source-grounded due questions from the dashboard and applies the configured Ownership Curve on final submission | Application preview |
-| Ownership Curve settings | Edits, validates, versions, duplicates, and applies a review curve using an explicit schedule-migration policy | Application preview |
-| Source intake and scope | Registers learner-provided files and links, records rights and provenance before processing, and supports adding sources to existing or new courses | Application preview + Codex skill workflow |
-| Web and document ingestion | Runs recoverable jobs through isolated staging, promotes source Markdown and originals into a portable course, and records hashes, status, and recovery steps | Application preview |
-| Video and audio processing | Uses the `yt-dlp` Python API, probes one public item, prefers human then automatic captions, and permits local `faster-whisper` transcription only after explicit approval and model configuration | Application preview + skill scripts |
-| Learner calibration | Announces and records a bounded 3-8 question pre-research diagnostic, then proposes up to five classified adjacent branches without treating provisional answers as mastery | Codex skill workflow |
-| Research orchestration | Compiles an authorized worker graph, then requires hashed role contracts and a generated context packet before exposing any task for dispatch | Codex skill workflow |
-| Evidence and contradiction control | Separates claims, sources, contradictions, gaps, verification decisions, and approved evidence before learner-facing synthesis | Codex skill workflow |
-| Knowledge Wiki | Browses approved and derived concepts, relationships, learner proficiency, contradictions, page Markdown, and exact source locators | Application preview + Codex skill artifacts |
-| Evidence & Activity | Projects approved and rejected claims, contradictions, gaps, and observable action events without exposing hidden reasoning | Application preview |
-| Course and assessment generation | Builds source-grounded study guides, knowledge pages, an exact per-chapter 80/20 standalone-to-passage MCQ bank, a Markdown review copy, and app-compatible ready exams | Codex skill workflow |
-| Publication gate | Rejects researched courses that lack extracted source notes, worker outputs, completion envelopes, approved claims, action logs, validated question coverage, or a ready exam | Skill scripts |
-| Citation validation | Validates source IDs, structured locators, support targets, answer explanations, and evidence packets before publication | Skill scripts |
-| Mastery records | Persists attempts, restores interrupted sessions, updates each question's interval, and records idempotent concept evidence | Application preview |
-| Tutoring and course updates | Runs source-grounded tutoring passes and reopens affected evidence, questions, and contradictions when sources or goals change | Codex skill workflow |
+The application asks the learner for a writable folder. It stores that choice locally, checks it on every start, and opens a repair screen if the folder is moved or unavailable. The skill checks the application before it starts work. It does not choose a workspace or install software on its own.
 
-## Product interface
+```mermaid
+flowchart TD
+    Start["Run Mastery Ledger"] --> Doctor["doctor checks the local runtime"]
+    Doctor -->|"Workspace is ready"| Dashboard["Open the dashboard"]
+    Doctor -->|"First use"| Onboard["Open onboarding"]
+    Doctor -->|"Workspace missing"| Repair["Open workspace repair"]
+    Onboard --> Choose["Learner chooses a folder"]
+    Repair --> Choose
+    Choose --> Save["Validate and save the workspace"]
+    Save --> Dashboard
+```
 
-### Workspace and ready exams
+The server listens only on `127.0.0.1`. A session token protects the local API. The course workspace is separate from the application and from the installed skill.
 
-The Exam Ledger landing page gathers due work, available exams, course state, source readiness, and the complete Ownership Curve without editing generated HTML for each course. The dashboard preview at the top of this README shows this surface.
+### 2. Bring in sources
 
-## Exam Ledger
+The Source Inbox creates a course when needed, records the source before processing, and runs ingestion as a recoverable job. Original files and downloaded media are kept beside the extracted notes. The system does not replace a source with a summary.
 
-Exam Ledger is the focused assessment interface inside Mastery Ledger. Learners answer selectable multiple-choice questions without hints. Incorrect choices are marked without revealing the answer; after a correct answer, the explanation becomes available and the source panel remains collapsed until opened.
+```mermaid
+flowchart TD
+    Add["Add a file or public link"] --> Receipt["Create a source record"]
+    Receipt --> Job["Queue an ingestion job"]
+    Job --> Stage["Work in .work/ingestion"]
+    Stage --> Check["Check type, rights, hash, and extraction result"]
+    Check -->|"Success"| Promote["Write source note and preserved media"]
+    Check -->|"Failure or cancellation"| Record["Keep the job receipt and recovery step"]
+    Promote --> Manifest["Update source manifest and event log"]
+```
 
-![Focused Question exam with selectable answers and collapsed source disclosure](design-mockups/exam-concept-2-focused-question-v2.png)
+Documents, web pages, subtitles, local media, and public video links have separate handlers. Video processing prefers captions. Local transcription is optional and requires an approved local model. The skill never downloads a model, `yt-dlp`, or FFmpeg by surprise.
 
-_Focused Question design direction. The current runner implements selectable answers, the question palette, flags, timer, scoring, source gating, and durable attempt autosave; persistent learner notes remain future work._
+Each course keeps these files close together:
 
-Question content is data, not generated interface code. A fixed local web template renders validated exam files. The application writes in-progress and completed attempts atomically under the course, restores compatible interrupted attempts after a restart, and updates the separate review queue only when final submission succeeds.
+```text
+course/
+  source/                 extracted source notes
+  source/media/           preserved originals and media
+  source-manifest.yaml    source IDs, hashes, rights, and status
+  logs/events.jsonl       short observable activity records
+  .work/                  temporary and worker material
+```
 
-### First-run workspace setup
+### 3. Build a source checked course
 
-Onboarding belongs to the application. The skill can detect that setup is required, but the learner confirms the workspace and processing choices in the protected local interface.
+For supplied material, the skill extracts the approved corpus. For a research topic, it first asks for the goal, scope, source limit, and worker budget. It may also run a short diagnostic so the course begins at the learner's level.
 
-![Mastery Ledger first-run workspace onboarding](design-mockups/onboarding-first-run.png)
+No worker writes directly into lessons, wiki pages, questions, or exams. Each worker receives a compiled brief with a role, allowed inputs, required contracts, and one private task folder. The main agent decides what moves into the course.
 
-## What is next
+```mermaid
+flowchart TD
+    Scope["Learner approves goal, scope, and source limit"] --> Plan["Create a task plan"]
+    Plan --> Map["Map the corpus and concepts"]
+    Map --> Research["Research bounded concept groups"]
+    Research --> Conflict["Review contradictions and gaps"]
+    Conflict --> Cite["Check retained claims against exact locators"]
+    Cite --> Approve["Main agent approves evidence"]
+    Approve --> Draft["Write lessons, wiki pages, and questions"]
+    Draft --> QuestionCheck["Independent question check"]
+    QuestionCheck --> Publish["Validate the course and create a ready exam"]
 
-- **Stable distribution** — exercise the tagged artifact workflow, then add maintainer-controlled Windows/macOS signing and installer jobs.
-- **Model management** — add an application-owned consent screen and managed cache before enabling local ASR model downloads.
-- **Broader acceptance** — test large real-world course libraries and accessibility workflows across supported operating systems.
+    Gate["Before every worker: check dependencies, contracts, inputs, and output path"]
+    Gate -.-> Map
+    Gate -.-> Research
+    Gate -.-> Conflict
+    Gate -.-> Cite
+    Gate -.-> Draft
+    Gate -.-> QuestionCheck
+```
 
-## Application architecture
+The research branch is deliberately ordered. Contradiction review comes before final citation review. This avoids spending time verifying claims that will be rejected because they are out of scope, duplicated, stale, or disputed.
 
-The accepted standalone stack is a Python **FastAPI + SQLite** runtime with a **React + TypeScript** interface built by Vite. Release builds bundle the compiled frontend into the Python application, so learners do not need Node.js. Course knowledge and review artifacts remain portable files in a learner-selected workspace; SQLite holds the application index and durable processing queue.
+Workers write an event shard and completion record inside `.work/runs/<run-id>/tasks/<task-id>/`. The orchestration validator checks the role, input hashes, contract acknowledgements, output path, completion record, and event before any event is merged into the course log.
 
-Exact resolved Python graphs are recorded in `requirements/core.lock` and `requirements/transcription.lock`. The latter is optional because local ASR is intentionally not installed or model-configured during ordinary onboarding.
+### 4. Take an exam and schedule the next review
 
-First-run onboarding belongs to the application because it validates and persists workspace, privacy, accessibility, dependency, and model-download choices. For an operational request, the optional Codex skill runs the read-only `mastery-ledger doctor --json --skill-version 0.1.0`; an `onboarding_required` result launches the fixed local onboarding command once, while `workspace_unavailable` launches explicit repair. A missing application is never downloaded or installed automatically. The skill passes proposed learning context without maintaining a second configuration system.
+The application reads a ready `exam.json` file and presents one multiple choice question at a time. The answer key and explanation are not included in the first browser response. A wrong answer shows no hint. A correct answer unlocks the explanation. The source panel remains closed until the learner opens it.
 
-### Implemented application slice
+```mermaid
+flowchart TD
+    Ready["Ready exam or due review"] --> Start["Start or resume an attempt"]
+    Start --> Question["Show one question"]
+    Question --> Answer["Learner selects one answer"]
+    Answer --> Lock["Lock the answer and save the attempt"]
+    Lock --> More{"More questions?"}
+    More -->|"Yes"| Question
+    More -->|"No"| Score["Score the completed attempt"]
+    Score --> Queue["Update the review queue once"]
+    Queue --> Progress["Update concept evidence and dashboard"]
+```
 
-- Read-only, versioned `mastery-ledger doctor --json --skill-version 0.1.0` compatibility output.
-- Idempotent `mastery-ledger onboard --open --json` loopback launch.
-- Explicit `mastery-ledger repair --open --json` launch, native folder chooser, and settings-preserving workspace reconnection.
-- Session-protected FastAPI endpoints bound to `127.0.0.1`.
-- SQLite-backed workspace registry and onboarding preferences.
-- Absolute-path validation and atomic first-workspace creation.
-- React onboarding for source invitation, workspace, privacy, accessibility, and editable review intervals.
-- Workspace dashboard that discovers course manifests, ready exams, due questions, source readiness, and Ownership Curve stages from portable course files.
-- Scrollable and searchable Ready Exams register with course filtering and an exam-detail sheet.
-- Focused Question runner with a question map, flags, locked single submissions, final-submit checkpoint, scoring, and review mode.
-- Server-side answer checking that keeps keys and gated explanations out of the initial browser payload.
-- Collapsed source disclosure that unlocks after a correct answer and for every question after final submission.
-- Atomic `attempts/ATTEMPT-*.json` records with restart recovery and immutable completed results.
-- Idempotent `progress/review-queue.json` updates using the learner's configured Ownership Curve.
-- Dashboard and exam-detail resume indicators for compatible in-progress attempts.
-- Due Review runner backed by canonical question definitions, the existing answer-isolation rules, and durable review attempts.
-- Idempotent `learner-progress.json` concept counts and evidence derived from deterministic multiple-choice results.
-- Versioned Ownership Curve editor with direct interval controls, human horizon labels, warnings, reset, profile duplication, and explicit new-only, future-advancement, or recalculate-all policies.
-- Per-question curve identity and intervals, with pending migrations applied only after the next completed due review and synchronized concept dates after an intentional recalculation.
-- Durable Source Inbox registration, rights validation, course creation, filtering, retry, cancellation, and job-state polling.
-- Recoverable ingestion worker with restart recovery, `.work/ingestion` staging, atomic promotion, and observable JSONL events.
-- Local document, SRT/VTT, and media ingestion; public-web extraction; and subtitle-first remote video processing through the `yt-dlp` Python API.
-- Canonical `source-manifest.yaml`, `source/SRC-*.md`, `source/media/SRC-*/`, and `logs/events.jsonl` course artifacts with legacy-manifest read compatibility.
-- Knowledge Wiki concept index and pages with relationship navigation, learner state, contradiction counts, and a collated grounding ledger.
-- Evidence Ledger and Activity Feed over portable evidence JSON and safe observable JSONL action fields.
-- Canonical `wiki-v1`, completion-envelope, runtime-compatibility, and per-run `.work/runs/<run-id>/tasks/<task-id>/` skill artifacts with executable dependency, context, role-profile, and write-boundary validation.
-- Deterministic calibration records, authorized research-plan compilation, fail-closed `DRAFT_UNVERIFIED` fallback, and gated workflow-state advancement.
-- Bounded workflow reconciliation that returns exact next work and converges every durable target without recursive agent fan-out or silent gate skipping.
-- App-compatible `question-bank-v2` items with four options and one answer key, exact 80/20 chapter mixes, Markdown review copies, independent assessment decisions, and ready-exam publication validation.
-- Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
+The default curve uses days `1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584`. Learners can edit the curve and choose how the change applies. A correct due answer moves a question forward. An incorrect due answer returns it to the first stage. Early practice does not silently advance the schedule.
 
-## Install and test the preview
+![Focused Question exam](design-mockups/exam-concept-2-focused-question-v2.png)
 
-The complete repository-controlled preview is ready for developer testing. This is not yet an OS-signed learner release; completing onboarding shows a setup receipt with an action that opens Exam Ledger.
+### 5. Update a course without erasing its history
 
-### 1. Install the local application
+When a source, goal, or course decision changes, the skill compares hashes, dates, source versions, claims, questions, and concept links. It marks only the affected material for review. Attempts stay in place. Older material is archived or labelled. It is not rewritten as though it never existed.
 
-For a normal preview installation, `uv` can install the CLI directly from the official GitHub repository without a clone:
+```mermaid
+flowchart LR
+    Change["Source or goal changes"] --> Impact["Find affected claims, pages, and questions"]
+    Impact --> Review["Recheck evidence and contradictions"]
+    Review --> Repair["Regenerate only affected material"]
+    Repair --> Validate["Run course and question validation"]
+    Validate --> Summary["Show the learner what changed"]
+```
+
+## What is in the repository
+
+| Area | Purpose |
+| --- | --- |
+| `src/mastery_ledger/` | FastAPI application, SQLite registry and job queue, course readers, exam service, review service |
+| `web/` | React and TypeScript interface |
+| `mastery-ledger/` | Installable Codex skill, workflow instructions, contracts, templates, and validators |
+| `tests/` | Application contract tests |
+| `mastery-ledger/tests/` | Skill, course, evidence, media, and orchestration tests |
+| `design-mockups/` | Interface concepts used in this README |
+| `RELEASE.md` | Artifact, checksum, attestation, and signing rules |
+
+## Run the preview
+
+This is an unsigned development preview from the repository's `main` branch. It is for testing. Signed installers are not ready yet.
+
+Install the local application:
 
 ```powershell
 uv tool install "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
-```
-
-The checked-in frontend build is included in the Python package, so Node.js is not required to launch and test onboarding. If `mastery-ledger` is not found afterward, run `uv tool update-shell` and open a new terminal.
-
-To update the preview from `main`, reinstall it explicitly:
-
-```powershell
-uv tool install --force "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
-```
-
-For contributors who already cloned the repository, use an editable installation instead:
-
-[`uv`](https://docs.astral.sh/uv/guides/tools/) provides the cleanest development installation because it gives the CLI an isolated environment while keeping this checkout editable:
-
-```powershell
-Set-Location D:\AI_projects\Tutor_AI
-uv tool install --editable .
-```
-
-To refresh an editable installation after package metadata or dependencies change, run `uv tool install --editable . --force`.
-
-### 2. Run the first-use flow
-
-Confirm that the read-only runtime check reports `onboarding_required`:
-
-```powershell
 mastery-ledger doctor --json
-```
-
-Launch the protected loopback application and open onboarding in the default browser:
-
-```powershell
 mastery-ledger onboard --open --json
 ```
 
-Complete all four setup steps, then verify that the same doctor command reports `ready`:
+After onboarding, `mastery-ledger doctor --json` should report `ready`. If the registered course workspace moves, run:
 
 ```powershell
-mastery-ledger doctor --json
+mastery-ledger repair --open --json
 ```
 
-Expected transition:
-
-```text
-onboarding_required
-  -> workspace validated and setup saved
-  -> ready
-```
-
-### 3. What to test
-
-- The browser opens only for the operational onboarding command, not for `doctor`.
-- A relative workspace path is rejected and an absolute writable path is accepted.
-- The suggested workspace is separate from the application and skill directories.
-- A ready exam opens from its detail sheet and initially exposes no answer key, explanation, or citation details to the browser.
-- Each question accepts one locked submission: an incorrect answer reveals no hint, while a correct answer reveals its explanation and enables a still-collapsed source disclosure.
-- Final submission reports the score and enables still-collapsed sources for every question in review mode.
-
-- Closing or restarting the local application restores the same compatible in-progress attempt and its locked answers.
-- Final submission writes a complete attempt result and updates each question's review record exactly once.
-- A correct due answer advances one stage, an incorrect due answer resets to stage zero, and early practice does not advance the schedule.
-- The Due Now action opens deliverable scheduled questions and returns the learner to the refreshed dashboard after final submission.
-- Ownership Curve settings reject invalid or descending stages, show the number of scheduled questions, and require confirmation before recalculating pending dates.
-- Future advancement preserves current due dates until the next completed due review; new-question-only preserves every existing curve version.
-- Course cards report how many concepts have evidence and how many have reached a proficient or stable state.
-- Source invitation may be completed or left empty.
-- Processing mode, language, reduced motion, and the review curve survive the final confirmation.
-- The default curve includes `1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584` days.
-- No ASR model, FFmpeg binary, or source media is downloaded during onboarding.
-- A second `mastery-ledger doctor --json` reports the saved workspace and `ready` status.
-- Removing or moving the registered folder reports `workspace_unavailable`; `mastery-ledger repair --open --json` opens explicit reconnection without changing learning settings.
-- The Exam Ledger dashboard discovers only exams whose canonical `exam.json` status is `ready`.
-- Search and course filters operate within the internally scrollable Ready Exams register.
-- Due totals and Ownership Curve counts match each course's `progress/review-queue.json` records.
-- Source Inbox preserves existing legacy manifest records, writes a pending receipt before processing, and shows queued, running, complete, failed, or cancelled durable jobs.
-- Local documents are processed from `.work/ingestion`, promoted to `source/SRC-*.md` plus `source/media/SRC-*/`, and leave no successful staging directory behind.
-- Remote videos are probed without credentials or user configuration, prefer human captions over automatic captions, and do not download media unless transcription is approved and a local ASR model is configured.
-- `python mastery-ledger/scripts/check_media_runtime.py` reports the active `yt-dlp`, FFmpeg, FFprobe, and local-ASR capabilities without installing or updating them.
-- Knowledge Wiki renders canonical pages and derives a useful concept index when optional wiki artifacts are absent.
-- Evidence & Activity displays decisions, exact artifact/source IDs, contradictions, and malformed-log warnings without passing unknown or private reasoning fields through the API.
-- The orchestration validator first exposes `context_required_task_ids`; after deterministic context compilation it exposes only dispatch-ready task IDs, and it blocks contradiction or citation reviewers until prerequisite completions, role/contract acknowledgements, and worker event shards validate.
-
-For an isolated manual run that does not touch the normal per-user registry or course location, set these variables in the same terminal before running `doctor` or `onboard`:
+For a checkout that you are editing:
 
 ```powershell
-$env:MASTERY_LEDGER_HOME = "$PWD\.work\manual-runtime"
-$env:MASTERY_LEDGER_DEFAULT_WORKSPACE = "$PWD\.work\manual-courses"
+Set-Location D:\AI_projects\Tutor_AI
+uv tool install --editable . --force
 ```
 
-Both locations are under the ignored `.work/` directory.
+## Install the Codex skill
 
-### 4. Run the automated checks
+The skill is optional. It drives the source, research, evidence, and course building workflow. It does not install the application.
 
-Create a project-local development environment without using PowerShell activation scripts:
+```powershell
+npx.cmd skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y --copy
+```
+
+After a repository update, refresh the installed copy and open a new Codex task:
+
+```powershell
+npx.cmd skills update mastery-ledger -g -y
+npx.cmd skills list -g -a codex
+```
+
+The skill checks `mastery-ledger doctor --json --skill-version 0.1.0` before it performs a durable course action. It opens onboarding only when the application says onboarding is required.
+
+## Test the project
+
+Run the Python tests from the repository root:
 
 ```powershell
 python -m venv .venv
 & .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-& .\.venv\Scripts\python.exe -m pytest -q tests mastery-ledger/tests
+& .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Validate or modify the frontend:
+Run the web checks:
 
 ```powershell
-Set-Location D:\AI_projects\Tutor_AI\web
+Set-Location web
 npm.cmd ci
 npm.cmd test
 npm.cmd run build
 ```
 
-`npm run build` replaces the bundled assets under `src/mastery_ledger/web/`; commit those assets with the frontend source when the UI changes.
+The web build is bundled into `src/mastery_ledger/web/`. Commit it with the web source when the interface changes.
 
-### 5. Install the Codex skill adapter
+## Limits of the current preview
 
-The application and `$mastery-ledger` skill are separate install surfaces. The recommended global Codex installation is:
+* The review curve is a clear product rule, not FSRS or a validated learning model.
+* Local transcription needs the optional `faster-whisper` dependency and a learner approved model. It is not installed during onboarding.
+* A stable release still needs signed operating system installers.
+* The current wiki stays in the portable `wiki/wiki.json` format. The planned Markdown index migration has not started.
 
-```powershell
-npx skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y --copy
-```
-
-Verify, update, or remove the installation with:
-
-```powershell
-npx skills list -g -a codex
-npx skills update mastery-ledger -g -y
-npx skills remove mastery-ledger -g -a codex -y
-```
-
-For users who prefer Codex's bundled system installer instead of the third-party `npx` CLI:
-
-```powershell
-python "$env:USERPROFILE\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py" `
-  --repo Howard-Starfield/Mastery-Ledger `
-  --path mastery-ledger
-```
-
-Start a new Codex task afterward so the skill can be discovered. The skill expects the `mastery-ledger` application command installed above to be available on `PATH`.
-
-### Local files and Git hygiene
-
-`uv tool install` stores its managed tool environment outside this repository, so there is no `uv` folder to remove or ignore. This repository already ignores `.venv/`, `node_modules/`, `build/`, `dist/`, `*.egg-info/`, `.work/`, and generated local course/runtime directories.
-
-Do not add `uv.lock` to `.gitignore` if one is introduced later. A project lockfile is intended to be committed so contributors and releases resolve the same dependencies.
-
-Remove the development application installation with:
-
-```powershell
-uv tool uninstall mastery-ledger
-```
-
-Tagged releases automatically build checksummed, provenance-attested Python artifacts. See [RELEASE.md](RELEASE.md). The skill will not describe the release as a signed learner-ready installer until maintainer-controlled OS signing is configured.
-
-## Repository map
-
-```text
-README.md                                product overview and workflow
-pyproject.toml                           Python package and CLI definition
-src/mastery_ledger/                      FastAPI runtime, SQLite state, and bundled web assets
-web/                                     React and TypeScript frontend source
-tests/                                   application contract tests
-design-mockups/                          dashboard and exam-interface concepts
-mastery-ledger/                         installable skill prototype
-MASTERY_LEDGER_DESIGN_DECISIONS.md      architecture decision record
-RELEASE.md                              release gates, checksums, attestations, and signing boundary
-.github/workflows/                      cross-platform CI and tagged artifact release
-LLM Wiki.md                              original knowledge-wiki concept notes
-LICENSE                                  MIT license
-```
-
-The installable skill uses the `mastery-ledger` identity. LinkVault appears only as an optional source connector; it is not a runtime dependency or storage owner.
+Mastery Ledger is released under the [MIT License](LICENSE).
