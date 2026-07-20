@@ -78,6 +78,7 @@ class LoadedExam:
     questions: list[LoadedQuestion]
     course_root: Path
     content_hash: str
+    kind: str = "exam"
 
 
 @dataclass(frozen=True)
@@ -205,7 +206,13 @@ def _load_question(
     sources = _validate_sources(raw.get("source_refs"), source_index, question_id)
     raw_concepts = raw.get("concept_ids", [])
     concepts = (
-        [str(value) for value in raw_concepts if isinstance(value, (str, int))][:20]
+        list(
+            dict.fromkeys(
+                str(value)
+                for value in raw_concepts
+                if isinstance(value, (str, int))
+            )
+        )[:20]
         if isinstance(raw_concepts, list)
         else []
     )
@@ -423,6 +430,7 @@ def _attempt_payload(state: AttemptState) -> dict[str, Any]:
         "exam_id": state.exam.exam_id,
         "exam_content_hash": state.exam.content_hash,
         "exam_title": state.exam.title,
+        "attempt_kind": state.exam.kind,
         "status": "complete" if state.finished else "in_progress",
         "started_at": state.started_at,
         "updated_at": state.updated_at,
@@ -536,14 +544,14 @@ def _update_review_queue(
     completion: ExamCompletion,
     completed_at: datetime,
     intervals: list[int],
-) -> None:
+) -> dict[str, Any]:
     path, existing = _review_queue_payload(state.exam.course_root)
     applied = existing.get("applied_attempt_ids", [])
     if not isinstance(applied, list):
         raise AttemptStorageError("The review queue applied-attempt ledger is malformed.")
     applied_ids = [str(value) for value in applied if isinstance(value, str)]
     if state.attempt_id in applied_ids:
-        return
+        return existing
     records = _list_records(existing, "questions", "entries", "items")
     if any(key in existing and not isinstance(existing[key], list) for key in ("questions", "entries", "items")):
         raise AttemptStorageError("The review queue question records are malformed.")
@@ -644,6 +652,137 @@ def _update_review_queue(
         "questions": records,
     }
     _atomic_write_json(path, payload, state.exam.course_root)
+    return payload
+
+
+def _concept_status(attempt_count: int, proficiency_score: float) -> str:
+    if attempt_count <= 1:
+        return "introduced"
+    if proficiency_score < 0.45:
+        return "practicing"
+    if attempt_count < 5 or proficiency_score < 0.70:
+        return "proficient"
+    return "stable"
+
+
+def _update_learner_progress(
+    state: AttemptState,
+    completion: ExamCompletion,
+    completed_at: datetime,
+    review_queue: dict[str, Any],
+) -> None:
+    canonical_path = state.exam.course_root / "progress" / "learner-progress.json"
+    legacy_path = state.exam.course_root / "learner-progress.json"
+    if canonical_path.is_file() and not canonical_path.is_symlink():
+        path = canonical_path
+    elif legacy_path.is_file() and not legacy_path.is_symlink():
+        path = legacy_path
+    else:
+        progress_root = _ensure_artifact_directory(state.exam.course_root, "progress")
+        path = progress_root / "learner-progress.json"
+    existing: dict[str, Any] = {}
+    if path.exists():
+        payload = _read_json(path, state.exam.course_root)
+        if payload is None:
+            raise AttemptStorageError("The existing learner progress file is not valid JSON.")
+        existing = payload
+
+    applied = existing.get("applied_attempt_ids", [])
+    if not isinstance(applied, list):
+        raise AttemptStorageError("The learner progress applied-attempt ledger is malformed.")
+    applied_ids = [str(value) for value in applied if isinstance(value, str)]
+    if state.attempt_id in applied_ids:
+        return
+    concepts = existing.get("concepts", [])
+    if not isinstance(concepts, list) or any(not isinstance(item, dict) for item in concepts):
+        raise AttemptStorageError("The learner progress concept records are malformed.")
+    indexed = {
+        str(record["concept_id"]): record
+        for record in concepts
+        if isinstance(record.get("concept_id"), (str, int))
+    }
+    if len(indexed) != len(concepts):
+        raise AttemptStorageError("Learner progress has missing or duplicate concept IDs.")
+
+    queue_records = _list_records(review_queue, "questions")
+    next_due_by_concept: dict[str, str] = {}
+    for record in queue_records:
+        next_due = record.get("next_due_at")
+        concept_ids = record.get("concept_ids", [])
+        if not isinstance(next_due, str) or not isinstance(concept_ids, list):
+            continue
+        for concept_id in concept_ids:
+            if not isinstance(concept_id, (str, int)):
+                continue
+            key = str(concept_id)
+            if key not in next_due_by_concept or next_due < next_due_by_concept[key]:
+                next_due_by_concept[key] = next_due
+
+    timestamp = _timestamp(completed_at)
+    for question, review in zip(state.exam.questions, completion.questions, strict=True):
+        for concept_id in question.view.concept_ids:
+            record = indexed.get(concept_id)
+            if record is None:
+                record = {
+                    "concept_id": concept_id,
+                    "status": "introduced",
+                    "proficiency_score": 0.0,
+                    "confidence_score": None,
+                    "attempt_count": 0,
+                    "correct_count": 0,
+                    "incorrect_count": 0,
+                    "unanswered_count": 0,
+                    "last_reviewed_at": None,
+                    "next_review_at": None,
+                    "misconceptions": [],
+                    "evidence": [],
+                }
+                concepts.append(record)
+                indexed[concept_id] = record
+            record["attempt_count"] = int(record.get("attempt_count", 0)) + 1
+            count_key = f"{review.status}_count"
+            record[count_key] = int(record.get(count_key, 0)) + 1
+            attempt_count = int(record["attempt_count"])
+            correct_count = int(record.get("correct_count", 0))
+            record["proficiency_score"] = round(correct_count / attempt_count, 4)
+            record["status"] = _concept_status(
+                attempt_count,
+                float(record["proficiency_score"]),
+            )
+            record["last_reviewed_at"] = timestamp
+            record["next_review_at"] = next_due_by_concept.get(concept_id)
+            evidence = record.get("evidence", [])
+            if not isinstance(evidence, list):
+                raise AttemptStorageError(
+                    f"Concept {concept_id} has a malformed evidence ledger."
+                )
+            evidence.append(
+                {
+                    "attempt_id": state.attempt_id,
+                    "exam_id": state.exam.exam_id,
+                    "question_id": question.view.question_id,
+                    "question_version": question.version,
+                    "result": review.status,
+                    "evaluated_at": timestamp,
+                    "evaluation_method": "deterministic_multiple_choice",
+                }
+            )
+            record["evidence"] = evidence
+
+    preserved = {
+        key: value
+        for key, value in existing.items()
+        if key not in {"concepts", "applied_attempt_ids"}
+    }
+    payload = {
+        **preserved,
+        "schema_version": "learner-progress-v1",
+        "course_id": state.exam.course_id,
+        "updated_at": timestamp,
+        "applied_attempt_ids": [*applied_ids, state.attempt_id],
+        "concepts": concepts,
+    }
+    _atomic_write_json(path, payload, state.exam.course_root)
 
 
 class ExamSessionStore:
@@ -678,6 +817,9 @@ class ExamSessionStore:
 
     def start(self, workspace: WorkspaceState, course_id: str, exam_id: str) -> ExamAttemptStart:
         exam = load_exam(workspace, course_id, exam_id)
+        return self.start_loaded(exam)
+
+    def start_loaded(self, exam: LoadedExam) -> ExamAttemptStart:
         with self._lock:
             state = _load_resumable_attempt(exam)
             if state is not None:
@@ -769,11 +911,17 @@ class ExamSessionStore:
             intervals = _valid_intervals(
                 read_setting("review_intervals", DEFAULT_REVIEW_INTERVALS)
             )
-            _update_review_queue(
+            review_queue = _update_review_queue(
                 attempt,
                 completion,
                 completed_at,
                 intervals,
+            )
+            _update_learner_progress(
+                attempt,
+                completion,
+                completed_at,
+                review_queue,
             )
             timestamp = _timestamp(completed_at)
             previous_updated_at = attempt.updated_at

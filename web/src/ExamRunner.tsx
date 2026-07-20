@@ -10,8 +10,9 @@ import {
 } from './api'
 
 type ExamRunnerProps = {
-  courseId: string
-  examId: string
+  courseId?: string
+  examId?: string
+  reviewMode?: boolean
   onExit: () => void
 }
 
@@ -71,7 +72,7 @@ function ResultDialog({ completion, onReview, onExit }: { completion: ExamComple
   )
 }
 
-export default function ExamRunner({ courseId, examId, onExit }: ExamRunnerProps) {
+export default function ExamRunner({ courseId, examId, reviewMode = false, onExit }: ExamRunnerProps) {
   const [attempt, setAttempt] = useState<ExamAttempt | null>(null)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({})
@@ -85,8 +86,12 @@ export default function ExamRunner({ courseId, examId, onExit }: ExamRunnerProps
   const [paletteOpen, setPaletteOpen] = useState(false)
 
   useEffect(() => {
-    applicationApi
-      .startExam(courseId, examId)
+    const startAttempt = reviewMode
+      ? applicationApi.startReview(courseId)
+      : courseId && examId
+        ? applicationApi.startExam(courseId, examId)
+        : Promise.reject(new Error('The requested exam is missing its course or exam ID.'))
+    startAttempt
       .then((nextAttempt) => {
         const restoredAnswers = Object.fromEntries(nextAttempt.questions.map((question) => [question.question_id, { selectedOptionId: null, feedback: null }])) as Record<string, AnswerState>
         nextAttempt.answers.forEach((feedback) => {
@@ -101,7 +106,7 @@ export default function ExamRunner({ courseId, examId, onExit }: ExamRunnerProps
       })
       .catch((cause: Error) => setError(cause.message))
       .finally(() => setBusy(false))
-  }, [courseId, examId])
+  }, [courseId, examId, reviewMode])
 
   useEffect(() => {
     if (!attempt || completion) return undefined
@@ -165,8 +170,8 @@ export default function ExamRunner({ courseId, examId, onExit }: ExamRunnerProps
     })
   }
 
-  if (busy && !attempt) return <main className="exam-launch"><span className="exam-launch__mark">ML</span><p>Preparing the focused exam…</p></main>
-  if (!attempt || !currentQuestion) return <main className="exam-launch exam-launch--error"><span className="exam-launch__mark">!</span><h1>This exam could not open.</h1><p>{error ?? 'No deliverable questions were found.'}</p><button type="button" onClick={onExit}>Return to Exam Ledger</button></main>
+  if (busy && !attempt) return <main className="exam-launch"><span className="exam-launch__mark">ML</span><p>Preparing {reviewMode ? 'your due review' : 'the focused exam'}…</p></main>
+  if (!attempt || !currentQuestion) return <main className="exam-launch exam-launch--error"><span className="exam-launch__mark">!</span><h1>This {reviewMode ? 'review' : 'exam'} could not open.</h1><p>{error ?? 'No deliverable questions were found.'}</p><button type="button" onClick={onExit}>Return to Exam Ledger</button></main>
 
   const isReview = Boolean(completion)
   const selectedOptionId = currentReview?.selected_option_id ?? currentAnswer?.selectedOptionId
@@ -181,13 +186,13 @@ export default function ExamRunner({ courseId, examId, onExit }: ExamRunnerProps
         <div className="exam-title-lockup"><span>{attempt.course_title}</span><strong>{attempt.title}</strong>{attempt.resumed && <em>Resumed</em>}</div>
         <div className="exam-clock"><small>Time elapsed</small><strong>{formatElapsed(elapsedSeconds)}</strong></div>
         <button type="button" className="palette-toggle" onClick={() => setPaletteOpen((value) => !value)} aria-expanded={paletteOpen}>Questions {currentIndex + 1}/{attempt.questions.length}</button>
-        <button type="button" className="finish-exam" onClick={() => completion ? setShowResult(true) : setFinishCheckpoint(true)}>{completion ? 'Results' : 'Finish exam'}</button>
+        <button type="button" className="finish-exam" onClick={() => completion ? setShowResult(true) : setFinishCheckpoint(true)}>{completion ? 'Results' : reviewMode ? 'Finish review' : 'Finish exam'}</button>
       </header>
 
       <section className="question-workspace">
         <article className="question-paper" aria-labelledby="active-question-title">
           <header className="question-meta">
-            <div><p className="kicker">Focused question</p><span>Question {currentIndex + 1} of {attempt.questions.length}</span></div>
+            <div><p className="kicker">{reviewMode ? 'Scheduled review' : 'Focused question'}</p><span>Question {currentIndex + 1} of {attempt.questions.length}</span></div>
             <button type="button" className={flags.has(currentQuestion.question_id) ? 'flag-button is-flagged' : 'flag-button'} onClick={toggleFlag} aria-pressed={flags.has(currentQuestion.question_id)}><span aria-hidden="true">⚑</span>{flags.has(currentQuestion.question_id) ? 'Flagged' : 'Flag question'}</button>
           </header>
 
@@ -241,7 +246,7 @@ export default function ExamRunner({ courseId, examId, onExit }: ExamRunnerProps
         <div className="palette-progress"><span style={{ width: `${(answeredCount / attempt.questions.length) * 100}%` }} /><small>{Math.round((answeredCount / attempt.questions.length) * 100)}% answered</small></div>
       </aside>
 
-      {finishCheckpoint && !completion && <div className="exam-modal-backdrop"><section className="finish-card" role="dialog" aria-modal="true" aria-labelledby="finish-title"><p className="kicker">Submission checkpoint</p><h2 id="finish-title">Finish this exam?</h2><p>Once submitted, unanswered questions remain unanswered and the complete answer review becomes available.</p><dl><div><dt>Locked</dt><dd>{answeredCount}</dd></div><div><dt>Unanswered</dt><dd>{attempt.questions.length - answeredCount}</dd></div><div><dt>Flagged</dt><dd>{flags.size}</dd></div></dl><div className="result-actions"><button type="button" onClick={() => setFinishCheckpoint(false)}>Keep working</button><button type="button" className="is-primary" onClick={finishExam} disabled={busy}>{busy ? 'Submitting…' : 'Submit final exam'}</button></div></section></div>}
+      {finishCheckpoint && !completion && <div className="exam-modal-backdrop"><section className="finish-card" role="dialog" aria-modal="true" aria-labelledby="finish-title"><p className="kicker">Submission checkpoint</p><h2 id="finish-title">Finish this {reviewMode ? 'review' : 'exam'}?</h2><p>Once submitted, unanswered questions remain unanswered and the complete answer review becomes available.</p><dl><div><dt>Locked</dt><dd>{answeredCount}</dd></div><div><dt>Unanswered</dt><dd>{attempt.questions.length - answeredCount}</dd></div><div><dt>Flagged</dt><dd>{flags.size}</dd></div></dl><div className="result-actions"><button type="button" onClick={() => setFinishCheckpoint(false)}>Keep working</button><button type="button" className="is-primary" onClick={finishExam} disabled={busy}>{busy ? 'Submitting…' : reviewMode ? 'Submit final review' : 'Submit final exam'}</button></div></section></div>}
       {showResult && completion && <ResultDialog completion={completion} onExit={onExit} onReview={() => setShowResult(false)} />}
     </main>
   )

@@ -101,6 +101,8 @@ class DashboardCourse(BaseModel):
     due_count: int = Field(ge=0)
     source_count: int = Field(ge=0)
     source_ready_count: int = Field(ge=0)
+    concept_count: int = Field(ge=0)
+    proficient_concept_count: int = Field(ge=0)
     updated_at: str | None = None
 
 

@@ -72,6 +72,8 @@ export interface DashboardCourse {
   due_count: number
   source_count: number
   source_ready_count: number
+  concept_count: number
+  proficient_concept_count: number
   updated_at: string | null
 }
 
@@ -198,6 +200,10 @@ export const onboardingApi = {
 export const applicationApi = {
   status: () => request<ApplicationStatus>('/api/v1/status'),
   dashboard: () => request<DashboardResult>('/api/v1/dashboard'),
+  startReview: (courseId?: string) =>
+    request<ExamAttempt>(`/api/v1/reviews/attempts${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ''}`, {
+      method: 'POST',
+    }),
   startExam: (courseId: string, examId: string) =>
     request<ExamAttempt>(`/api/v1/exams/${encodeURIComponent(courseId)}/${encodeURIComponent(examId)}/attempts`, {
       method: 'POST',

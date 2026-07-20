@@ -226,6 +226,8 @@ def test_dashboard_discovers_ready_exams_and_review_queue(
         "due_count": 1,
         "source_count": 2,
         "source_ready_count": 1,
+        "concept_count": 0,
+        "proficient_concept_count": 0,
         "updated_at": "2026-07-20T10:00:00Z",
     }
     assert [stage["interval_days"] for stage in payload["ownership_curve"]] == [1, 3, 7, 14]
@@ -482,3 +484,150 @@ def test_focused_exam_locks_answers_and_gates_explanations(
     assert records["Q-003"]["stage_index"] == 2
     assert records["Q-003"]["interval_days"] == 7
     assert records["Q-003"]["due_success_count"] == 5
+
+
+def test_due_review_advances_curve_and_updates_concept_progress(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    app = create_app(session_token="review-session", web_dir=tmp_path / "missing-web")
+    workspace = tmp_path / "ReviewWorkspace"
+
+    with TestClient(app) as client:
+        client.get("/bootstrap/review-session", follow_redirects=False)
+        client.post(
+            "/api/v1/onboarding/complete",
+            json={
+                "workspace_path": str(workspace),
+                "workspace_name": "Review workspace",
+                "language": "en",
+                "processing_mode": "local_only",
+                "reduced_motion": False,
+                "review_intervals": [1, 3, 7],
+                "initial_source_hint": None,
+            },
+        )
+        course = workspace / "courses" / "biology"
+        questions_root = course / "questions"
+        source_root = course / "source"
+        progress_root = course / "progress"
+        questions_root.mkdir(parents=True)
+        source_root.mkdir()
+        progress_root.mkdir()
+        (course / "course.yaml").write_text(
+            "course_id: COURSE-BIO\ntitle: Biology\n",
+            encoding="utf-8",
+        )
+        (source_root / "source-manifest.yaml").write_text(
+            "sources:\n  - source_id: SRC-BIO\n    title: Biology text\n    processing_status: ready\n",
+            encoding="utf-8",
+        )
+        source_ref = {
+            "source_id": "SRC-BIO",
+            "locator": {"kind": "section", "value": "4", "label": "Section 4"},
+            "supports": ["correct_answer", "explanation"],
+            "support_strength": "direct",
+        }
+        (questions_root / "question-bank.json").write_text(
+            json.dumps(
+                {
+                    "questions": [
+                        {
+                            "question_id": "Q-BIO-1",
+                            "version": 3,
+                            "concept_ids": ["cellular-respiration"],
+                            "prompt": "Which molecule is the primary energy currency of the cell?",
+                            "options": [
+                                {"option_id": "A", "text": "DNA"},
+                                {"option_id": "B", "text": "ATP"},
+                            ],
+                            "correct_option_id": "B",
+                            "correct_explanation": "ATP transfers usable chemical energy.",
+                            "source_refs": [source_ref],
+                            "difficulty": 2,
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        (progress_root / "review-queue.json").write_text(
+            json.dumps(
+                {
+                    "questions": [
+                        {
+                            "question_id": "Q-BIO-1",
+                            "question_version": 3,
+                            "concept_ids": ["cellular-respiration"],
+                            "stage_index": 0,
+                            "interval_days": 1,
+                            "next_due_at": "2020-01-01T00:00:00Z",
+                            "due_success_count": 0,
+                            "lapse_count": 0,
+                            "early_practice_count": 0,
+                            "status": "learning",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        (course / "learner-progress.json").write_text(
+            json.dumps({"schema_version": "1.0", "study_id": "COURSE-BIO", "concepts": []}),
+            encoding="utf-8",
+        )
+
+        start = client.post("/api/v1/reviews/attempts")
+        assert start.status_code == 200
+        attempt = start.json()
+        assert attempt["exam_id"] == "REVIEW-DUE"
+        assert attempt["title"] == "Due review"
+        assert [item["question_id"] for item in attempt["questions"]] == ["Q-BIO-1"]
+        assert "correct_option_id" not in json.dumps(attempt)
+
+        answer = client.post(
+            f"/api/v1/exams/COURSE-BIO/REVIEW-DUE/attempts/{attempt['attempt_id']}/questions/Q-BIO-1",
+            json={"option_id": "B"},
+        )
+        assert answer.status_code == 200
+        assert answer.json()["correct"] is True
+
+        finish = client.post(
+            f"/api/v1/exams/COURSE-BIO/REVIEW-DUE/attempts/{attempt['attempt_id']}/finish"
+        )
+        assert finish.status_code == 200
+        assert finish.json()["score_percent"] == 100.0
+
+        no_more_due = client.post("/api/v1/reviews/attempts")
+        assert no_more_due.status_code == 404
+        dashboard = client.get("/api/v1/dashboard").json()
+        assert dashboard["recent_courses"][0]["concept_count"] == 1
+        assert dashboard["recent_courses"][0]["proficient_concept_count"] == 0
+
+    attempt_payload = json.loads(
+        (course / "attempts" / f"{attempt['attempt_id']}.json").read_text(encoding="utf-8")
+    )
+    assert attempt_payload["attempt_kind"] == "review"
+    assert attempt_payload["status"] == "complete"
+
+    queue = json.loads(
+        (progress_root / "review-queue.json").read_text(encoding="utf-8")
+    )
+    queue_record = queue["questions"][0]
+    assert queue_record["stage_index"] == 1
+    assert queue_record["interval_days"] == 3
+    assert queue_record["due_success_count"] == 1
+
+    learner_progress = json.loads(
+        (course / "learner-progress.json").read_text(encoding="utf-8")
+    )
+    assert not (progress_root / "learner-progress.json").exists()
+    assert learner_progress["schema_version"] == "learner-progress-v1"
+    assert learner_progress["applied_attempt_ids"] == [attempt["attempt_id"]]
+    concept = learner_progress["concepts"][0]
+    assert concept["concept_id"] == "cellular-respiration"
+    assert concept["attempt_count"] == 1
+    assert concept["correct_count"] == 1
+    assert concept["proficiency_score"] == 1.0
+    assert concept["status"] == "introduced"
+    assert concept["next_review_at"] == queue_record["next_due_at"]
+    assert concept["evidence"][0]["evaluation_method"] == "deterministic_multiple_choice"

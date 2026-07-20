@@ -119,6 +119,22 @@ def _source_counts(course_root: Path) -> tuple[int, int]:
     return len(sources), ready
 
 
+def _concept_counts(course_root: Path) -> tuple[int, int]:
+    payload = _read_json(
+        course_root / "progress" / "learner-progress.json",
+        course_root,
+    )
+    if payload is None:
+        payload = _read_json(course_root / "learner-progress.json", course_root)
+    concepts = _list_records(payload, "concepts")
+    proficient = sum(
+        1
+        for concept in concepts
+        if str(concept.get("status", "")).casefold() in {"proficient", "stable"}
+    )
+    return len(concepts), proficient
+
+
 def _review_records(course_root: Path) -> list[dict[str, Any]]:
     payload = _read_json(course_root / "progress" / "review-queue.json", course_root)
     if payload is None:
@@ -241,6 +257,7 @@ def build_dashboard(workspace: WorkspaceState, *, now: datetime | None = None) -
         exams = _exam_summaries(course_root, course_id, title)
         ready_exams.extend(exams)
         source_count, source_ready_count = _source_counts(course_root)
+        concept_count, proficient_concept_count = _concept_counts(course_root)
         courses.append(
             DashboardCourse(
                 course_id=course_id,
@@ -250,6 +267,8 @@ def build_dashboard(workspace: WorkspaceState, *, now: datetime | None = None) -
                 due_count=due_count,
                 source_count=source_count,
                 source_ready_count=source_ready_count,
+                concept_count=concept_count,
+                proficient_concept_count=proficient_concept_count,
                 updated_at=str(manifest["updated_at"]) if manifest.get("updated_at") else None,
             )
         )

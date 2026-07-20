@@ -61,6 +61,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [error, setError] = useState<string | null>(null)
   const [selectedExam, setSelectedExam] = useState<DashboardExam | null>(null)
   const [activeExam, setActiveExam] = useState<DashboardExam | null>(null)
+  const [activeReview, setActiveReview] = useState(false)
 
   const refresh = () => {
     setLoading(true)
@@ -88,6 +89,9 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
 
   if (activeExam) {
     return <ExamRunner courseId={activeExam.course_id} examId={activeExam.exam_id} onExit={() => { setActiveExam(null); refresh() }} />
+  }
+  if (activeReview) {
+    return <ExamRunner reviewMode onExit={() => { setActiveReview(false); refresh() }} />
   }
 
   return (
@@ -138,7 +142,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
             <h2 id="due-title">{data?.due_now ? 'Keep the ownership curve moving.' : 'Nothing is overdue.'}</h2>
             <p>{data?.due_now ? 'Review the same grounded questions at the moment memory needs another successful retrieval.' : 'Your next scheduled questions will surface here automatically.'}</p>
           </div>
-          <button type="button" className="review-button" disabled title="Due-review delivery is the next application slice">Review runner next <span>→</span></button>
+          <button type="button" className="review-button" disabled={!data?.due_now} onClick={() => setActiveReview(true)}>{data?.due_now ? 'Start due review' : 'Nothing due'} <span>→</span></button>
         </section>
 
         <section className="exam-register" aria-labelledby="ready-exams-title">
@@ -172,6 +176,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
               <article key={item.course_id}>
                 <span className="course-index">{item.course_id}</span><h3>{item.title}</h3>
                 <dl><div><dt>Questions</dt><dd>{item.question_count}</dd></div><div><dt>Ready exams</dt><dd>{item.ready_exam_count}</dd></div><div><dt>Sources</dt><dd>{item.source_ready_count}/{item.source_count}</dd></div></dl>
+                <p className="course-concepts"><span>Concept evidence</span><strong>{item.proficient_concept_count}/{item.concept_count} proficient</strong></p>
                 <div className="course-rule"><span style={{ width: `${item.source_count ? (item.source_ready_count / item.source_count) * 100 : 0}%` }} /></div>
               </article>
             )) : <div className="course-empty"><strong>No course folders discovered.</strong><span>Create a course through the Mastery Ledger skill, then rescan this workspace.</span></div>}

@@ -2,7 +2,7 @@
 
 Turn documents, websites, video, audio, and researched topics into source-grounded courses, focused exams, and long-term review records.
 
-> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, Focused Question exam delivery, durable attempt history, deterministic question scheduling, and the skill prototype. Course ingestion, scheduled-review sessions, concept-level proficiency aggregation, and signed installers remain under development.
+> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, Focused Question exams, durable attempts, scheduled-review sessions, deterministic question scheduling, concept evidence, and the skill prototype. Course ingestion and learner-facing knowledge/evidence surfaces remain under development; signed distribution remains a release gate.
 
 ![Mastery Ledger Exam Ledger dashboard](design-mockups/mastery-ledger-dashboard.png)
 
@@ -76,6 +76,7 @@ Mastery Ledger has two cooperating layers: a local application for learner-facin
 | Focused Question exams | Delivers one question at a time with selectable answers, flags, navigation, timer, final submission, scoring, and review mode | Application preview |
 | Answer isolation | Keeps answer keys, explanations, and citation details out of the initial browser payload; every answer locks after one submission | Application preview |
 | Source disclosure | Shows no source details for an incorrect active answer; enables a still-collapsed citation panel after a correct answer and during final review | Application preview |
+| Scheduled reviews | Starts source-grounded due questions from the dashboard and applies the configured Ownership Curve on final submission | Application preview |
 | Source intake and scope | Asks for learner-provided sources, records the learning goal and boundaries, and supports adding more sources to an existing course | Codex skill workflow |
 | Web and document ingestion | Organizes approved webpages and local materials into source manifests with provenance, hashes, processing state, and precise locators | Codex skill workflow |
 | Video and audio processing | Uses a rights-aware `yt-dlp` wrapper, prefers available subtitles, normalizes SRT/VTT timestamps, and supports optional local `faster-whisper` transcription | Skill scripts |
@@ -83,7 +84,7 @@ Mastery Ledger has two cooperating layers: a local application for learner-facin
 | Evidence and contradiction control | Separates claims, sources, contradictions, gaps, verification decisions, and approved evidence before learner-facing synthesis | Codex skill workflow |
 | Course and assessment generation | Builds source-grounded study guides, knowledge pages, question banks, and exam definitions from approved evidence | Codex skill workflow |
 | Citation validation | Validates source IDs, structured locators, support targets, answer explanations, and evidence packets before publication | Skill scripts |
-| Mastery records | Persists exam attempts, restores interrupted exams, and updates each question on the configured long-term interval curve | Application preview; concept aggregation pending |
+| Mastery records | Persists attempts, restores interrupted sessions, updates each question's interval, and records idempotent concept evidence | Application preview |
 | Tutoring and course updates | Runs source-grounded tutoring passes and reopens affected evidence, questions, and contradictions when sources or goals change | Codex skill workflow |
 
 ## Product interface
@@ -110,8 +111,6 @@ Onboarding belongs to the application. The skill can detect that setup is requir
 
 ## What is next
 
-- **Review Queue sessions** — launch scheduled reviews from the dashboard and apply the learner's editable Ownership Curve.
-- **Concept proficiency aggregation** — project question results into inspectable concept-level evidence without rewriting attempt history.
 - **Source Inbox** — add files and links, inspect processing state, and revisit provenance from the application.
 - **Knowledge Wiki** — browse approved concepts, relationships, contradictions, and exact source locations.
 - **Evidence & Activity** — inspect source decisions, worker handoffs, rejected claims, and machine-readable action events.
@@ -140,6 +139,8 @@ First-run onboarding belongs to the application because it validates and persist
 - Atomic `attempts/ATTEMPT-*.json` records with restart recovery and immutable completed results.
 - Idempotent `progress/review-queue.json` updates using the learner's configured Ownership Curve.
 - Dashboard and exam-detail resume indicators for compatible in-progress attempts.
+- Due Review runner backed by canonical question definitions, the existing answer-isolation rules, and durable review attempts.
+- Idempotent `learner-progress.json` concept counts and evidence derived from deterministic multiple-choice results.
 - Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
 
 ## Install and test the preview
@@ -213,6 +214,8 @@ onboarding_required
 - Closing or restarting the local application restores the same compatible in-progress attempt and its locked answers.
 - Final submission writes a complete attempt result and updates each question's review record exactly once.
 - A correct due answer advances one stage, an incorrect due answer resets to stage zero, and early practice does not advance the schedule.
+- The Due Now action opens deliverable scheduled questions and returns the learner to the refreshed dashboard after final submission.
+- Course cards report how many concepts have evidence and how many have reached a proficient or stable state.
 - Source invitation may be completed or left empty.
 - Processing mode, language, reduced motion, and the review curve survive the final confirmation.
 - The default curve includes `1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584` days.

@@ -144,7 +144,7 @@ The normal skill workflow should launch the exact exam automatically; the learne
 
 The local web app opens on a workspace dashboard when no specific exam is passed. It reads only registered course manifests and shows:
 
-**Implementation status:** the `dashboard-v1` API and React Exam Ledger landing page now discover registered `course.yaml` or `study.yaml` manifests, ready exam definitions, question banks, source manifests, review queues, and compatible in-progress attempts. Search, course filtering, the fixed-height exam register, recent-course summaries, the complete curve rail, responsive expansion, and the exam detail sheet are implemented. Ready exams launch into Focused Question delivery with server-side answer checking, one locked submission per question, gated explanations and citations, final scoring, review mode, atomic attempt records, restart recovery, and idempotent Ownership Curve updates. Starting scheduled-review sessions and editing the curve from settings remain later slices.
+**Implementation status:** the `dashboard-v1` API and React Exam Ledger landing page now discover registered `course.yaml` or `study.yaml` manifests, ready exam definitions, question banks, source manifests, review queues, compatible in-progress attempts, and concept evidence. Search, course filtering, the fixed-height exam register, recent-course summaries, the complete curve rail, responsive expansion, and the exam detail sheet are implemented. Ready exams and scheduled Due Now sessions use the Focused Question delivery contract with server-side answer checking, one locked submission per question, gated explanations and citations, final scoring, review mode, atomic attempt records, restart recovery, idempotent Ownership Curve updates, and concept-level evidence. Editing the curve from settings remains a later slice.
 
 - **Due now:** questions whose `next_due_at` is due or overdue, grouped by course.
 - **Ready exams:** every LLM-generated exam set with `status: ready`, question count, estimated duration, concepts, and creation time. Render this as a fixed-height, internally scrollable ledger with a sticky header, visible scrollbar, total count, search, course/status filters, and newest-first default sorting. Do not hide older ready exams behind a small card limit or a required `View all` action. Use windowing/virtualization when the collection is large. Preserve keyboard focus and announce the result count after filtering. On narrow screens, expand the ledger into its own page or sheet instead of creating a cramped nested scroll area.
@@ -1648,8 +1648,10 @@ The first executable slice implements:
 - the workspace-backed dashboard and Focused Question exam runner;
 - atomic in-progress and completed attempt artifacts with restart recovery;
 - idempotent question scheduling on the configured Ownership Curve.
+- scheduled-review delivery from canonical due questions;
+- idempotent concept-level learner-progress evidence and dashboard summaries.
 
-The following remain release gates rather than completed functionality: signed installers and release manifests, application/skill compatibility-range enforcement, native folder-picker integration, workspace repair UI, durable worker execution, ingestion, scheduled-review delivery, concept-level proficiency aggregation, and curve editing after onboarding.
+The following remain release gates rather than completed functionality: signed installers and release manifests, application/skill compatibility-range enforcement, native folder-picker integration, workspace repair UI, durable worker execution, ingestion, learner-facing Source Inbox, Knowledge Wiki and Evidence/Activity surfaces, and curve editing after onboarding.
 
 ### Item 12 implementation references
 
