@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ from mastery_ledger.models import (
 DEFAULT_REVIEW_INTERVALS = [1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584]
 MAX_COURSES = 500
 MAX_EXAMS_PER_COURSE = 2_000
+MAX_ATTEMPTS_PER_COURSE = 2_000
 
 
 def _inside(root: Path, path: Path) -> bool:
@@ -124,6 +126,27 @@ def _review_records(course_root: Path) -> list[dict[str, Any]]:
     return _list_records(payload, "questions", "entries", "items")
 
 
+def _in_progress_exam_ids(course_root: Path) -> set[str]:
+    attempts_root = course_root / "attempts"
+    if not attempts_root.is_dir() or attempts_root.is_symlink():
+        return set()
+    try:
+        paths = list(itertools.islice(attempts_root.iterdir(), MAX_ATTEMPTS_PER_COURSE))
+    except OSError:
+        return set()
+    exam_ids: set[str] = set()
+    for path in paths:
+        if not path.is_file() or path.is_symlink() or path.suffix.casefold() != ".json":
+            continue
+        payload = _read_json(path, course_root)
+        if not payload or payload.get("status") != "in_progress":
+            continue
+        exam_id = payload.get("exam_id")
+        if isinstance(exam_id, str) and exam_id:
+            exam_ids.add(exam_id)
+    return exam_ids
+
+
 def _is_due(value: object, now: datetime) -> bool:
     if not isinstance(value, str) or not value.strip():
         return False
@@ -150,6 +173,7 @@ def _exam_summaries(
         return []
 
     exams: list[DashboardExam] = []
+    in_progress_exam_ids = _in_progress_exam_ids(course_root)
     for exam_root in directories[:MAX_EXAMS_PER_COURSE]:
         if not exam_root.is_dir() or exam_root.is_symlink():
             continue
@@ -179,6 +203,7 @@ def _exam_summaries(
                 concepts=concepts,
                 created_at=str(payload["created_at"]) if payload.get("created_at") else None,
                 source_status=source_status,
+                resume_available=str(payload.get("exam_id") or exam_root.name) in in_progress_exam_ids,
             )
         )
     return exams

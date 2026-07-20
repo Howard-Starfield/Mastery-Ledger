@@ -267,14 +267,43 @@ def test_focused_exam_locks_answers_and_gates_explanations(
         course = workspace / "courses" / "medicine"
         exam_root = course / "exams" / "EXAM-FOCUSED"
         source_root = course / "source"
+        progress_root = course / "progress"
         exam_root.mkdir(parents=True)
         source_root.mkdir()
+        progress_root.mkdir()
         (course / "course.yaml").write_text(
             "course_id: COURSE-MED\ntitle: Medicine Foundations\n",
             encoding="utf-8",
         )
         (source_root / "source-manifest.yaml").write_text(
             "sources:\n  - source_id: SRC-001\n    title: Clinical guide\n    processing_status: ready\n",
+            encoding="utf-8",
+        )
+        (progress_root / "review-queue.json").write_text(
+            json.dumps(
+                {
+                    "questions": [
+                        {
+                            "question_id": "Q-001",
+                            "stage_index": 2,
+                            "interval_days": 7,
+                            "next_due_at": "2020-01-01T00:00:00Z",
+                            "due_success_count": 2,
+                            "lapse_count": 0,
+                            "early_practice_count": 0,
+                        },
+                        {
+                            "question_id": "Q-003",
+                            "stage_index": 1,
+                            "interval_days": 3,
+                            "next_due_at": "2020-01-01T00:00:00Z",
+                            "due_success_count": 4,
+                            "lapse_count": 0,
+                            "early_practice_count": 0,
+                        },
+                    ]
+                }
+            ),
             encoding="utf-8",
         )
         source_ref = {
@@ -316,6 +345,18 @@ def test_focused_exam_locks_answers_and_gates_explanations(
                             "correct_explanation": "Option A is supported.",
                             "source_refs": [source_ref],
                         },
+                        {
+                            "question_id": "Q-003",
+                            "prompt": "Choose the due-review answer.",
+                            "options": [
+                                {"option_id": "A", "text": "First review option"},
+                                {"option_id": "B", "text": "Second review option"},
+                            ],
+                            "correct_option_id": "B",
+                            "correct_explanation": "Option B is supported for this review.",
+                            "source_refs": [source_ref],
+                            "version": 2,
+                        },
                     ],
                 }
             ),
@@ -329,7 +370,14 @@ def test_focused_exam_locks_answers_and_gates_explanations(
         assert "correct_option_id" not in serialized_start
         assert "correct_explanation" not in serialized_start
         assert "source_count" in serialized_start
+        assert start_payload["resumed"] is False
+        assert start_payload["answers"] == []
         attempt_id = start_payload["attempt_id"]
+        attempt_path = course / "attempts" / f"{attempt_id}.json"
+        persisted_start = json.loads(attempt_path.read_text(encoding="utf-8"))
+        assert persisted_start["status"] == "in_progress"
+        assert persisted_start["responses"] == []
+        assert "correct_option_id" not in json.dumps(persisted_start)
 
         wrong = client.post(
             f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/questions/Q-001",
@@ -340,36 +388,97 @@ def test_focused_exam_locks_answers_and_gates_explanations(
         assert wrong.json()["explanation"] is None
         assert wrong.json()["sources"] == []
 
+        persisted_wrong = json.loads(attempt_path.read_text(encoding="utf-8"))
+        assert len(persisted_wrong["responses"]) == 1
+        assert persisted_wrong["responses"][0]["question_id"] == "Q-001"
+        assert persisted_wrong["responses"][0]["selected_option_id"] == "A"
+        assert persisted_wrong["responses"][0]["status"] == "incorrect"
+        assert persisted_wrong["responses"][0]["submitted_at"]
+
+        dashboard_before_restart = client.get("/api/v1/dashboard").json()
+        assert dashboard_before_restart["ready_exams"][0]["resume_available"] is True
+
         retry = client.post(
             f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/questions/Q-001",
             json={"option_id": "B"},
         )
         assert retry.status_code == 409
 
-        correct = client.post(
-            f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/questions/Q-002",
-            json={"option_id": "A"},
+        restarted_app = create_app(
+            session_token="restart-session", web_dir=tmp_path / "missing-web"
         )
-        assert correct.status_code == 200
-        assert correct.json()["status"] == "correct"
-        assert correct.json()["explanation"] == "Option A is supported."
-        assert correct.json()["sources"][0] == {
-            "source_id": "SRC-001",
-            "title": "Clinical guide",
-            "locator_label": "Section 2",
-            "support_strength": "direct",
-            "href": "https://example.com/guide#section-2",
-        }
+        with TestClient(restarted_app) as restarted_client:
+            restarted_client.get("/bootstrap/restart-session", follow_redirects=False)
+            resumed = restarted_client.post(
+                "/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts"
+            )
+            assert resumed.status_code == 200
+            assert resumed.json()["attempt_id"] == attempt_id
+            assert resumed.json()["resumed"] is True
+            assert resumed.json()["answers"][0]["status"] == "incorrect"
+            assert resumed.json()["answers"][0]["explanation"] is None
 
-        finish = client.post(
-            f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/finish"
-        )
+            correct = restarted_client.post(
+                f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/questions/Q-002",
+                json={"option_id": "A"},
+            )
+            assert correct.status_code == 200
+            assert correct.json()["status"] == "correct"
+            assert correct.json()["explanation"] == "Option A is supported."
+            assert correct.json()["sources"][0] == {
+                "source_id": "SRC-001",
+                "title": "Clinical guide",
+                "locator_label": "Section 2",
+                "support_strength": "direct",
+                "href": "https://example.com/guide#section-2",
+            }
+
+            due_correct = restarted_client.post(
+                f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/questions/Q-003",
+                json={"option_id": "B"},
+            )
+            assert due_correct.status_code == 200
+            assert due_correct.json()["status"] == "correct"
+
+            finish = restarted_client.post(
+                f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/finish"
+            )
+            repeated_finish = restarted_client.post(
+                f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/finish"
+            )
+            assert repeated_finish.status_code == 200
+            assert repeated_finish.json() == finish.json()
+            dashboard_after_finish = restarted_client.get("/api/v1/dashboard").json()
+            assert dashboard_after_finish["ready_exams"][0]["resume_available"] is False
 
     assert finish.status_code == 200
     completion = finish.json()
-    assert completion["correct_count"] == 1
+    assert completion["correct_count"] == 2
     assert completion["incorrect_count"] == 1
     assert completion["unanswered_count"] == 0
-    assert completion["score_percent"] == 50.0
+    assert completion["score_percent"] == 66.7
     assert completion["questions"][0]["correct_option_id"] == "B"
     assert completion["questions"][0]["sources"][0]["source_id"] == "SRC-001"
+
+    persisted_completion = json.loads(attempt_path.read_text(encoding="utf-8"))
+    assert persisted_completion["status"] == "complete"
+    assert persisted_completion["result"]["score_percent"] == 66.7
+
+    review_queue = json.loads(
+        (progress_root / "review-queue.json").read_text(encoding="utf-8")
+    )
+    assert review_queue["schema_version"] == "review-queue-v1"
+    assert review_queue["curve_intervals"] == [1, 3, 7]
+    assert review_queue["applied_attempt_ids"] == [attempt_id]
+    records = {item["question_id"]: item for item in review_queue["questions"]}
+    assert records["Q-001"]["stage_index"] == 0
+    assert records["Q-001"]["interval_days"] == 1
+    assert records["Q-001"]["lapse_count"] == 1
+    assert records["Q-001"]["last_attempt_id"] == attempt_id
+    assert records["Q-002"]["stage_index"] == 0
+    assert records["Q-002"]["interval_days"] == 1
+    assert records["Q-002"]["early_practice_count"] == 1
+    assert records["Q-003"]["question_version"] == 2
+    assert records["Q-003"]["stage_index"] == 2
+    assert records["Q-003"]["interval_days"] == 7
+    assert records["Q-003"]["due_success_count"] == 5

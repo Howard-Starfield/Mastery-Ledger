@@ -15,6 +15,7 @@ from mastery_ledger.database import initialize_database, save_onboarding
 from mastery_ledger.exam_service import (
     AttemptConflictError,
     AttemptNotFoundError,
+    AttemptStorageError,
     ExamNotFoundError,
     ExamSessionStore,
     ExamValidationError,
@@ -99,6 +100,8 @@ def create_app(*, session_token: str | None = None, web_dir: Path | None = None)
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
         except ExamValidationError as error:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+        except AttemptStorageError as error:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 
     @app.post(
         "/api/v1/exams/{course_id}/{exam_id}/attempts/{attempt_id}/questions/{question_id}",
@@ -126,6 +129,8 @@ def create_app(*, session_token: str | None = None, web_dir: Path | None = None)
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
         except ExamValidationError as error:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+        except AttemptStorageError as error:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 
     @app.post(
         "/api/v1/exams/{course_id}/{exam_id}/attempts/{attempt_id}/finish",
@@ -137,6 +142,8 @@ def create_app(*, session_token: str | None = None, web_dir: Path | None = None)
             return exam_sessions.finish(attempt_id, course_id, exam_id)
         except AttemptNotFoundError as error:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+        except AttemptStorageError as error:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 
     @app.get("/api/v1/onboarding/defaults", dependencies=[Depends(require_session)])
     def onboarding_defaults() -> dict[str, object]:

@@ -90,6 +90,7 @@ class DashboardExam(BaseModel):
     concepts: list[str] = Field(default_factory=list)
     created_at: str | None = None
     source_status: Literal["verified", "ready", "review_needed"] = "ready"
+    resume_available: bool = False
 
 
 class DashboardCourse(BaseModel):
@@ -134,21 +135,6 @@ class ExamQuestionView(BaseModel):
     source_status: Literal["verified", "unavailable"]
 
 
-class ExamAttemptStart(BaseModel):
-    schema_version: Literal["exam-attempt-v1"] = "exam-attempt-v1"
-    attempt_id: str
-    exam_id: str
-    course_id: str
-    course_title: str
-    title: str
-    estimated_minutes: int = Field(ge=0)
-    questions: list[ExamQuestionView]
-
-
-class QuestionSubmissionRequest(BaseModel):
-    option_id: str = Field(min_length=1, max_length=24)
-
-
 class SourceDisclosure(BaseModel):
     source_id: str
     title: str
@@ -166,6 +152,24 @@ class QuestionFeedback(BaseModel):
     locked: Literal[True] = True
     explanation: str | None = None
     sources: list[SourceDisclosure] = Field(default_factory=list)
+
+
+class ExamAttemptStart(BaseModel):
+    schema_version: Literal["exam-attempt-v1"] = "exam-attempt-v1"
+    attempt_id: str
+    exam_id: str
+    course_id: str
+    course_title: str
+    title: str
+    estimated_minutes: int = Field(ge=0)
+    started_at: str
+    resumed: bool = False
+    questions: list[ExamQuestionView]
+    answers: list[QuestionFeedback] = Field(default_factory=list)
+
+
+class QuestionSubmissionRequest(BaseModel):
+    option_id: str = Field(min_length=1, max_length=24)
 
 
 class QuestionReview(BaseModel):

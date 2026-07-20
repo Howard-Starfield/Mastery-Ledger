@@ -2,7 +2,7 @@
 
 Turn documents, websites, video, audio, and researched topics into source-grounded courses, focused exams, and long-term review records.
 
-> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, Focused Question exam delivery, and the skill prototype. Course ingestion, durable attempt history, scheduled review execution, and signed installers remain under development.
+> **Project status:** Mastery Ledger now includes executable onboarding, a workspace-backed Exam Ledger dashboard, Focused Question exam delivery, durable attempt history, deterministic question scheduling, and the skill prototype. Course ingestion, scheduled-review sessions, concept-level proficiency aggregation, and signed installers remain under development.
 
 ![Mastery Ledger Exam Ledger dashboard](design-mockups/mastery-ledger-dashboard.png)
 
@@ -83,7 +83,7 @@ Mastery Ledger has two cooperating layers: a local application for learner-facin
 | Evidence and contradiction control | Separates claims, sources, contradictions, gaps, verification decisions, and approved evidence before learner-facing synthesis | Codex skill workflow |
 | Course and assessment generation | Builds source-grounded study guides, knowledge pages, question banks, and exam definitions from approved evidence | Codex skill workflow |
 | Citation validation | Validates source IDs, structured locators, support targets, answer explanations, and evidence packets before publication | Skill scripts |
-| Mastery records | Provides a validated script contract for updating question proficiency and the configured long-term interval curve | Skill script; application integration pending |
+| Mastery records | Persists exam attempts, restores interrupted exams, and updates each question on the configured long-term interval curve | Application preview; concept aggregation pending |
 | Tutoring and course updates | Runs source-grounded tutoring passes and reopens affected evidence, questions, and contradictions when sources or goals change | Codex skill workflow |
 
 ## Product interface
@@ -98,9 +98,9 @@ Exam Ledger is the focused assessment interface inside Mastery Ledger. Learners 
 
 ![Focused Question exam with selectable answers and collapsed source disclosure](design-mockups/exam-concept-2-focused-question-v2.png)
 
-_Focused Question design direction. The current runner implements selectable answers, the question palette, flags, timer, scoring, and source gating; durable notes and autosave remain future work._
+_Focused Question design direction. The current runner implements selectable answers, the question palette, flags, timer, scoring, source gating, and durable attempt autosave; persistent learner notes remain future work._
 
-Question content is data, not generated interface code. A fixed local web template renders validated exam files. The current preview keeps an active attempt in application memory; the next persistence slice will write durable attempt and review records back to the course workspace.
+Question content is data, not generated interface code. A fixed local web template renders validated exam files. The application writes in-progress and completed attempts atomically under the course, restores compatible interrupted attempts after a restart, and updates the separate review queue only when final submission succeeds.
 
 ### First-run workspace setup
 
@@ -110,8 +110,8 @@ Onboarding belongs to the application. The skill can detect that setup is requir
 
 ## What is next
 
-- **Durable attempts and review scheduling** — write completed attempts into the course and update each question's next due date.
 - **Review Queue sessions** — launch scheduled reviews from the dashboard and apply the learner's editable Ownership Curve.
+- **Concept proficiency aggregation** — project question results into inspectable concept-level evidence without rewriting attempt history.
 - **Source Inbox** — add files and links, inspect processing state, and revisit provenance from the application.
 - **Knowledge Wiki** — browse approved concepts, relationships, contradictions, and exact source locations.
 - **Evidence & Activity** — inspect source decisions, worker handoffs, rejected claims, and machine-readable action events.
@@ -137,6 +137,9 @@ First-run onboarding belongs to the application because it validates and persist
 - Focused Question runner with a question map, flags, locked single submissions, final-submit checkpoint, scoring, and review mode.
 - Server-side answer checking that keeps keys and gated explanations out of the initial browser payload.
 - Collapsed source disclosure that unlocks after a correct answer and for every question after final submission.
+- Atomic `attempts/ATTEMPT-*.json` records with restart recovery and immutable completed results.
+- Idempotent `progress/review-queue.json` updates using the learner's configured Ownership Curve.
+- Dashboard and exam-detail resume indicators for compatible in-progress attempts.
 - Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
 
 ## Install and test the preview
@@ -207,7 +210,9 @@ onboarding_required
 - Each question accepts one locked submission: an incorrect answer reveals no hint, while a correct answer reveals its explanation and enables a still-collapsed source disclosure.
 - Final submission reports the score and enables still-collapsed sources for every question in review mode.
 
-Exam attempts currently live in application memory and reset when the local server stops. Durable attempt files and review scheduling are the next persistence slice.
+- Closing or restarting the local application restores the same compatible in-progress attempt and its locked answers.
+- Final submission writes a complete attempt result and updates each question's review record exactly once.
+- A correct due answer advances one stage, an incorrect due answer resets to stage zero, and early practice does not advance the schedule.
 - Source invitation may be completed or left empty.
 - Processing mode, language, reduced motion, and the review curve survive the final confirmation.
 - The default curve includes `1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584` days.

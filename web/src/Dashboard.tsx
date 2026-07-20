@@ -87,7 +87,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const maxStageCount = Math.max(1, ...(data?.ownership_curve.map((stage) => stage.question_count) ?? [1]))
 
   if (activeExam) {
-    return <ExamRunner courseId={activeExam.course_id} examId={activeExam.exam_id} onExit={() => setActiveExam(null)} />
+    return <ExamRunner courseId={activeExam.course_id} examId={activeExam.exam_id} onExit={() => { setActiveExam(null); refresh() }} />
   }
 
   return (
@@ -159,7 +159,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
                 <div className="exam-metric"><strong>{exam.question_count}</strong><span>items</span></div>
                 <div className="exam-metric"><strong>{exam.estimated_minutes}</strong><span>minutes</span></div>
                 <div className={`evidence-state evidence-state--${exam.source_status}`}><i />{exam.source_status === 'review_needed' ? 'Review needed' : exam.source_status === 'verified' ? 'Verified' : 'Ready'}</div>
-                <button type="button" className="exam-action" onClick={() => setSelectedExam(exam)}>Inspect <span>↗</span></button>
+                <button type="button" className={exam.resume_available ? 'exam-action has-resume' : 'exam-action'} onClick={() => setSelectedExam(exam)}>{exam.resume_available ? 'Continue' : 'Inspect'} <span>↗</span></button>
               </article>
             )) : <EmptyLedger filtered={Boolean(query || course !== 'all' || evidence !== 'all')} />}
           </div>
@@ -200,8 +200,8 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
             <p className="kicker">{selectedExam.exam_id}</p><h2 id="exam-sheet-title">{selectedExam.title}</h2><p className="sheet-course">{selectedExam.course_title}</p>
             <dl><div><dt>Questions</dt><dd>{selectedExam.question_count}</dd></div><div><dt>Expected time</dt><dd>{selectedExam.estimated_minutes} minutes</dd></div><div><dt>Evidence</dt><dd>{selectedExam.source_status.replace('_', ' ')}</dd></div><div><dt>Created</dt><dd>{formatDate(selectedExam.created_at)}</dd></div></dl>
             {Boolean(selectedExam.concepts.length) && <div className="sheet-concepts">{selectedExam.concepts.map((concept) => <span key={concept}>{concept}</span>)}</div>}
-            <div className="sheet-notice"><strong>Focused Question delivery</strong><p>Each answer locks once. Incorrect answers reveal nothing; correct answers enable the collapsed source disclosure.</p></div>
-            <button type="button" className="sheet-start" onClick={() => { setActiveExam(selectedExam); setSelectedExam(null) }}>Begin focused exam <span>→</span></button>
+            <div className="sheet-notice"><strong>{selectedExam.resume_available ? 'Saved attempt found' : 'Focused Question delivery'}</strong><p>{selectedExam.resume_available ? 'Locked answers will be restored from the portable course record.' : 'Each answer locks once. Incorrect answers reveal nothing; correct answers enable the collapsed source disclosure.'}</p></div>
+            <button type="button" className="sheet-start" onClick={() => { setActiveExam(selectedExam); setSelectedExam(null) }}>{selectedExam.resume_available ? 'Continue saved exam' : 'Begin focused exam'} <span>→</span></button>
           </section>
         </div>
       )}

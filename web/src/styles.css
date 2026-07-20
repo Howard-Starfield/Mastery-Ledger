@@ -434,6 +434,8 @@ button:disabled { cursor: not-allowed; }
 .evidence-state--review_needed i { background: #d57958; }
 .exam-action { display: flex; min-height: 34px; align-items: center; justify-content: space-between; border: 1px solid #55728e; color: #173552; background: transparent; font-size: .63rem; font-weight: 760; }
 .exam-action:hover { color: #fff; background: #173552; }
+.exam-action.has-resume { border-color: #2d7b58; color: #246347; background: #edf7f0; }
+.exam-action.has-resume:hover { color: #fff; background: #246347; }
 .ledger-empty, .register-loading { min-height: 176px; display: flex; align-items: center; justify-content: center; gap: 20px; padding: 30px; color: #627084; }
 .ledger-empty__folio { color: #c4bdae; font-family: var(--serif); font-size: 4rem; line-height: 1; }
 .ledger-empty strong { color: #20344e; font-family: var(--serif); font-size: 1.05rem; }
@@ -500,6 +502,7 @@ button:disabled { cursor: not-allowed; }
 .exam-title-lockup { min-width: 0; display: flex; align-items: center; gap: 12px; padding: 0 20px; }
 .exam-title-lockup span { color: #93a5b9; font-size: .59rem; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
 .exam-title-lockup strong { overflow: hidden; text-overflow: ellipsis; font-family: var(--serif); font-size: .82rem; white-space: nowrap; }
+.exam-title-lockup em { flex: 0 0 auto; padding: 4px 7px; border: 1px solid rgba(115,198,155,.45); color: #9ed6b8; font-size: .5rem; font-style: normal; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
 .exam-clock { min-width: 126px; display: grid; place-content: center; padding: 0 22px; border-inline: 1px solid rgba(255,255,255,.13); text-align: center; }
 .exam-clock small { color: #8ea1b7; font-size: .52rem; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
 .exam-clock strong { margin-top: 3px; color: #71b9ff; font-family: "Cascadia Mono", Consolas, monospace; font-size: 1rem; letter-spacing: .08em; }

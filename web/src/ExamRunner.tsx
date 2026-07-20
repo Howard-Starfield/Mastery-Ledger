@@ -88,8 +88,16 @@ export default function ExamRunner({ courseId, examId, onExit }: ExamRunnerProps
     applicationApi
       .startExam(courseId, examId)
       .then((nextAttempt) => {
+        const restoredAnswers = Object.fromEntries(nextAttempt.questions.map((question) => [question.question_id, { selectedOptionId: null, feedback: null }])) as Record<string, AnswerState>
+        nextAttempt.answers.forEach((feedback) => {
+          restoredAnswers[feedback.question_id] = { selectedOptionId: feedback.selected_option_id, feedback }
+        })
         setAttempt(nextAttempt)
-        setAnswers(Object.fromEntries(nextAttempt.questions.map((question) => [question.question_id, { selectedOptionId: null, feedback: null }])))
+        setAnswers(restoredAnswers)
+        const firstUnlocked = nextAttempt.questions.findIndex((question) => !restoredAnswers[question.question_id]?.feedback)
+        setCurrentIndex(firstUnlocked >= 0 ? firstUnlocked : 0)
+        const startedAt = Date.parse(nextAttempt.started_at)
+        if (!Number.isNaN(startedAt)) setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)))
       })
       .catch((cause: Error) => setError(cause.message))
       .finally(() => setBusy(false))
@@ -170,7 +178,7 @@ export default function ExamRunner({ courseId, examId, onExit }: ExamRunnerProps
     <main className="focused-exam">
       <header className="exam-topbar">
         <button type="button" className="exam-exit" onClick={onExit} aria-label="Return to Exam Ledger">ML</button>
-        <div className="exam-title-lockup"><span>{attempt.course_title}</span><strong>{attempt.title}</strong></div>
+        <div className="exam-title-lockup"><span>{attempt.course_title}</span><strong>{attempt.title}</strong>{attempt.resumed && <em>Resumed</em>}</div>
         <div className="exam-clock"><small>Time elapsed</small><strong>{formatElapsed(elapsedSeconds)}</strong></div>
         <button type="button" className="palette-toggle" onClick={() => setPaletteOpen((value) => !value)} aria-expanded={paletteOpen}>Questions {currentIndex + 1}/{attempt.questions.length}</button>
         <button type="button" className="finish-exam" onClick={() => completion ? setShowResult(true) : setFinishCheckpoint(true)}>{completion ? 'Results' : 'Finish exam'}</button>

@@ -61,6 +61,7 @@ export interface DashboardExam {
   concepts: string[]
   created_at: string | null
   source_status: 'verified' | 'ready' | 'review_needed'
+  resume_available: boolean
 }
 
 export interface DashboardCourse {
@@ -113,7 +114,10 @@ export interface ExamAttempt {
   course_title: string
   title: string
   estimated_minutes: number
+  started_at: string
+  resumed: boolean
   questions: ExamQuestion[]
+  answers: QuestionFeedback[]
 }
 
 export interface SourceDisclosure {
@@ -160,6 +164,7 @@ export interface ExamCompletion {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: 'same-origin',
+    cache: 'no-store',
     headers: { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
   })

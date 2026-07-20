@@ -144,7 +144,7 @@ The normal skill workflow should launch the exact exam automatically; the learne
 
 The local web app opens on a workspace dashboard when no specific exam is passed. It reads only registered course manifests and shows:
 
-**Implementation status:** the `dashboard-v1` API and React Exam Ledger landing page now discover registered `course.yaml` or `study.yaml` manifests, ready exam definitions, question banks, source manifests, and review queues. Search, course filtering, the fixed-height exam register, recent-course summaries, the complete curve rail, responsive expansion, and the exam detail sheet are implemented. Ready exams launch into Focused Question delivery with server-side answer checking, one locked submission per question, gated explanations and citations, final scoring, and review mode. Attempts are currently held in application memory; durable attempt artifacts, starting scheduled reviews, and editing the curve from settings remain later slices.
+**Implementation status:** the `dashboard-v1` API and React Exam Ledger landing page now discover registered `course.yaml` or `study.yaml` manifests, ready exam definitions, question banks, source manifests, review queues, and compatible in-progress attempts. Search, course filtering, the fixed-height exam register, recent-course summaries, the complete curve rail, responsive expansion, and the exam detail sheet are implemented. Ready exams launch into Focused Question delivery with server-side answer checking, one locked submission per question, gated explanations and citations, final scoring, review mode, atomic attempt records, restart recovery, and idempotent Ownership Curve updates. Starting scheduled-review sessions and editing the curve from settings remain later slices.
 
 - **Due now:** questions whose `next_due_at` is due or overdue, grouped by course.
 - **Ready exams:** every LLM-generated exam set with `status: ready`, question count, estimated duration, concepts, and creation time. Render this as a fixed-height, internally scrollable ledger with a sticky header, visible scrollbar, total count, search, course/status filters, and newest-first default sorting. Do not hide older ready exams behind a small card limit or a required `View all` action. Use windowing/virtualization when the collection is large. Preserve keyboard focus and announce the result count after filtering. On narrow screens, expand the ledger into its own page or sheet instead of creating a cramped nested scroll area.
@@ -281,7 +281,7 @@ courses/<course-id>/exams/EXAM-001/
 - `exam.json` is the validated canonical exam definition.
 - `generation-manifest.json` records approved evidence inputs, generator version, prompt version, timestamps, and validation result.
 
-Attempt history should be stored separately from the immutable exam definition. The exact browser-to-course persistence mechanism will be decided with item 2 because a static browser file cannot silently write arbitrary workspace files.
+Attempt history is stored separately from the immutable exam definition. Managed local mode writes schema-versioned attempt files through the protected loopback API; a future portable offline mode will require explicit browser export and validated import because a static browser file cannot silently write arbitrary workspace files.
 
 ### Security and integrity requirements
 
@@ -1645,8 +1645,11 @@ The first executable slice implements:
 - a React and TypeScript onboarding interface with an editable ownership curve;
 - a Vite release build copied into the Python package;
 - Python contract tests, frontend unit tests, and a real-browser visual acceptance capture.
+- the workspace-backed dashboard and Focused Question exam runner;
+- atomic in-progress and completed attempt artifacts with restart recovery;
+- idempotent question scheduling on the configured Ownership Curve.
 
-The following remain release gates rather than completed functionality: signed installers and release manifests, application/skill compatibility-range enforcement, native folder-picker integration, workspace repair UI, the dashboard, durable worker execution, ingestion, exam rendering, and review scheduling.
+The following remain release gates rather than completed functionality: signed installers and release manifests, application/skill compatibility-range enforcement, native folder-picker integration, workspace repair UI, durable worker execution, ingestion, scheduled-review delivery, concept-level proficiency aggregation, and curve editing after onboarding.
 
 ### Item 12 implementation references
 
