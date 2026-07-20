@@ -26,6 +26,9 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "workflows" / "tutor-and-review.md",
             ROOT / "workflows" / "update-study.md",
             ROOT / "references" / "agent-roles.md",
+            ROOT / "references" / "agent-role-profiles.json",
+            ROOT / "references" / "artifact-lifecycle.md",
+            ROOT / "references" / "event-contract.md",
             ROOT / "references" / "source-policy.md",
             ROOT / "references" / "citation-contract.md",
             ROOT / "references" / "video-transcript-contract.md",
@@ -47,6 +50,9 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "assets" / "assessment-validation.json",
             ROOT / "assets" / "contradiction-review.json",
             ROOT / "assets" / "runtime-compatibility.json",
+            ROOT / "scripts" / "compile_worker_context.py",
+            ROOT / "scripts" / "merge_worker_events.py",
+            ROOT / "scripts" / "adopt_course.py",
         ]
         missing = [str(path.relative_to(ROOT)) for path in required if not path.exists()]
         self.assertEqual([], missing, f"Missing required files: {missing}")
@@ -110,7 +116,7 @@ class SkillStructureTests(unittest.TestCase):
         self.assertIn('"source/media"', content)
         self.assertIn('"lessons"', content)
         self.assertIn('"wiki/pages"', content)
-        self.assertIn('".work/orchestration/tasks"', content)
+        self.assertIn('".work/runs"', content)
         self.assertIn('"questions/question-bank.json"', content)
         self.assertIn('"progress/learner-progress.json"', content)
         self.assertIn('"questions/question-bank.md"', content)
@@ -119,6 +125,27 @@ class SkillStructureTests(unittest.TestCase):
         self.assertNotIn('"orchestration/tasks"', content)
 
         self.assertTrue((ROOT / "scripts" / "create_assessment_plan.py").is_file())
+
+    def test_role_profiles_are_bounded_and_versioned(self) -> None:
+        payload = json.loads((ROOT / "references" / "agent-role-profiles.json").read_text(encoding="utf-8"))
+        self.assertEqual("agent-role-profiles-v1", payload["schema_version"])
+        required_roles = {
+            "corpus-mapper",
+            "source-extractor",
+            "research-worker",
+            "contradiction-reviewer",
+            "citation-verifier",
+            "assessment-generator",
+            "assessment-validator",
+        }
+        self.assertEqual(required_roles, set(payload["profiles"]))
+        for role, profile in payload["profiles"].items():
+            self.assertEqual("1.0", profile["version"], role)
+            self.assertTrue(profile["mission"], role)
+            self.assertTrue(profile["best_practices"], role)
+            self.assertTrue(profile["stop_conditions"], role)
+            self.assertTrue(profile["prohibited_actions"], role)
+            self.assertIn("references/event-contract.md", profile["required_contracts"], role)
 
     def test_question_template_matches_application_delivery_contract(self) -> None:
         payload = json.loads((ROOT / "assets" / "question-bank.json").read_text(encoding="utf-8"))

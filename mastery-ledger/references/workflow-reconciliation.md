@@ -31,10 +31,11 @@ Exit code `0` means complete, `2` means work or user input is required, and `3` 
 2. Run reconciliation once.
 3. If work is returned, read only the listed workflow files.
 4. Run the deterministic helper or the exact `ready_task_ids` reported by `validate_orchestration.py`.
-5. Wait for the entire dispatched wave and route completion envelopes before rerunning the gate.
-6. Record observable actions, decisions, evidence, and short justifications. Never record hidden reasoning.
-7. Rerun reconciliation after an artifact, task status, source, learner decision, or validation result changed.
-8. Stop on completion, required user input, declined/unavailable independent workers, or retry exhaustion.
+5. For each `context_required_task_id`, compile its worker context and rerun orchestration validation before dispatch. Never compose a replacement prompt.
+6. Wait for the entire dispatched wave, route completion envelopes, and merge accepted worker event shards before rerunning the gate.
+7. Record observable actions, decisions, evidence, and short justifications. Never record hidden reasoning.
+8. Rerun reconciliation after an artifact, task status, source, learner decision, or validation result changed.
+9. Stop on completion, required user input, declined/unavailable independent workers, or retry exhaustion.
 
 Do not call the script in a tight loop. A return is a work order for the main agent, not permission to fabricate the missing artifact. Do not create a worker to run reconciliation; the main agent owns the loop.
 

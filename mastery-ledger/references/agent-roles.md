@@ -1,5 +1,7 @@
 # Agent roles
 
+`agent-role-profiles.json` is the canonical machine-readable role registry. Do not describe a worker role from memory. The context compiler selects one profile, hashes it, attaches its mission, best practices, stop conditions, prohibited actions, and required contracts, and the completion validator requires the worker to acknowledge that exact version. This document explains the topology; it does not replace compiled role context.
+
 ## Main orchestrator
 
 Accountable owner of the study. It interprets the learner, freezes scope, assigns tasks, approves evidence, resolves conflicts, synthesizes the curriculum, and conducts tutoring.
@@ -18,6 +20,10 @@ Broadly inspects an approved corpus and proposes:
 - independent research tasks.
 
 It does not approve claims or draft the final guide.
+
+## Source extractor
+
+Converts one assigned source or bounded source subset into faithful, locator-preserving evidence. It preserves hierarchy, separates the source author's claims from interpretation, and reports omissions or internal inconsistency. It does not synthesize across unassigned sources or approve evidence.
 
 ## Research worker
 
@@ -71,3 +77,5 @@ Attempts to find unsupported claims, misleading simplifications, stale facts, so
 - Evaluators submit recommendations; they do not silently edit approved artifacts.
 - Research and extraction workers submit independently. The contradiction reviewer runs only after their completion envelopes are accepted, and citation verification runs last, after contradiction review has rejected or retained candidate claims.
 - When no subagents are available, the main agent may preserve separated provisional passes for the live conversation, but a researched course remains `DRAFT_UNVERIFIED` and cannot become a ready exam or active mastery course.
+- Do not force a reviewer to invent a defect or contradiction. A clean result must still name the most fragile assumption or remaining evidence gap.
+- Do not give workers the full skill or learner conversation. Give only the compiled role profile, approved scope, required contracts, bounded inputs, declared outputs, and accepted dependency artifacts.

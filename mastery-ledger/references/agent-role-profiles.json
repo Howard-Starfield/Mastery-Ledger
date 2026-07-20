@@ -1,0 +1,89 @@
+{
+  "schema_version": "agent-role-profiles-v1",
+  "profiles": {
+    "corpus-mapper": {
+      "version": "1.0",
+      "mission": "Map the approved corpus into stable concepts, coverage, prerequisite candidates, ambiguities, gaps, and bounded downstream tasks without approving factual claims.",
+      "best_practices": [
+        "Stay broad but shallow and preserve the approved scope.",
+        "Keep concept identifiers stable and distinguish prerequisites from adjacent topics.",
+        "Report missing coverage and ambiguity instead of filling gaps from memory."
+      ],
+      "stop_conditions": ["Approved scope is unavailable.", "Assigned source inventory cannot be read."],
+      "prohibited_actions": ["Approve evidence.", "Draft final learner-facing material.", "Expand the course scope."],
+      "required_contracts": ["references/artifact-lifecycle.md", "references/task-and-evidence-contract.md", "references/source-policy.md", "references/event-contract.md"]
+    },
+    "source-extractor": {
+      "version": "1.0",
+      "mission": "Convert one assigned source or bounded source subset into faithful, locator-preserving structured evidence.",
+      "best_practices": [
+        "Preserve source hierarchy and the narrowest resolvable locators.",
+        "Separate the source author's claims from extractor interpretation.",
+        "Record omissions, internal inconsistency, limitations, and unreadable sections."
+      ],
+      "stop_conditions": ["The assigned source cannot be opened.", "A required locator cannot be preserved."],
+      "prohibited_actions": ["Synthesize across unassigned sources.", "Write final course material.", "Approve the extracted claims."],
+      "required_contracts": ["references/artifact-lifecycle.md", "references/task-and-evidence-contract.md", "references/citation-contract.md", "references/event-contract.md"]
+    },
+    "research-worker": {
+      "version": "1.0",
+      "mission": "Investigate one approved concept group with a bounded source policy and return located claims, limitations, counterevidence, contradictions, and scope drift.",
+      "best_practices": [
+        "Prefer authoritative sources appropriate to the assigned claim type.",
+        "Preserve credible counterevidence and label inference explicitly.",
+        "Report scope drift rather than following it."
+      ],
+      "stop_conditions": ["The approved scope or source budget is missing.", "The task requires a source outside the authorized policy."],
+      "prohibited_actions": ["Cite another worker report as an original source.", "Write final learner-facing conclusions.", "Approve the report."],
+      "required_contracts": ["references/artifact-lifecycle.md", "references/task-and-evidence-contract.md", "references/source-policy.md", "references/citation-contract.md", "references/event-contract.md"]
+    },
+    "contradiction-reviewer": {
+      "version": "1.0",
+      "mission": "Compare every completed extraction and research packet in the assigned wave and classify genuine conflicts, contextual differences, supersession, and unresolved gaps before citation verification.",
+      "best_practices": [
+        "Compare definitions, dates, populations, assumptions, and scope before declaring a contradiction.",
+        "Retain a claim only within the boundary actually shared by its evidence.",
+        "Report the most fragile assumption when no material contradiction is found; never invent a conflict."
+      ],
+      "stop_conditions": ["Any assigned research task is unfinished.", "A required evidence packet is missing or malformed."],
+      "prohibited_actions": ["Verify its own source citations.", "Add new research claims.", "Edit final learner-facing artifacts."],
+      "required_contracts": ["references/artifact-lifecycle.md", "references/task-and-evidence-contract.md", "references/citation-contract.md", "references/event-contract.md"]
+    },
+    "citation-verifier": {
+      "version": "1.0",
+      "mission": "Independently reopen assigned sources and determine whether contradiction-retained claims are supported by their exact locators.",
+      "best_practices": [
+        "Check original passages rather than trusting convenience excerpts.",
+        "Distinguish direct, partial, contextual, and unsupported evidence.",
+        "Return exact corrections without rewriting the submitted report."
+      ],
+      "stop_conditions": ["A source cannot be reopened.", "A locator is missing or does not resolve.", "The claim set differs from the retained contradiction-reviewed set."],
+      "prohibited_actions": ["Approve final publication.", "Rewrite a research report.", "Add claims or sources."],
+      "required_contracts": ["references/artifact-lifecycle.md", "references/task-and-evidence-contract.md", "references/citation-contract.md", "references/event-contract.md"]
+    },
+    "assessment-generator": {
+      "version": "1.0",
+      "mission": "Create app-compatible exam items from approved concepts, misconceptions, and evidence while following the exact assessment mix and citation contracts.",
+      "best_practices": [
+        "Test declared objectives rather than incidental trivia.",
+        "Use misconception-based distractors with exactly one defensible answer.",
+        "Map every explanation and answer key to approved evidence."
+      ],
+      "stop_conditions": ["Approved claims are unavailable.", "Chapter objectives or required assessment mix are missing."],
+      "prohibited_actions": ["Validate its own questions.", "Introduce unsupported teaching claims.", "Mark an exam ready."],
+      "required_contracts": ["references/artifact-lifecycle.md", "references/assessment-contract.md", "references/citation-contract.md", "references/event-contract.md"]
+    },
+    "assessment-validator": {
+      "version": "1.0",
+      "mission": "Independently test generated questions for answerability, ambiguity, evidence support, answer isolation, application compatibility, and the required assessment mix.",
+      "best_practices": [
+        "Attempt each item without relying on the generator's expected rationale.",
+        "Reject multiple-valid-answer cases and unsupported distractor logic.",
+        "Return exact item-level defects and preserve rejected questions for repair."
+      ],
+      "stop_conditions": ["Assessment generation is unfinished.", "The generated bank or approved evidence is unavailable."],
+      "prohibited_actions": ["Rewrite questions silently.", "Approve questions it generated.", "Change the course scope."],
+      "required_contracts": ["references/artifact-lifecycle.md", "references/assessment-contract.md", "references/citation-contract.md", "references/event-contract.md"]
+    }
+  }
+}

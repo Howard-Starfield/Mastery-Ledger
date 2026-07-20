@@ -27,8 +27,25 @@ def main() -> int:
     if mode in {"topic-research", "hybrid"}:
         parser.error("Use create_research_plan.py for topic-research or hybrid studies.")
     run_id = f"RUN-{uuid.uuid4().hex[:8].upper()}"
-    generator = task(run_id, "TASK-ASSESSMENT-GENERATE", "assessment-generator", [], schema="question-bank-v2")
-    validator = task(run_id, "TASK-ASSESSMENT-VALIDATE", "assessment-validator", ["TASK-ASSESSMENT-GENERATE"], "reviews", "assessment-validation-v1")
+    generator = task(
+        run_id,
+        "TASK-ASSESSMENT-GENERATE",
+        "assessment-generator",
+        [],
+        schema="question-bank-v2",
+        scope_included=["Approved course objectives and chapter assessment contract"],
+        input_artifacts=["evidence/approved-claims.json", "study-guide.md", "concept-map.md"],
+    )
+    validator = task(
+        run_id,
+        "TASK-ASSESSMENT-VALIDATE",
+        "assessment-validator",
+        ["TASK-ASSESSMENT-GENERATE"],
+        "reviews",
+        "assessment-validation-v1",
+        scope_included=["Generated question bank and approved evidence"],
+        input_artifacts=["evidence/approved-claims.json"],
+    )
     now = datetime.now(timezone.utc).isoformat()
     payload = {
         "schema_version": "assessment-run-plan-v1",
@@ -52,7 +69,13 @@ def main() -> int:
         "artifacts": [".work/orchestration/run-plan.yaml"], "decision": "approved",
         "justification": "A ready exam requires independent assessment validation.",
     })
-    print(yaml.safe_dump({"status": "complete", "run_id": run_id, "path": str(path), "first_ready_task_ids": ["TASK-ASSESSMENT-GENERATE"]}, sort_keys=False))
+    print(yaml.safe_dump({
+        "status": "complete",
+        "run_id": run_id,
+        "path": str(path),
+        "first_context_task_ids": ["TASK-ASSESSMENT-GENERATE"],
+        "first_ready_task_ids": [],
+    }, sort_keys=False))
     return 0
 
 

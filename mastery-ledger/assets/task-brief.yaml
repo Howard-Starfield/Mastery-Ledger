@@ -2,7 +2,10 @@ schema_version: "1.0"
 task_id: TASK-001
 run_id: RUN-001
 role: research-worker
-objective: Investigate one bounded concept group
+role_profile_id: research-worker
+role_profile_version: "1.0"
+role_profile_sha256: "sha256:replace-during-plan-compilation"
+objective: Investigate one approved concept group with a bounded source policy
 scope_included: []
 scope_excluded: []
 concept_ids: []
@@ -10,11 +13,17 @@ input_source_ids: []
 input_artifacts: []
 source_limit: 5
 dependencies: []
-output_path: .work/orchestration/reports/REPORT-001.json
-completion_path: .work/orchestration/completions/TASK-001.json
+task_work_dir: .work/runs/RUN-001/tasks/TASK-001
+brief_path: .work/runs/RUN-001/tasks/TASK-001/task-brief.json
+context_path: .work/runs/RUN-001/tasks/TASK-001/context-manifest.json
+dispatch_path: .work/runs/RUN-001/tasks/TASK-001/dispatch-message.txt
+event_path: .work/runs/RUN-001/tasks/TASK-001/events.jsonl
+output_path: .work/runs/RUN-001/tasks/TASK-001/submission.json
+completion_path: .work/runs/RUN-001/tasks/TASK-001/completion.json
 required_schema: evidence-packet-v1
 reviewer_role: citation-verifier
 acceptance_criteria:
   - Every factual claim has a valid source ID and precise locator
   - Contradictions and gaps are preserved
+context_status: pending
 status: planned

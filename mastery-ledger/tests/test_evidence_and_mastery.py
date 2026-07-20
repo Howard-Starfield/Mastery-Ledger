@@ -257,46 +257,74 @@ class EvidenceAndMasteryTests(unittest.TestCase):
     def test_orchestration_gate_requires_matching_completion_envelopes(self) -> None:
         tool = load_module("validate_orchestration_envelopes", "scripts/validate_orchestration.py")
         with tempfile.TemporaryDirectory() as directory:
-            course_root = Path(directory)
-            completion = course_root / ".work" / "orchestration" / "completions" / "research.json"
-            output = course_root / ".work" / "orchestration" / "reports" / "research.json"
-            completion.parent.mkdir(parents=True)
-            output.parent.mkdir(parents=True)
-            output.write_text("{}", encoding="utf-8")
+            studies = Path(directory)
+            subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Envelope Course", "--studies-dir", str(studies)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            course_root = studies / "envelope-course"
+            study_path = course_root / "study.yaml"
+            study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
+            study["mode"] = "provided-material-only"
+            study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
+            subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "create_assessment_plan.py"), str(course_root), "--authorized"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "compile_worker_context.py"), str(course_root), "TASK-ASSESSMENT-GENERATE", "--json"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            plan_path = course_root / ".work" / "orchestration" / "run-plan.yaml"
+            plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
+            task = plan["task_graph"][0]
+            output = course_root / task["output_path"]
+            completion = course_root / task["completion_path"]
+            event = course_root / task["event_path"]
+            output.write_text('{"schema_version":"question-bank-v2"}\n', encoding="utf-8")
+            event.write_text(json.dumps({
+                "schema_version": "action-event-v1",
+                "event_id": "EVT-ENVELOPE",
+                "timestamp": "2026-07-20T00:00:00Z",
+                "run_id": task["run_id"],
+                "task_id": task["task_id"],
+                "action": "assessment.generated",
+                "actor": task["role"],
+                "status": "complete",
+                "summary": "Generated the assigned assessment draft.",
+            }) + "\n", encoding="utf-8")
+            context = json.loads((course_root / task["context_path"]).read_text(encoding="utf-8"))
             completion.write_text(
                 json.dumps(
                     {
                         "schema_version": "completion-envelope-v1",
-                        "task_id": "TASK-RESEARCH",
+                        "task_id": task["task_id"],
+                        "run_id": task["run_id"],
+                        "role": task["role"],
+                        "role_profile_acknowledged": context["role_profile"],
+                        "contracts_acknowledged": [
+                            {"contract_id": item["contract_id"], "sha256": item["sha256"]}
+                            for item in context["required_contracts"]
+                        ],
                         "status": "submitted",
-                        "output_path": ".work/orchestration/reports/research.json",
+                        "summary": "Submitted the assigned assessment draft.",
+                        "event_path": task["event_path"],
+                        "output_path": task["output_path"],
                     }
                 ),
                 encoding="utf-8",
             )
-            plan = {
-                "task_graph": [
-                    {
-                        "task_id": "TASK-RESEARCH",
-                        "role": "research-worker",
-                        "status": "submitted",
-                        "dependencies": [],
-                        "output_path": ".work/orchestration/reports/research.json",
-                        "completion_path": ".work/orchestration/completions/research.json",
-                    },
-                    {
-                        "task_id": "TASK-CONTRADICTIONS",
-                        "role": "contradiction-reviewer",
-                        "status": "planned",
-                        "dependencies": ["TASK-RESEARCH"],
-                        "output_path": ".work/orchestration/reports/contradictions.json",
-                        "completion_path": ".work/orchestration/completions/contradictions.json",
-                    },
-                ]
-            }
+            task["status"] = "submitted"
+            plan_path.write_text(yaml.safe_dump(plan, sort_keys=False), encoding="utf-8")
             errors, _, ready = tool.validate_plan(plan, course_root=course_root)
             self.assertEqual([], errors)
-            self.assertEqual(["TASK-CONTRADICTIONS"], ready)
+            self.assertEqual([], ready)
 
             completion.write_text("{}", encoding="utf-8")
             errors, _, ready = tool.validate_plan(plan, course_root=course_root)

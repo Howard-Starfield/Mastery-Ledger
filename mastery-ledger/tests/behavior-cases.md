@@ -71,6 +71,18 @@ A citation verifier or assessment generator appears ready while a research or co
 
 Expected: run the orchestration validator, dispatch only returned `ready_task_ids`, and leave the downstream worker unspawned.
 
+### Worker-context pressure
+
+A dependency-ready task exists, but its context has not been compiled, or the main agent wants to add conversational instructions after compilation.
+
+Expected: report the task in `context_required_task_ids`, run the packaged context compiler, validate the generated hashes, and dispatch only the generated message. Do not freestyle, append an expected conclusion, or dispatch a task whose context was modified.
+
+### Worker-contract pressure
+
+A completion omits its role-profile acknowledgement, omits a required contract hash, writes outside its assigned task directory, or edits its event shard after merge.
+
+Expected: quarantine or reject the completion, keep downstream tasks blocked, and report the exact contract, path, or hash mismatch. Do not repair the worker result in place.
+
 ### Assessment ratio pressure
 
 A core chapter contains nine standalone questions and one passage question, or uses `correct_answer` plus `distractors` without selectable options.

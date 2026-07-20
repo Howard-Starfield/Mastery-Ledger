@@ -242,6 +242,7 @@ def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
     if not log.is_file() or log.is_symlink() or not log.read_text(encoding="utf-8").strip():
         errors.append("Publication requires a non-empty logs/events.jsonl action log")
     else:
+        substantive_events = 0
         for line_number, line in enumerate(log.read_text(encoding="utf-8").splitlines(), 1):
             try:
                 event = json.loads(line)
@@ -251,6 +252,10 @@ def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
             required = {"event_id", "schema_version", "timestamp", "action", "actor", "status", "summary"}
             if not isinstance(event, dict) or event.get("schema_version") != "action-event-v1" or not required.issubset(event):
                 errors.append(f"logs/events.jsonl line {line_number} is not a complete action-event-v1")
+            elif event.get("action") != "course.initialized":
+                substantive_events += 1
+        if substantive_events == 0:
+            errors.append("Publication requires an action log beyond the course initialization event")
 
     plan_path = root / ".work" / "orchestration" / "run-plan.yaml"
     if not plan_path.is_file():

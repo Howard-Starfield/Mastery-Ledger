@@ -36,7 +36,9 @@ def parse_simple_yaml(path: Path) -> dict[str, Any]:
 
 def load_records(directory: Path) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
-    for path in sorted(directory.glob("*")):
+    paths = {path for path in directory.glob("*") if path.is_file()}
+    paths.update(path for path in directory.rglob("submission.json") if path.is_file())
+    for path in sorted(paths):
         if path.suffix.lower() == ".json":
             records.append(json.loads(path.read_text(encoding="utf-8")))
         elif path.suffix.lower() in {".yaml", ".yml"}:
@@ -98,8 +100,16 @@ def main() -> int:
         parser.error(f"Reviews directory does not exist: {args.reviews_dir}")
 
     report_list = load_records(args.reports_dir)
-    reports = {str(record.get("report_id")): record for record in report_list if record.get("report_id")}
-    reviews = load_records(args.reviews_dir)
+    reports = {
+        str(record.get("report_id")): record
+        for record in report_list
+        if record.get("report_id") and isinstance(record.get("claims"), list)
+    }
+    reviews = [
+        record
+        for record in load_records(args.reviews_dir)
+        if record.get("report_id") and record.get("decision")
+    ]
     merged, errors = aggregate(reports, reviews)
     if errors:
         print(json.dumps({"status": "fail", "errors": errors}, ensure_ascii=False, indent=2))

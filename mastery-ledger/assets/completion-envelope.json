@@ -3,10 +3,22 @@
   "task_id": "TASK-001",
   "run_id": "RUN-001",
   "role": "research-worker",
+  "role_profile_acknowledged": {
+    "id": "research-worker",
+    "version": "1.0",
+    "sha256": "sha256:replace-from-task-brief"
+  },
+  "contracts_acknowledged": [
+    {
+      "contract_id": "task-and-evidence-contract",
+      "sha256": "sha256:replace-from-context-manifest"
+    }
+  ],
   "status": "submitted",
   "summary": "Short observable summary of completed work.",
-  "output_path": ".work/orchestration/reports/REPORT-001.json",
-  "artifacts": [".work/orchestration/reports/REPORT-001.json"],
+  "event_path": ".work/runs/RUN-001/tasks/TASK-001/events.jsonl",
+  "output_path": ".work/runs/RUN-001/tasks/TASK-001/submission.json",
+  "artifacts": [".work/runs/RUN-001/tasks/TASK-001/submission.json"],
   "blockers": [],
   "next_actions": ["Route the submitted report to contradiction review."],
   "completed_at": "2026-07-19T00:00:00Z"

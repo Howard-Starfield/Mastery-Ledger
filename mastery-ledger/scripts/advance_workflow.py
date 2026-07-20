@@ -235,7 +235,7 @@ def gate_requirements(root: Path, target: str) -> list[dict[str, Any]]:
                 "Required research or contradiction work is missing" if not required else "Unfinished tasks: " + ", ".join(unfinished),
                 workflow="orchestrate-research.md",
                 action="Run validate_orchestration.py, dispatch only ready_task_ids, wait for the whole ready wave, route completions, and rerun.",
-                artifacts=[".work/orchestration/run-plan.yaml", ".work/orchestration/completions/"],
+                artifacts=[".work/orchestration/run-plan.yaml", ".work/runs/<run-id>/tasks/<task-id>/completion.json"],
             )]
         return []
 

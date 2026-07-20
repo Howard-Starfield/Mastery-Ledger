@@ -8,6 +8,9 @@ Every delegated task must use this conceptual shape:
 task_id: TASK-001
 run_id: RUN-001
 role: research-worker
+role_profile_id: research-worker
+role_profile_version: "1.0"
+role_profile_sha256: "sha256:<compiled-profile-hash>"
 objective: Explain the policy-gradient theorem and REINFORCE
 scope_included:
   - policy-gradient theorem
@@ -19,8 +22,13 @@ concept_ids: [policy-gradient, reinforce]
 input_source_ids: []
 source_limit: 5
 dependencies: [TASK-000]
-output_path: .work/orchestration/reports/REPORT-001.json
-completion_path: .work/orchestration/completions/TASK-001.json
+task_work_dir: .work/runs/RUN-001/tasks/TASK-001
+brief_path: .work/runs/RUN-001/tasks/TASK-001/task-brief.json
+context_path: .work/runs/RUN-001/tasks/TASK-001/context-manifest.json
+dispatch_path: .work/runs/RUN-001/tasks/TASK-001/dispatch-message.txt
+event_path: .work/runs/RUN-001/tasks/TASK-001/events.jsonl
+output_path: .work/runs/RUN-001/tasks/TASK-001/submission.json
+completion_path: .work/runs/RUN-001/tasks/TASK-001/completion.json
 required_schema: evidence-packet-v1
 reviewer_role: citation-verifier
 acceptance_criteria:
@@ -29,7 +37,9 @@ acceptance_criteria:
 status: planned
 ```
 
-Every worker writes only its assigned output plus one `completion-envelope-v1` JSON record shaped like `assets/completion-envelope.json`. The envelope contains an observable summary, artifacts, blockers, and next actions; it must not contain prompts, hidden reasoning, scratch notes, or chain-of-thought. Scratch work remains under `.work/scratch/` and is never promoted.
+Do not dispatch this conceptual brief directly. Run `compile_worker_context.py`, which freezes a `worker-task-brief-v1`, `worker-context-v1`, role profile, required contract hashes, allowed inputs, and dispatch message inside the assigned task directory. Then run the orchestration validator and dispatch only IDs in `ready_task_ids`.
+
+Every worker writes only its assigned event shard, submission, and one `completion-envelope-v1` JSON record shaped like `assets/completion-envelope.json`. The envelope acknowledges the exact role profile and contract hashes. It contains an observable summary, artifacts, blockers, and next actions; it must not contain prompts, hidden reasoning, scratch notes, or chain-of-thought. Scratch remains inside the task's `tmp/` directory and is never promoted.
 
 ## Evidence packet
 

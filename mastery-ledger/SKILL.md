@@ -23,6 +23,8 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 - Never publish a researched course through a single-agent self-review. If required subagents are unavailable or declined, stop at `DRAFT_UNVERIFIED` and explain what remains.
 - Resolve this installed `SKILL.md` location as `SKILL_ROOT`. Invoke bundled scripts by absolute path under `SKILL_ROOT`; never assume the current directory is the skill directory.
 - Never edit `workflow_state` by hand. Drive every durable workflow target with `scripts/reconcile_workflow.py`.
+- Before the first durable course action, read [artifact lifecycle](references/artifact-lifecycle.md) and [event contract](references/event-contract.md) in full. These required contracts are not optional background.
+- Never dispatch a worker from a conversationally composed prompt. Compile and validate its role-specific context first; pass the generated dispatch message without substantive edits.
 - Read only the workflow and reference files required for the current phase.
 
 ## Start every operational run
@@ -30,6 +32,7 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 1. Detect available capabilities: the Mastery Ledger runtime, filesystem, web, PDF/media reading, scripts, persistent storage, subagents, parallelism, and source-citation support.
 2. For a course, ingestion, exam, or review operation, read [runtime detection and onboarding](workflows/runtime-onboarding.md) and pass its gate before touching durable application state. Do not launch or install software for a design-only or explanatory request.
 3. Look for an existing `study.yaml` and resume it when the request belongs to that study.
+   If an application-created course has `course.yaml` but no `study.yaml`, read [artifact lifecycle](references/artifact-lifecycle.md) and run the packaged `scripts/adopt_course.py`; never fill the layout manually.
 4. Determine the mode: `provided-material-only`, `existing-library`, `local-media`, `topic-research`, or `hybrid`.
 5. Read [intake and scope](workflows/intake-and-scope.md). For `topic-research` or `hybrid`, also read [calibrate and authorize](workflows/calibrate-and-authorize.md). Do not launch research before calibration disposition, scope, and worker topology are approved.
 
@@ -43,11 +46,17 @@ python "<SKILL_ROOT>/scripts/reconcile_workflow.py" "<COURSE_ROOT>" "<TARGET_STA
 
 Follow [workflow reconciliation](references/workflow-reconciliation.md) exactly. On `needs_work`, perform only the returned next actions, run the named validator or ready task wave, and rerun the same command. On `needs_user_input`, ask only for the returned blocking decision and resume after recording it. On `retry_exhausted`, stop instead of repeating or widening the work. On `complete`, continue with learner-facing delivery. Never recursively spawn workers, infer a later gate, or call reconciliation repeatedly without observable progress.
 
+## Deterministic worker dispatch
+
+For every dependency-ready task, run `scripts/compile_worker_context.py` with absolute paths, then run `scripts/validate_orchestration.py`. Dispatch only IDs in `ready_task_ids`; `context_required_task_ids` are not dispatchable. The compiler selects the versioned role profile, required contracts, bounded inputs, exact outputs, and immutable dispatch message. If compilation or validation fails, stop with `blocked` rather than paraphrasing a role or inventing context.
+
+Require each worker to read its generated brief, context manifest, and assigned contracts before work. A worker writes only inside its assigned `.work/runs/<run-id>/tasks/<task-id>/` directory and returns the declared submission, `action-event-v1` shard, and completion envelope. Reject or quarantine missing contract acknowledgements, profile/hash mismatches, unexpected writes, self-approval, scope expansion, or worker-spawned delegation. After an accepted completion, merge its observable events only through `scripts/merge_worker_events.py`.
+
 ## Route by phase
 
 - Supplied files or an existing course folder: read [ingest material](workflows/ingest-material.md). When the learner explicitly uses LinkVault, additionally read [optional LinkVault connector](references/linkvault-connector.md).
 - Video, audio, SRT, or VTT: additionally read [process video](workflows/process-video.md) and [video transcript contract](references/video-transcript-contract.md).
-- Topic requiring external research: read [research topic](workflows/research-topic.md), [source policy](references/source-policy.md), and [orchestrate research](workflows/orchestrate-research.md). Delegation is required for a publishable researched course.
+- Topic requiring external research: read [research topic](workflows/research-topic.md), [source policy](references/source-policy.md), [agent roles](references/agent-roles.md), and [orchestrate research](workflows/orchestrate-research.md). Delegation is required for a publishable researched course.
 - Creating calibration, chapter questions, a question bank, or an exam: read [assessment contract](references/assessment-contract.md).
 - Submitted worker evidence: read [verify evidence](workflows/verify-evidence.md) before synthesis.
 - Approved evidence ready: read [build study pack](workflows/build-study-pack.md).
@@ -112,6 +121,8 @@ Use [quality rubric](references/quality-rubric.md), [topic splitting policy](ref
 ## Direct reference index
 
 - [Agent roles](references/agent-roles.md)
+- [Artifact lifecycle](references/artifact-lifecycle.md)
+- [Event contract](references/event-contract.md)
 - [Source policy](references/source-policy.md)
 - [Citation contract](references/citation-contract.md)
 - [Video transcript contract](references/video-transcript-contract.md)

@@ -36,6 +36,23 @@ MEDIA_RIGHTS = {
 }
 TERMINAL_STATES = {"complete", "partial", "needs_user_action", "failed", "cancelled"}
 _EVENT_LOCK = threading.Lock()
+PROHIBITED_EVENT_FIELDS = {
+    "authorization",
+    "authorization_header",
+    "chain_of_thought",
+    "cookie",
+    "cookies",
+    "credential",
+    "credentials",
+    "hidden_reasoning",
+    "model_context",
+    "password",
+    "prompt",
+    "reasoning",
+    "secret",
+    "secrets",
+    "token",
+}
 
 
 class SourceIntakeError(ValueError):
@@ -88,11 +105,21 @@ def append_event(course_root: Path, event: dict[str, Any]) -> None:
     if not _inside(course_root, path) or path.is_symlink():
         raise SourceIntakeError("The course event log is outside the course boundary.")
     path.parent.mkdir(parents=True, exist_ok=True)
+    for field in ("action", "actor", "status", "summary"):
+        if not isinstance(event.get(field), str) or not str(event[field]).strip():
+            raise SourceIntakeError(f"The course event is missing {field}.")
+    if len(str(event["summary"])) > 1_000:
+        raise SourceIntakeError("The course event summary is too long.")
+    justification = event.get("justification", event.get("short_justification"))
+    if justification is not None and len(str(justification)) > 1_000:
+        raise SourceIntakeError("The course event justification is too long.")
+    if PROHIBITED_EVENT_FIELDS & set(event):
+        raise SourceIntakeError("Private model context cannot be written to the course event log.")
     payload = {
+        **event,
         "event_id": f"EVT-{uuid.uuid4().hex[:16].upper()}",
         "schema_version": "action-event-v1",
         "timestamp": _timestamp(),
-        **event,
     }
     with _EVENT_LOCK, path.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n")

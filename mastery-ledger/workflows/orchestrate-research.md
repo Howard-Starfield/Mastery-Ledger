@@ -17,6 +17,8 @@ Record whether the runtime supports:
 
 For `topic-research` or `hybrid`, independent workers are a publication requirement. If they are unavailable or declined, preserve provisional work under `.work/`, advance to `DRAFT_UNVERIFIED`, and stop before evidence approval, study-pack validation, learning activation, or a ready exam. A sequential main-agent pass may support the live conversation but cannot publish researched material.
 
+Before planning or dispatch, read [artifact lifecycle](../references/artifact-lifecycle.md), [event contract](../references/event-contract.md), [agent roles](../references/agent-roles.md), and [task and evidence contract](../references/task-and-evidence-contract.md) in full.
+
 ## Main-agent responsibilities
 
 The main agent owns:
@@ -67,15 +69,15 @@ Every task must declare the fields in `assets/task-brief.yaml` and must have:
 - required report schema;
 - named reviewer role;
 - acceptance criteria.
-- a unique completion-envelope path under `.work/orchestration/completions/`.
+- a unique task directory under `.work/runs/<run-id>/tasks/<task-id>/` containing compiled brief, context, dispatch, event, submission, and completion paths.
 
 Never assign two workers to the same output path. Do not expose the entire corpus when a bounded subset is sufficient.
 
-All output, completion, review, draft, and scratch paths must be relative descendants of `.work/`. A worker that writes outside its assigned paths is rejected. Final course artifacts are promoted only by the main agent after approval and validation.
+All output, completion, review, draft, and scratch paths must be relative descendants of the assigned task directory. A worker that writes outside its assigned paths is rejected. Final course artifacts are promoted only by the main agent after approval and validation.
 
 ## Worker prompt recipe
 
-Provide only:
+Do not compose the worker prompt. Compile the deterministic context packet and pass its generated dispatch message. The packet provides only:
 
 1. role and objective;
 2. included and excluded scope;
@@ -84,7 +86,9 @@ Provide only:
 5. source subset or search limit;
 6. required evidence-packet schema;
 7. output path;
-8. instruction to preserve contradictions and gaps.
+8. instruction to preserve contradictions and gaps;
+9. versioned role profile and required contract hashes;
+10. exact event, submission, and completion paths.
 
 Do not leak the expected conclusion. Do not ask the worker to “make the guide coherent”; that is the main agent’s job.
 
@@ -102,11 +106,12 @@ Compile the approved plan instead of hand-authoring it, then run the gate before
 
 ```bash
 python scripts/create_research_plan.py studies/my-study --research-workers 3 --authorized
+python scripts/compile_worker_context.py studies/my-study TASK-MAP --json
 python scripts/validate_orchestration.py studies/my-study/.work/orchestration/run-plan.yaml \
   --course-root studies/my-study
 ```
 
-Dispatch only task IDs listed in `ready_task_ids`. Citation verification remains unavailable until every extraction, research, and contradiction task submits. Assessment generation remains unavailable until citation verification submits; assessment validation remains unavailable until generation submits. A submitted task without a matching `completion-envelope-v1` fails validation. The main agent updates task state and reruns this gate; workers and the completion router never infer readiness themselves.
+Compile IDs listed in `context_required_task_ids`, rerun the gate, and dispatch only task IDs listed in `ready_task_ids`. Pass the generated `dispatch-message.txt` without substantive edits. Citation verification remains unavailable until every extraction, research, and contradiction task submits. Assessment generation remains unavailable until citation verification submits; assessment validation remains unavailable until generation submits. A submitted task without a matching event shard, contract acknowledgements, role-profile acknowledgement, output, and `completion-envelope-v1` fails validation. The main agent updates task state, merges accepted worker events through `merge_worker_events.py`, and reruns this gate; workers and the completion router never infer readiness themselves.
 
 After each complete ready wave, return to `reconcile_workflow.py` with the original target. The returned next gate determines whether another wave, evidence review, study-pack repair, or learner input is allowed. Never self-dispatch by recursively calling the worker topology.
 

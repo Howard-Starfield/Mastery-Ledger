@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import tempfile
 import uuid
@@ -15,25 +17,63 @@ import yaml
 from record_action import append_event
 
 
-def task(run_id: str, task_id: str, role: str, dependencies: list[str], folder: str = "reports", schema: str = "evidence-packet-v1") -> dict:
-    output = f".work/orchestration/{folder}/{task_id}.json"
+ROLE_PROFILES_PATH = Path(__file__).resolve().parents[1] / "references" / "agent-role-profiles.json"
+
+
+def _canonical_hash(value: object) -> str:
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def load_role_profiles() -> dict[str, dict]:
+    payload = json.loads(ROLE_PROFILES_PATH.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != "agent-role-profiles-v1" or not isinstance(payload.get("profiles"), dict):
+        raise ValueError("references/agent-role-profiles.json must use agent-role-profiles-v1")
+    return payload["profiles"]
+
+
+def task(
+    run_id: str,
+    task_id: str,
+    role: str,
+    dependencies: list[str],
+    folder: str = "reports",
+    schema: str = "evidence-packet-v1",
+    *,
+    scope_included: list[str] | None = None,
+    input_artifacts: list[str] | None = None,
+) -> dict:
+    del folder  # Retained for caller compatibility; every task now owns one isolated directory.
+    profile = load_role_profiles().get(role)
+    if not isinstance(profile, dict):
+        raise ValueError(f"No deterministic role profile exists for {role}")
+    task_root = f".work/runs/{run_id}/tasks/{task_id}"
     return {
         "task_id": task_id,
         "run_id": run_id,
         "role": role,
-        "objective": f"Complete the bounded {role} phase.",
-        "scope_included": [],
+        "role_profile_id": role,
+        "role_profile_version": profile["version"],
+        "role_profile_sha256": _canonical_hash(profile),
+        "objective": profile["mission"],
+        "scope_included": scope_included or [],
         "scope_excluded": [],
         "concept_ids": [],
         "input_source_ids": [],
-        "input_artifacts": [],
+        "input_artifacts": input_artifacts or [],
         "source_limit": 5,
         "dependencies": dependencies,
-        "output_path": output,
-        "completion_path": f".work/orchestration/completions/{task_id}.json",
+        "task_work_dir": task_root,
+        "brief_path": f"{task_root}/task-brief.json",
+        "context_path": f"{task_root}/context-manifest.json",
+        "dispatch_path": f"{task_root}/dispatch-message.txt",
+        "event_path": f"{task_root}/events.jsonl",
+        "output_path": f"{task_root}/submission.json",
+        "completion_path": f"{task_root}/completion.json",
         "required_schema": schema,
         "reviewer_role": "main-agent",
-        "acceptance_criteria": ["Use assigned scope only", "Preserve contradictions and gaps"],
+        "acceptance_criteria": [*profile["best_practices"], "Use assigned scope only."],
+        "context_status": "pending",
         "status": "planned",
     }
 
@@ -68,13 +108,38 @@ def main() -> int:
     if mode not in {"topic-research", "hybrid"}:
         parser.error("This compiler is only for topic-research or hybrid studies.")
     run_id = f"RUN-{uuid.uuid4().hex[:8].upper()}"
-    mapper = task(run_id, "TASK-MAP", "corpus-mapper", [], schema="corpus-map-v1")
+    mapper = task(
+        run_id,
+        "TASK-MAP",
+        "corpus-mapper",
+        [],
+        schema="corpus-map-v1",
+        scope_included=[str(study.get("learner_goal") or "Approved course scope")],
+        input_artifacts=["source-manifest.yaml"],
+    )
     research = [task(run_id, f"TASK-RESEARCH-{index:02d}", "research-worker", ["TASK-MAP"]) for index in range(1, args.research_workers + 1)]
     research_ids = [item["task_id"] for item in research]
     contradiction = task(run_id, "TASK-CONTRADICTIONS", "contradiction-reviewer", research_ids, schema="contradiction-review-v1")
     citation = task(run_id, "TASK-CITATIONS", "citation-verifier", ["TASK-CONTRADICTIONS"], "reviews", "citation-review-v1")
-    generator = task(run_id, "TASK-ASSESSMENT-GENERATE", "assessment-generator", ["TASK-CITATIONS"], schema="question-bank-v2")
-    validator = task(run_id, "TASK-ASSESSMENT-VALIDATE", "assessment-validator", ["TASK-ASSESSMENT-GENERATE"], "reviews", "assessment-validation-v1")
+    generator = task(
+        run_id,
+        "TASK-ASSESSMENT-GENERATE",
+        "assessment-generator",
+        ["TASK-CITATIONS"],
+        schema="question-bank-v2",
+        scope_included=["Approved course objectives and chapter assessment contract"],
+        input_artifacts=["evidence/approved-claims.json", "study-guide.md", "concept-map.md"],
+    )
+    validator = task(
+        run_id,
+        "TASK-ASSESSMENT-VALIDATE",
+        "assessment-validator",
+        ["TASK-ASSESSMENT-GENERATE"],
+        "reviews",
+        "assessment-validation-v1",
+        scope_included=["Generated question bank and approved evidence"],
+        input_artifacts=["evidence/approved-claims.json"],
+    )
     now = datetime.now(timezone.utc).isoformat()
     payload = {
         "schema_version": "research-run-plan-v1",
@@ -98,7 +163,13 @@ def main() -> int:
         "artifacts": [".work/orchestration/run-plan.yaml"], "decision": "approved",
         "justification": "The learner approved the displayed scope and worker topology."
     })
-    print(yaml.safe_dump({"status": "complete", "run_id": run_id, "path": str(path), "first_ready_task_ids": ["TASK-MAP"]}, sort_keys=False))
+    print(yaml.safe_dump({
+        "status": "complete",
+        "run_id": run_id,
+        "path": str(path),
+        "first_context_task_ids": ["TASK-MAP"],
+        "first_ready_task_ids": [],
+    }, sort_keys=False))
     return 0
 
 
