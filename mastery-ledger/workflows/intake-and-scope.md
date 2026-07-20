@@ -93,6 +93,8 @@ Obtain user approval before:
 Approval may be an explicit acceptance or an explicit edit to the scope card.
 For a researched course, include the exact worker topology in the same approval card; do not ask for a second approval unless the run later expands.
 
+After explicit approval, persist the scope with `record_scope_approval.py` using an absolute script path resolved from `SKILL_ROOT`, then return to the original `reconcile_workflow.py` target. Do not enter `SCOPED` from conversational inference alone.
+
 ## Exit gate
 
 The phase is complete only when:

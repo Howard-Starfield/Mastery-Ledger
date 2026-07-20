@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -98,11 +99,12 @@ def validate_workspace(raw_path: str, *, create: bool = False) -> WorkspaceValid
 
 
 def capabilities() -> CapabilityState:
+    native_media_ready = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
     return CapabilityState(
         web_app="ready",
         yt_dlp="ready" if importlib.util.find_spec("yt_dlp") else "not_installed",
         local_asr="ready" if importlib.util.find_spec("faster_whisper") else "not_configured",
-        ffmpeg_export="unavailable",
+        ffmpeg_export="ready" if native_media_ready else "unavailable",
     )
 
 

@@ -157,6 +157,7 @@ First-run onboarding belongs to the application because it validates and persist
 - Evidence Ledger and Activity Feed over portable evidence JSON and safe observable JSONL action fields.
 - Canonical `wiki-v1`, completion-envelope, runtime-compatibility, and `.work/orchestration` skill artifacts with executable dependency-order validation.
 - Deterministic calibration records, authorized research-plan compilation, fail-closed `DRAFT_UNVERIFIED` fallback, and gated workflow-state advancement.
+- Bounded workflow reconciliation that returns exact next work and converges every durable target without recursive agent fan-out or silent gate skipping.
 - App-compatible `question-bank-v2` items with four options and one answer key, exact 80/20 chapter mixes, Markdown review copies, independent assessment decisions, and ready-exam publication validation.
 - Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
 
@@ -247,6 +248,7 @@ onboarding_required
 - Source Inbox preserves existing legacy manifest records, writes a pending receipt before processing, and shows queued, running, complete, failed, or cancelled durable jobs.
 - Local documents are processed from `.work/ingestion`, promoted to `source/SRC-*.md` plus `source/media/SRC-*/`, and leave no successful staging directory behind.
 - Remote videos are probed without credentials or user configuration, prefer human captions over automatic captions, and do not download media unless transcription is approved and a local ASR model is configured.
+- `python mastery-ledger/scripts/check_media_runtime.py` reports the active `yt-dlp`, FFmpeg, FFprobe, and local-ASR capabilities without installing or updating them.
 - Knowledge Wiki renders canonical pages and derives a useful concept index when optional wiki artifacts are absent.
 - Evidence & Activity displays decisions, exact artifact/source IDs, contradictions, and malformed-log warnings without passing unknown or private reasoning fields through the API.
 - The orchestration validator exposes only dependency-ready task IDs and blocks contradiction or citation reviewers until their prerequisite completion envelopes are submitted.

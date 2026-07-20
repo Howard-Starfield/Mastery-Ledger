@@ -1797,7 +1797,7 @@ The QTI 3 standard reinforces the separation between an assessment item, its cho
 - the app-compatible question schema and Markdown review copy;
 - at least one embedded, validated `ready` exam.
 
-`advance_workflow.py` is the only supported writer of `workflow_state`; it permits only adjacent state transitions and runs the relevant gate. LLMs and workers must not edit the state directly.
+`advance_workflow.py` is the only low-level writer of `workflow_state`; it permits only adjacent state transitions and runs the relevant gate. Operational agents drive it through `reconcile_workflow.py`, which advances already-satisfied gates and otherwise returns structured next work. LLMs and workers must not edit the state directly.
 
 ### Item 15 accepted decision
 
@@ -1811,3 +1811,20 @@ Separate bounded calibration from research, require learner-visible topology aut
 - [Roediger and Karpicke, Test-Enhanced Learning](https://www.psychologicalscience.org/journals/psychological-science/j.1467-9280.2006.01693.x/)
 - [Richland, Kornell, and Kao, The pretesting effect](https://pubmed.ncbi.nlm.nih.gov/19751074/)
 - [AERA, APA, and NCME Standards for Educational and Psychological Testing](https://www.aera.net/Publications/Books/Standards-for----Educational-Psychological-Testing-2014-Edition)
+
+## Item 16: bounded workflow reconciliation and media dependency ownership
+
+### Accepted decision
+
+Use an iterative reconciliation driver for every durable target, including `LEARNING_ACTIVE`. It inspects only the next adjacent gate, atomically advances gates that already pass, and otherwise returns machine-readable requirements, the owning workflow, and the exact rerun arguments. The main agent performs observable work and reruns the driver. It must not recursively spawn agents or repeatedly invoke the driver without changing an artifact, task status, source, validation result, or learner decision. Three identical no-progress inspections return `retry_exhausted` and preserve the current state.
+
+Record scope authorization as durable observable data before entering `SCOPED`. For researched modes, calibration must be complete or explicitly skipped. Later gates enforce ready extracted sources, dependency-ordered research waves, contradiction review before final citation verification, main-agent evidence approval, study-pack validation, independent assessment validation, and publication validity at activation time.
+
+Keep dependency installation outside the skill. The application release environment installs a tested `yt-dlp[default]` set from checked-in locks and updates it only through an explicit application install or update. The installed skill contains read-only probes and safe wrappers, not `yt-dlp` source or an executable. FFmpeg is a native optional capability, not a Python replacement to vendor or download on demand. Caption acquisition, metadata inspection, and single-stream audio acquisition can proceed without it; separate-stream merge or export requires an existing audited `ffmpeg` plus `ffprobe` path or a separately approved application profile.
+
+### Verification references
+
+- [yt-dlp README: installation, update, dependencies, and embedding](https://github.com/yt-dlp/yt-dlp/blob/master/README.md)
+- [yt-dlp installation wiki](https://github.com/yt-dlp/yt-dlp/wiki/Installation)
+- [yt-dlp FAQ: FFmpeg requirements](https://github.com/yt-dlp/yt-dlp/wiki/FAQ)
+- [FFmpeg official downloads](https://ffmpeg.org/download.html)

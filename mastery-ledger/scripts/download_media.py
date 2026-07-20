@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,7 +42,8 @@ def validate_source_id(value: str) -> str:
 
 
 def build_options(
-    *, output_dir: Path, source_id: str, mode: str, languages: list[str], playlist: bool
+    *, output_dir: Path, source_id: str, mode: str, languages: list[str], playlist: bool,
+    ffmpeg_location: Path | None = None,
 ) -> dict[str, Any]:
     if mode not in MODES:
         raise ValueError(f"Unsupported mode: {mode}")
@@ -55,6 +57,8 @@ def build_options(
         "overwrites": False,
         "writeinfojson": mode != "probe",
     }
+    if ffmpeg_location is not None:
+        options["ffmpeg_location"] = str(ffmpeg_location.resolve(strict=False))
     if mode == "probe":
         options["skip_download"] = True
     elif mode == "human_subtitles":
@@ -123,6 +127,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", choices=sorted(MODES), default="probe")
     parser.add_argument("--languages", default="en.*,en")
     parser.add_argument("--playlist", action="store_true")
+    parser.add_argument(
+        "--ffmpeg-location",
+        type=Path,
+        help="Existing ffmpeg executable or directory; the skill never downloads it",
+    )
     args = parser.parse_args(argv)
 
     if args.rights_basis not in ALLOWED_RIGHTS:
@@ -135,6 +144,16 @@ def main(argv: list[str] | None = None) -> int:
         source_id = validate_source_id(args.source_id)
     except ValueError as error:
         parser.error(str(error))
+
+    if args.ffmpeg_location is not None and not args.ffmpeg_location.exists():
+        parser.error("--ffmpeg-location must name an existing executable or directory")
+    if args.mode == "video" and args.ffmpeg_location is None and not shutil.which("ffmpeg"):
+        print(json.dumps({
+            "status": "failed",
+            "code": "missing_ffmpeg_for_video_merge",
+            "message": "Video mode may require native FFmpeg to merge separate streams. Use an existing audited FFmpeg path or the application media-export profile; the skill will not download it.",
+        }))
+        return 2
 
     try:
         import yt_dlp
@@ -159,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         mode=args.mode,
         languages=[item.strip() for item in args.languages.split(",") if item.strip()],
         playlist=args.playlist,
+        ffmpeg_location=args.ffmpeg_location,
     )
     state = "failed"
     error_code: str | None = None

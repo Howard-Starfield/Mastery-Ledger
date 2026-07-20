@@ -131,6 +131,8 @@ Use these ownership rules:
 | ASR model | Managed per-user model cache | Application shows model, revision, and expected size before download |
 | Optional native media-export tools | Audited optional profile | Separate explicit approval; never triggered by merely supplying a video URL |
 
+The installed skill contains `check_media_runtime.py`, `download_media.py`, and transcript helpers, but it does not contain dependency source trees or executables. Resolve those helpers from `SKILL_ROOT`. Missing `yt-dlp` means the application runtime needs repair or an explicit application update; missing FFmpeg only disables native merge/export paths. Never turn either condition into an automatic latest-version download.
+
 The skill may pass a source URL, course goal, or user-supplied workspace suggestion as a proposed onboarding hint. The application must display and validate every hint before saving it.
 
 ## 5. Script-only fallback

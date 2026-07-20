@@ -44,6 +44,26 @@ class MediaToolTests(unittest.TestCase):
         self.assertTrue(automatic["writeautomaticsub"])
         self.assertIn("SRC-1", human["outtmpl"]["default"])
 
+        located = tool.build_options(
+            output_dir=Path("out"),
+            source_id="SRC-1",
+            mode="video",
+            languages=["en.*"],
+            playlist=False,
+            ffmpeg_location=Path("tools/ffmpeg"),
+        )
+        self.assertTrue(Path(located["ffmpeg_location"]).is_absolute())
+
+    def test_media_runtime_probe_is_read_only_and_reports_dependency_ownership(self) -> None:
+        tool = load_module("check_media_runtime", "scripts/check_media_runtime.py")
+        payload = tool.inspect_runtime()
+        self.assertEqual("media-runtime-v1", payload["schema_version"])
+        self.assertIn(payload["status"], {"ready", "degraded"})
+        self.assertIn("yt_dlp", payload["packages"])
+        self.assertIn("ffmpeg", payload["native_tools"])
+        self.assertIn("never an individual skill run", payload["ownership"]["updates"])
+        self.assertIsInstance(payload["capabilities"]["caption_acquisition"], bool)
+
     def test_media_source_id_rejects_unsafe_paths(self) -> None:
         tool = load_module("download_media_validation", "scripts/download_media.py")
         with self.assertRaises(ValueError):

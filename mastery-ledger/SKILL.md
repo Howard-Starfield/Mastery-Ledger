@@ -21,7 +21,8 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 - Do not claim permanent mastery. Record evidence-based proficiency and uncertainty.
 - Never assume subagents, live skill reload, a particular skills directory, or cloud privacy behavior.
 - Never publish a researched course through a single-agent self-review. If required subagents are unavailable or declined, stop at `DRAFT_UNVERIFIED` and explain what remains.
-- Never edit `workflow_state` by hand. Advance it only with `scripts/advance_workflow.py`.
+- Resolve this installed `SKILL.md` location as `SKILL_ROOT`. Invoke bundled scripts by absolute path under `SKILL_ROOT`; never assume the current directory is the skill directory.
+- Never edit `workflow_state` by hand. Drive every durable workflow target with `scripts/reconcile_workflow.py`.
 - Read only the workflow and reference files required for the current phase.
 
 ## Start every operational run
@@ -31,6 +32,16 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 3. Look for an existing `study.yaml` and resume it when the request belongs to that study.
 4. Determine the mode: `provided-material-only`, `existing-library`, `local-media`, `topic-research`, or `hybrid`.
 5. Read [intake and scope](workflows/intake-and-scope.md). For `topic-research` or `hybrid`, also read [calibrate and authorize](workflows/calibrate-and-authorize.md). Do not launch research before calibration disposition, scope, and worker topology are approved.
+
+## Deterministic convergence loop
+
+For every durable target—including `SOURCES_READY`, `EVIDENCE_APPROVED`, `STUDY_PACK_VALIDATED`, and `LEARNING_ACTIVE`—run:
+
+```text
+python "<SKILL_ROOT>/scripts/reconcile_workflow.py" "<COURSE_ROOT>" "<TARGET_STATE>" --json
+```
+
+Follow [workflow reconciliation](references/workflow-reconciliation.md) exactly. On `needs_work`, perform only the returned next actions, run the named validator or ready task wave, and rerun the same command. On `needs_user_input`, ask only for the returned blocking decision and resume after recording it. On `retry_exhausted`, stop instead of repeating or widening the work. On `complete`, continue with learner-facing delivery. Never recursively spawn workers, infer a later gate, or call reconciliation repeatedly without observable progress.
 
 ## Route by phase
 
@@ -111,4 +122,5 @@ Use [quality rubric](references/quality-rubric.md), [topic splitting policy](ref
 - [Mastery model](references/mastery-model.md)
 - [Quality rubric](references/quality-rubric.md)
 - [Runtime portability](references/runtime-portability.md)
+- [Workflow reconciliation](references/workflow-reconciliation.md)
 - [Optional LinkVault connector](references/linkvault-connector.md)

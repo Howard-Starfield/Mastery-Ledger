@@ -10,6 +10,8 @@ Keep ordinary learner interaction single-agent. Ask one question at a time. A sp
 
 Do not enter durable tutoring when `workflow_state` is `DRAFT_UNVERIFIED` or when the publication validator fails. Provisional conversation may continue, but do not update the spaced-review schedule from it.
 
+Before the first durable session and after any source or assessment change, reconcile to `LEARNING_ACTIVE`. If reconciliation returns work, user input, or retry exhaustion, do not schedule from the provisional session.
+
 ## Learning modes
 
 - **Socratic:** use questions and hints; delay direct explanation.

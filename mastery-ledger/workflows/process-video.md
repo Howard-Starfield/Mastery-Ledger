@@ -29,10 +29,18 @@ Never discard the raw subtitle or media file.
 
 ## Bundled utilities
 
+Resolve `SKILL_ROOT` from the installed `SKILL.md` path. Before remote media work, inspect the active runtime without installing or updating anything:
+
+```text
+python "<SKILL_ROOT>/scripts/check_media_runtime.py"
+```
+
+Use the application-owned release runtime when available. The skill includes safe Python wrappers, not vendored copies of `yt-dlp` or FFmpeg. `yt-dlp` is installed from the application release lock. FFmpeg is an optional native executable used for separate-stream merging or export; caption acquisition, metadata probing, and single-stream audio acquisition do not trigger its installation. Never run `pip install -U`, `yt-dlp -U`, or an FFmpeg download during a course workflow.
+
 ### Normalize SRT or VTT
 
-```bash
-python scripts/normalize_subtitles.py input.srt \
+```text
+python "<SKILL_ROOT>/scripts/normalize_subtitles.py" input.srt \
   --output-dir studies/my-study/source/media/SRC-001 \
   --source-id SRC-001 --item-id LESSON-003 \
   --origin human_caption
@@ -45,8 +53,8 @@ Outputs:
 
 ### Download permitted remote material
 
-```bash
-python scripts/download_media.py "https://example.invalid/video" \
+```text
+python "<SKILL_ROOT>/scripts/download_media.py" "https://example.invalid/video" \
   --output-dir studies/my-study/.work/ingestion/JOB-001/media \
   --source-id SRC-001 \
   --rights-basis explicit_permission \
@@ -57,14 +65,16 @@ If the probe reports no matching human captions, run a separate `--mode automati
 
 ### Local ASR
 
-```bash
-python scripts/transcribe_media.py lesson.mp4 \
+```text
+python "<SKILL_ROOT>/scripts/transcribe_media.py" lesson.mp4 \
   --output-dir studies/my-study/.work/ingestion/JOB-001/media \
   --source-id SRC-001 --item-id LESSON-003 \
   --model small --language en
 ```
 
 This optionally uses `faster-whisper`. Record model, version, source hash, language, and origin.
+
+For explicitly approved video download/merge, pass an existing executable or containing directory with `--ffmpeg-location`. If the capability probe reports it unavailable, return `needs_user_action`; do not search for or fetch an arbitrary build. Prefer captions or single-stream audio plus local ASR when those meet the learning goal.
 
 ## Durable product integration
 

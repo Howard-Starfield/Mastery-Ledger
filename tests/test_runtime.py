@@ -12,6 +12,7 @@ from mastery_ledger.cli import main
 from mastery_ledger.config import database_path
 from mastery_ledger.ingestion_worker import IngestionWorker
 from mastery_ledger.models import FolderPickerResult, WorkspaceState
+from mastery_ledger import runtime
 from mastery_ledger.runtime import build_doctor_result, validate_workspace
 
 
@@ -47,6 +48,15 @@ def test_doctor_enforces_the_supported_skill_version_range(runtime_home: Path) -
         assert result.skill_compatible is False
         assert result.action == "update_application_or_skill"
         assert result.onboarding_required is False
+
+
+def test_media_export_capability_requires_both_native_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(runtime.importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(runtime.shutil, "which", lambda name: f"/tools/{name}" if name == "ffmpeg" else None)
+    assert runtime.capabilities().ffmpeg_export == "unavailable"
+
+    monkeypatch.setattr(runtime.shutil, "which", lambda name: f"/tools/{name}")
+    assert runtime.capabilities().ffmpeg_export == "ready"
 
 
 def test_workspace_validation_requires_absolute_path(runtime_home: Path) -> None:

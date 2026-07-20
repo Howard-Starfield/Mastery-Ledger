@@ -11,6 +11,14 @@ learning_mode: coached
 source_policy: topic-research
 processing_mode: cloud_allowed
 worker_budget: lean
+scope_approval:
+  status: pending
+  approved_at: null
+  summary: null
+  source_limit: null
+  research_workers: null
+  accepted_branches: []
+  excluded: []
 source_cutoff_date: "2026-07-19"
 concept_map_version: "0.1"
 artifact_paths:

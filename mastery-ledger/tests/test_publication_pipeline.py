@@ -146,6 +146,30 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
         )
         assert validation.returncode == 0, validation.stdout + validation.stderr
 
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "record_calibration.py"), "start", str(course), "--count", "0", "--concept-questions", "0", "--scenario-questions", "0", "--disposition", "skip"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Publish the bounded fixture", "--source-limit", "5", "--research-workers", "2"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        reconciled = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "reconcile_workflow.py"), str(course), "LEARNING_ACTIVE", "--json"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert reconciled.returncode == 0, reconciled.stdout + reconciled.stderr
+        reconciliation = json.loads(reconciled.stdout)
+        assert reconciliation["status"] == "complete"
+        assert reconciliation["current_state"] == "LEARNING_ACTIVE"
+        assert len(reconciliation["advanced"]) == 10
+
         sys.path.insert(0, str(REPO / "src"))
         from mastery_ledger.exam_service import load_exam
         from mastery_ledger.models import WorkspaceState
@@ -238,3 +262,59 @@ def test_provided_source_assessment_plan_starts_with_generator_only() -> None:
         assert checked.returncode == 0, checked.stdout + checked.stderr
         payload = json.loads(checked.stdout)
         assert payload["ready_task_ids"] == ["TASK-ASSESSMENT-GENERATE"]
+
+
+def test_reconciliation_returns_exact_next_work_and_stops_repeated_no_progress() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        studies = Path(directory)
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Recursive Course", "--studies-dir", str(studies)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        course = studies / "recursive-course"
+        command = [
+            sys.executable,
+            str(ROOT / "scripts" / "reconcile_workflow.py"),
+            str(course),
+            "LEARNING_ACTIVE",
+            "--json",
+        ]
+        first = subprocess.run(command, check=False, capture_output=True, text=True)
+        assert first.returncode == 2
+        first_payload = json.loads(first.stdout)
+        assert first_payload["status"] == "needs_user_input"
+        assert first_payload["blocked_state"] == "SCOPED"
+        assert {item["code"] for item in first_payload["requirements"]} == {
+            "scope.calibration_incomplete",
+            "scope.approval_missing",
+        }
+
+        second = subprocess.run(command, check=False, capture_output=True, text=True)
+        assert second.returncode == 2
+        assert json.loads(second.stdout)["consecutive_identical_passes"] == 2
+        third = subprocess.run(command, check=False, capture_output=True, text=True)
+        assert third.returncode == 3
+        assert json.loads(third.stdout)["status"] == "retry_exhausted"
+
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "record_calibration.py"), "start", str(course), "--count", "0", "--concept-questions", "0", "--scenario-questions", "0", "--disposition", "skip"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Research the approved topic", "--source-limit", "5", "--research-workers", "1"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        progressed = subprocess.run(command, check=False, capture_output=True, text=True)
+        assert progressed.returncode == 2
+        progressed_payload = json.loads(progressed.stdout)
+        assert progressed_payload["status"] == "needs_work"
+        assert progressed_payload["current_state"] == "SCOPED"
+        assert progressed_payload["blocked_state"] == "SOURCES_READY"
+        assert progressed_payload["consecutive_identical_passes"] == 1
+        assert progressed_payload["requirements"][0]["code"] == "sources.not_ready"

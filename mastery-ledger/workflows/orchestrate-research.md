@@ -108,6 +108,8 @@ python scripts/validate_orchestration.py studies/my-study/.work/orchestration/ru
 
 Dispatch only task IDs listed in `ready_task_ids`. Citation verification remains unavailable until every extraction, research, and contradiction task submits. Assessment generation remains unavailable until citation verification submits; assessment validation remains unavailable until generation submits. A submitted task without a matching `completion-envelope-v1` fails validation. The main agent updates task state and reruns this gate; workers and the completion router never infer readiness themselves.
 
+After each complete ready wave, return to `reconcile_workflow.py` with the original target. The returned next gate determines whether another wave, evidence review, study-pack repair, or learner input is allowed. Never self-dispatch by recursively calling the worker topology.
+
 ## Cost controls
 
 Stop and ask the user before expanding when:

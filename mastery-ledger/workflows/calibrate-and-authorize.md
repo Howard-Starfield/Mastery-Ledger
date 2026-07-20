@@ -56,13 +56,14 @@ The learner's approval covers the displayed worker count, accepted branches, sou
 After approval, generate the task graph with:
 
 ```bash
+python scripts/record_scope_approval.py COURSE_ROOT --summary "APPROVED_SCOPE" --source-limit 10 --research-workers 3
 python scripts/create_research_plan.py COURSE_ROOT --research-workers 3 --authorized
 python scripts/validate_orchestration.py COURSE_ROOT/.work/orchestration/run-plan.yaml --course-root COURSE_ROOT
 ```
 
 Spawn only `ready_task_ids`. Wait for every task in a wave before advancing. Never spawn the contradiction reviewer early; never spawn citation verification before contradiction review; never mark assessment ready before independent assessment validation.
 
-If subagents are unavailable or the learner declines them, run:
+Use absolute script paths resolved from `SKILL_ROOT` during an installed-skill run. If subagents are unavailable or the learner declines them, run:
 
 ```bash
 python scripts/advance_workflow.py COURSE_ROOT DRAFT_UNVERIFIED --reason "Independent workers unavailable or declined"

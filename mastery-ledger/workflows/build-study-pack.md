@@ -96,6 +96,8 @@ python scripts/validate_study_pack.py studies/my-study --publication
 
 Also perform semantic audits for citation faithfulness, pedagogy, and assessment ambiguity. An independent evaluator is preferred when available.
 
+Return to `reconcile_workflow.py` after each repair. Do not manually set `STUDY_PACK_DRAFTED`, `STUDY_PACK_VALIDATED`, or `LEARNING_ACTIVE`; the reconciliation gate advances them only after the corresponding validation passes.
+
 ## Exit gate
 
 The phase is complete only when:
