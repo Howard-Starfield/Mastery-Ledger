@@ -1629,6 +1629,22 @@ Workspace changes after onboarding also go through application settings. The ski
 
 Build the standalone runtime with **FastAPI + SQLite** and the interface with **React + TypeScript + Vite**, shipping prebuilt frontend assets inside the Python release. Put canonical onboarding in the application; keep the skill responsible only for detection, launch, context handoff, and a clearly limited fallback.
 
+### Item 12 implementation status
+
+The first executable slice implements:
+
+- the `mastery-ledger` Python package and CLI;
+- read-only `doctor-v1` JSON with `ready`, `onboarding_required`, and `workspace_unavailable` behavior;
+- an idempotent `onboarding-launch-v1` loopback launcher;
+- a random local session bootstrap, HttpOnly same-site cookie, and protected onboarding API;
+- SQLite schema creation for workspaces, settings, and the durable job-queue boundary;
+- workspace validation and persisted onboarding completion;
+- a React and TypeScript onboarding interface with an editable ownership curve;
+- a Vite release build copied into the Python package;
+- Python contract tests, frontend unit tests, and a real-browser visual acceptance capture.
+
+The following remain release gates rather than completed functionality: signed installers and release manifests, application/skill compatibility-range enforcement, native folder-picker integration, workspace repair UI, the dashboard, durable worker execution, ingestion, exam rendering, and review scheduling.
+
 ### Item 12 implementation references
 
 - [FastAPI lifespan events](https://fastapi.tiangolo.com/advanced/events/)

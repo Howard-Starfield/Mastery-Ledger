@@ -9,6 +9,16 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+*.egg-info/
+dist/
+build/
+
+# Frontend dependencies and build output
+node_modules/
+web/node_modules/
+web/dist/
+coverage/
+*.tsbuildinfo
 
 # Local configuration and secrets
 .env

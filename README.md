@@ -2,7 +2,7 @@
 
 Turn scattered sources into grounded knowledge, exam practice, and a review record that can last for years.
 
-> **Project status:** Mastery Ledger is currently a design and skill prototype. The standalone application/runtime described here is being specified and is not yet a finished release.
+> **Project status:** Mastery Ledger now includes an executable first-run application scaffold and skill prototype. Course ingestion, exam delivery, review scheduling, and signed installers remain under development.
 
 ![Mastery Ledger dashboard concept](design-mockups/concept-a-exam-ledger.png)
 
@@ -61,10 +61,42 @@ The accepted standalone stack is a Python **FastAPI + SQLite** runtime with a **
 
 First-run onboarding belongs to the application because it validates and persists workspace, privacy, accessibility, dependency, and model-download choices. For an operational request, the optional Codex skill runs the read-only `mastery-ledger doctor --json`; an `onboarding_required` result launches the fixed local onboarding command once. A missing application is never downloaded or installed automatically. The skill passes proposed learning context without maintaining a second configuration system.
 
+![Mastery Ledger first-run onboarding](design-mockups/onboarding-first-run.png)
+
+### Implemented application slice
+
+- Read-only, versioned `mastery-ledger doctor --json` output.
+- Idempotent `mastery-ledger onboard --open --json` loopback launch.
+- Session-protected FastAPI endpoints bound to `127.0.0.1`.
+- SQLite-backed workspace registry and onboarding preferences.
+- Absolute-path validation and atomic first-workspace creation.
+- React onboarding for source invitation, workspace, privacy, accessibility, and editable review intervals.
+- Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
+
+### Development quick start
+
+```bash
+python -m venv .venv
+# Activate .venv using the command for your shell.
+python -m pip install -e ".[dev]"
+cd web
+npm install
+npm run build
+cd ..
+mastery-ledger doctor --json
+mastery-ledger onboard --open --json
+```
+
+This is a source-checkout workflow, not a learner installer. The official release page will not be recommended by the skill until a compatible signed artifact and checksum manifest exist.
+
 ## Repository map
 
 ```text
 README.md                                product overview and workflow
+pyproject.toml                           Python package and CLI definition
+src/mastery_ledger/                      FastAPI runtime, SQLite state, and bundled web assets
+web/                                     React and TypeScript frontend source
+tests/                                   application contract tests
 demo/study-ledger-course/                attributed, source-grounded demo
 design-mockups/                          dashboard and exam-interface concepts
 mastery-ledger/                         installable skill prototype

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mastery-ledger"
+version = "0.1.0"
+description = "Local-first, source-grounded learning and long-term review workspace"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Howard Starfield" }]
+dependencies = [
+  "fastapi>=0.115,<1",
+  "pydantic>=2.10,<3",
+  "uvicorn>=0.30,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27,<1",
+  "pytest>=8,<10",
+]
+
+[project.scripts]
+mastery-ledger = "mastery_ledger.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mastery_ledger = ["web/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "mastery-ledger/tests"]
+addopts = "-ra"
