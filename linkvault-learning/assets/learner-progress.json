@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "study_id": "STUDY-001",
+  "concepts": [
+    {
+      "concept_id": "concept-id",
+      "status": "introduced",
+      "proficiency_score": 0.0,
+      "confidence_score": 0.0,
+      "attempt_count": 0,
+      "correct_count": 0,
+      "partial_count": 0,
+      "assisted_count": 0,
+      "application_success_count": 0,
+      "last_reviewed_at": null,
+      "next_review_at": null,
+      "misconceptions": [],
+      "evidence": []
+    }
+  ]
+}

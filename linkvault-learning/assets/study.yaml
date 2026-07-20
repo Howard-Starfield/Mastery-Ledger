@@ -1,0 +1,24 @@
+schema_version: "1.0"
+study_id: STUDY-001
+parent_study_id: null
+title: Example study
+mode: topic-research
+workflow_state: intake
+learner_goal: Build working competence in the topic
+assumed_prior_knowledge: []
+target_depth: working
+learning_mode: coached
+source_policy: topic-research
+processing_mode: cloud_allowed
+worker_budget: lean
+source_cutoff_date: "2026-07-19"
+concept_map_version: "0.1"
+artifact_paths:
+  source_manifest: source-manifest.yaml
+  study_guide: study-guide.md
+  concept_map: concept-map.md
+  glossary: glossary.md
+  question_bank: question-bank.json
+  learner_progress: learner-progress.json
+created_at: "2026-07-19T00:00:00Z"
+updated_at: "2026-07-19T00:00:00Z"

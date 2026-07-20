@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "source_ref_schema": "source-ref-v1",
+  "study_id": "STUDY-001",
+  "questions": [
+    {
+      "question_id": "Q-001",
+      "concept_ids": ["concept-id"],
+      "objective_ids": ["OBJ-001"],
+      "type": "free-recall",
+      "difficulty": 2,
+      "prompt": "Explain the concept in your own words.",
+      "correct_answer": "A concise reference answer.",
+      "acceptable_answer_elements": ["required element"],
+      "common_wrong_answers": [],
+      "distractors": [],
+      "explanation": "Why the answer is correct.",
+      "hint_ladder": ["retrieval cue", "conceptual clue"],
+      "source_refs": [
+        {
+          "source_id": "SRC-001",
+          "locator": {
+            "kind": "section",
+            "value": "1",
+            "label": "Section 1"
+          },
+          "supports": ["correct_answer", "explanation"],
+          "support_strength": "direct"
+        }
+      ],
+      "prerequisite_concepts": [],
+      "quality_status": "draft"
+    }
+  ]
+}

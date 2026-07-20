@@ -1,0 +1,19 @@
+schema_version: "1.0"
+task_id: TASK-001
+run_id: RUN-001
+role: research-worker
+objective: Investigate one bounded concept group
+scope_included: []
+scope_excluded: []
+concept_ids: []
+input_source_ids: []
+input_artifacts: []
+source_limit: 5
+dependencies: []
+output_path: orchestration/reports/REPORT-001.json
+required_schema: evidence-packet-v1
+reviewer_role: citation-verifier
+acceptance_criteria:
+  - Every factual claim has a valid source ID and precise locator
+  - Contradictions and gaps are preserved
+status: planned

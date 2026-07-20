@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "source_ref_schema": "source-ref-v1",
+  "report_id": "REPORT-001",
+  "task_id": "TASK-001",
+  "worker_role": "research-worker",
+  "scope": {
+    "included": [],
+    "excluded": []
+  },
+  "sources_used": [],
+  "claims": [],
+  "contradictions": [],
+  "unresolved_questions": [],
+  "suggested_concepts": [],
+  "scope_drift": [],
+  "quality_notes": []
+}

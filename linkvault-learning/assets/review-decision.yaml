@@ -1,0 +1,18 @@
+schema_version: "1.0"
+review_id: REVIEW-001
+report_id: REPORT-001
+reviewer_role: citation-verifier
+decision: verified
+checks:
+  source_ids: pass
+  locators: pass
+  claim_support: pass
+  quote_accuracy: pass
+  counterevidence: pass
+issues: []
+verified_claim_ids: []
+rejected_claim_ids: []
+sampled_claim_ids: []
+required_actions: []
+approved_by: null
+reviewed_at: "2026-07-19T00:00:00Z"

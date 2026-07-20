@@ -1,0 +1,85 @@
+# Ingest material
+
+## Purpose
+
+Turn supplied files, a LinkVault course folder, or an authorized local corpus into a traceable source bundle without flattening its original structure.
+
+## Supported modes
+
+- `provided-material-only`: use only the supplied corpus.
+- `existing-library`: import an existing LinkVault course or lesson tree.
+- `local-media`: authorized local video, audio, subtitles, or transcript.
+- `hybrid`: supplied corpus remains primary; research fills explicit gaps.
+
+## Source manifest first
+
+Create or update `source-manifest.yaml` before semantic extraction. Assign stable source and item IDs. Record:
+
+- title, author, publisher, source type, and dates;
+- original location and local path;
+- content hash;
+- rights basis and permitted uses;
+- processing mode;
+- language;
+- primary or secondary classification;
+- included and excluded sections;
+- processing status;
+- version and supersession links.
+
+Use `assets/source-manifest.yaml` as the shape.
+
+## Preserve four structures
+
+Do not collapse these into one graph:
+
+1. **Source hierarchy:** course → module → lesson → media/artifact.
+2. **Concept graph:** concepts and semantic relationships.
+3. **Study-plan graph:** selected modules and learning order.
+4. **Proficiency ledger:** learner evidence over time.
+
+## Existing LinkVault course folder
+
+Inspect the real folder rather than assuming a fixed layout. Identify:
+
+- manifest or metadata files;
+- course, module, and lesson order;
+- videos and audio;
+- subtitle and transcript files;
+- exercises, readings, and attachments;
+- missing or partial artifacts;
+- source hashes and download state.
+
+Create a normalized SourceBundle that points to originals. Do not move or rewrite originals unless the user authorizes it.
+
+## Documents and notes
+
+For each long document, create section-level locators:
+
+- page and heading path;
+- paragraph or block ID;
+- slide number;
+- table or figure number.
+
+Store short source notes separately from the original file. Do not replace a source with an LLM summary.
+
+## Gaps and conflicts
+
+Record:
+
+- unreadable or unsupported files;
+- missing pages or lessons;
+- duplicated material;
+- stale or contradictory versions;
+- corpus questions that cannot be answered in material-only mode.
+
+## Exit gate
+
+The phase is complete only when:
+
+- every included source has a stable ID and hash;
+- originals are preserved;
+- all derived text maps back to locators;
+- rights and processing modes are explicit;
+- source hierarchy is represented;
+- missing or failed artifacts are recorded;
+- the corpus is ready for mapping or topic research.
