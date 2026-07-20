@@ -4,6 +4,8 @@ Turn scattered sources into grounded knowledge, exam practice, and a review reco
 
 > **Project status:** Mastery Ledger is currently a design and skill prototype. The standalone application/runtime described here is being specified and is not yet a finished release.
 
+![Mastery Ledger dashboard concept](design-mockups/concept-a-exam-ledger.png)
+
 ## What Mastery Ledger is
 
 Mastery Ledger is a local-first learning workspace. Give it documents, websites, video, audio, subtitles, or a topic to research. Its workflow organizes those sources, records provenance, checks generated claims, builds a navigable knowledge wiki, creates exam-style assessments, and schedules the same knowledge for increasingly distant review.
@@ -41,6 +43,8 @@ Explore the complete [Study Ledger to Mastery Ledger demo](demo/study-ledger-cou
 
 Exam Ledger is the focused assessment interface inside Mastery Ledger. Learners answer selectable multiple-choice questions without hints. Incorrect choices are marked without revealing the answer; after a correct answer, the explanation becomes available and the source panel remains collapsed until opened.
 
+![Focused question exam concept](design-mockups/exam-concept-2-focused-question-v2.png)
+
 Question content is data, not generated interface code. A fixed local web template renders validated exam files and records attempts back to the course workspace.
 
 ## Planned product areas
@@ -54,12 +58,16 @@ Question content is data, not generated interface code. A fixed local web templa
 ## Repository map
 
 ```text
-README.md                               product overview and workflow
-demo/study-ledger-course/               attributed, source-grounded demo
-LICENSE                                 MIT license
+README.md                                product overview and workflow
+demo/study-ledger-course/                attributed, source-grounded demo
+design-mockups/                          dashboard and exam-interface concepts
+linkvault-learning/                      current pre-rename skill prototype
+LINKVAULT_LEARNING_DESIGN_DECISIONS.md   architecture decision record
+LLM Wiki.md                              original knowledge-wiki concept notes
+LICENSE                                  MIT license
 ```
 
-The application, CLI, and installable `mastery-ledger` skill will be published as their implementation reaches a testable standalone milestone.
+The `linkvault-learning` identifiers are historical prototype names. The application, CLI, storage paths, tests, and installable skill will move to the `mastery-ledger` namespace together in one migration.
 
 ## Attribution
 
