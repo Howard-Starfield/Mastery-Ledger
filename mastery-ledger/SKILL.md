@@ -20,6 +20,8 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 - Do not call adaptive tutoring “reinforcement learning” unless model weights or a policy are actually trained from reward.
 - Do not claim permanent mastery. Record evidence-based proficiency and uncertainty.
 - Never assume subagents, live skill reload, a particular skills directory, or cloud privacy behavior.
+- Never publish a researched course through a single-agent self-review. If required subagents are unavailable or declined, stop at `DRAFT_UNVERIFIED` and explain what remains.
+- Never edit `workflow_state` by hand. Advance it only with `scripts/advance_workflow.py`.
 - Read only the workflow and reference files required for the current phase.
 
 ## Start every operational run
@@ -28,14 +30,14 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 2. For a course, ingestion, exam, or review operation, read [runtime detection and onboarding](workflows/runtime-onboarding.md) and pass its gate before touching durable application state. Do not launch or install software for a design-only or explanatory request.
 3. Look for an existing `study.yaml` and resume it when the request belongs to that study.
 4. Determine the mode: `provided-material-only`, `existing-library`, `local-media`, `topic-research`, or `hybrid`.
-5. Read [intake and scope](workflows/intake-and-scope.md). Do not launch broad research before the scope and worker budget are approved.
+5. Read [intake and scope](workflows/intake-and-scope.md). For `topic-research` or `hybrid`, also read [calibrate and authorize](workflows/calibrate-and-authorize.md). Do not launch research before calibration disposition, scope, and worker topology are approved.
 
 ## Route by phase
 
 - Supplied files or an existing course folder: read [ingest material](workflows/ingest-material.md). When the learner explicitly uses LinkVault, additionally read [optional LinkVault connector](references/linkvault-connector.md).
 - Video, audio, SRT, or VTT: additionally read [process video](workflows/process-video.md) and [video transcript contract](references/video-transcript-contract.md).
-- Topic requiring external research: read [research topic](workflows/research-topic.md) and [source policy](references/source-policy.md).
-- Two or more independent research tasks: read [orchestrate research](workflows/orchestrate-research.md), [agent roles](references/agent-roles.md), and [task and evidence contract](references/task-and-evidence-contract.md).
+- Topic requiring external research: read [research topic](workflows/research-topic.md), [source policy](references/source-policy.md), and [orchestrate research](workflows/orchestrate-research.md). Delegation is required for a publishable researched course.
+- Creating calibration, chapter questions, a question bank, or an exam: read [assessment contract](references/assessment-contract.md).
 - Submitted worker evidence: read [verify evidence](workflows/verify-evidence.md) before synthesis.
 - Approved evidence ready: read [build study pack](workflows/build-study-pack.md).
 - Creating or consuming source manifests, evidence, questions, explanations, or exams: read [citation contract](references/citation-contract.md) and validate every source reference before publishing the artifact.
@@ -66,7 +68,7 @@ The main agent must:
 - synthesize approved evidence rather than concatenate reports;
 - keep learner-facing tutoring single-agent for continuity.
 
-When subagents are unavailable, execute the same task contracts sequentially and label citation review as a self-review fallback.
+For a single user-provided source, research and extraction workers are optional; a ready exam still requires an independent assessment validator. For `topic-research` and `hybrid`, use independent subagents for research, contradiction review, final citation verification, and assessment validation. If the required workers are unavailable, preserve drafts under `.work/`, record `DRAFT_UNVERIFIED`, and do not activate learning or mark an exam ready.
 
 ## Completion gates
 
@@ -77,6 +79,7 @@ Before tutoring begins:
 - core objectives have concept and question coverage;
 - contradictions and gaps are visible;
 - validators pass;
+- at least one app-compatible ready exam exists for an exam-building run;
 - the main agent records limitations and anything not independently checked.
 
 Use [quality rubric](references/quality-rubric.md), [topic splitting policy](references/topic-splitting-policy.md), and [runtime portability](references/runtime-portability.md) whenever those decisions arise.
@@ -85,6 +88,7 @@ Use [quality rubric](references/quality-rubric.md), [topic splitting policy](ref
 
 - [Runtime detection and onboarding](workflows/runtime-onboarding.md)
 - [Intake and scope](workflows/intake-and-scope.md)
+- [Calibrate and authorize](workflows/calibrate-and-authorize.md)
 - [Ingest material](workflows/ingest-material.md)
 - [Process video](workflows/process-video.md)
 - [Research topic](workflows/research-topic.md)
@@ -103,6 +107,7 @@ Use [quality rubric](references/quality-rubric.md), [topic splitting policy](ref
 - [Task and evidence contract](references/task-and-evidence-contract.md)
 - [Topic splitting policy](references/topic-splitting-policy.md)
 - [Pedagogy](references/pedagogy.md)
+- [Assessment contract](references/assessment-contract.md)
 - [Mastery model](references/mastery-model.md)
 - [Quality rubric](references/quality-rubric.md)
 - [Runtime portability](references/runtime-portability.md)

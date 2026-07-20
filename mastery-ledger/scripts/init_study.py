@@ -40,6 +40,7 @@ def main() -> int:
     target.mkdir(parents=True, exist_ok=True)
     for directory in (
         "source/media",
+        "lessons",
         "wiki/pages",
         "questions",
         "progress",
@@ -62,6 +63,9 @@ def main() -> int:
         "source-manifest.yaml": "source-manifest.yaml",
         "study-guide.md": "study-guide.md",
         "question-bank.json": "questions/question-bank.json",
+        "question-bank.md": "questions/question-bank.md",
+        "lesson.md": "lessons/CH-001.md",
+        "approved-claims.json": "evidence/approved-claims.json",
         "learner-progress.json": "progress/learner-progress.json",
         "wiki.json": "wiki/wiki.json",
         "wiki-page.md": "wiki/pages/concept-id.md",

@@ -1,0 +1,8 @@
+{
+  "schema_version": "contradiction-review-v1",
+  "status": "complete",
+  "retained_claim_ids": [],
+  "rejected_claim_ids": [],
+  "contradictions": [],
+  "gaps": []
+}

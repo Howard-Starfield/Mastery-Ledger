@@ -1723,3 +1723,91 @@ The skill continues to prohibit silent application installation. When the runtim
 ### Item 14 accepted decision
 
 Use direct `uv tool install` from the official repository as the no-clone preview installation, retain editable installs for contributors, clearly label the mutable unsigned channel, and preserve the separate application, skill, and workspace-onboarding trust boundaries.
+
+## 15. Deterministic researched-course production and assessment
+
+### Failure that triggered this decision
+
+A real skill run created a course folder and repeatedly updated learner session evaluations, but it did not produce extracted source Markdown, worker reports, completion envelopes, action logs, or a ready exam. Its run plan explicitly contained `subagents: false` and an empty `task_graph`, while `study.yaml` nevertheless reached `LEARNING_ACTIVE`. Both original validators passed because they checked file shape but did not enforce publication completeness. The question bank also used `correct_answer` plus `distractors`, while the web application's actual exam parser requires `options` plus `correct_option_id`.
+
+This is a state-machine and schema problem, not merely a prompting problem. A stronger sentence in `SKILL.md` cannot make an invalid course impossible; deterministic scripts and fail-closed gates must own fragile transitions.
+
+### Calibration is separate from course production
+
+Before researched-course fan-out, use a provisional learner calibration:
+
+- announce the exact question count, mix, estimated time, and recorded fields before question 1;
+- ask 3-8 questions across the proposed course, one at a time, with 10 as an explicit maximum;
+- default to 8 questions: 6 concise concept questions and 2 short scenarios;
+- record only learner-visible prompts, answers, confidence when supplied, and feedback shown;
+- do not update durable proficiency from unsourced calibration;
+- after the final question, propose 1-5 adjacent branches and classify their blast radius.
+
+The learner may begin, adjust, or skip. Calibration and intake must not become an endless substitute for research.
+
+### One authorization card
+
+After calibration, present the scope, accepted branches, source limit, and exact worker topology in one authorization card. A standard publishable run is:
+
+```text
+corpus mapper
+  -> bounded research workers
+  -> contradiction reviewer
+  -> final citation verifier
+  -> assessment generator
+  -> independent assessment validator
+  -> deterministic publication gate
+```
+
+The main agent compiles this graph with `create_research_plan.py`; it does not improvise dependencies. The executable orchestration gate exposes only ready task IDs. Contradiction review waits for every source/research task. Citation verification runs only on retained claims. Assessment generation waits for citations; assessment validation waits for generation.
+
+Codex documentation states that current local Codex releases can delegate after a direct user request or applicable skill instruction, and that subagents are particularly useful for bounded read-heavy work while consuming additional tokens. Mastery Ledger therefore requests delegation in the skill itself and includes the topology in the learner-approved budget.
+
+### Fail closed when independence is unavailable
+
+Independent subagents are mandatory for publishing `topic-research` and `hybrid` courses and for marking their exams ready. They are optional for a single user-provided source and unnecessary for tutoring an already approved pack.
+
+When required subagents are unavailable or declined:
+
+- preserve provisional notes and reports under `.work/`;
+- record `DRAFT_UNVERIFIED`;
+- allow a clearly labeled live teaching conversation if useful;
+- prohibit `EVIDENCE_APPROVED`, `STUDY_PACK_VALIDATED`, `LEARNING_ACTIVE`, ready exams, and durable spaced-review updates.
+
+This boundary acknowledges runtime capability without pretending that self-review is independent verification.
+
+### Assessment contract
+
+Keep pre-research calibration distinct from the published chapter bank. For each core chapter, create exactly 10 source-grounded selectable items: 8 concise standalone MCQs and 2 short passage/case MCQs. For each short or optional chapter, create 5: 4 standalone and 1 passage. This 80/20 ratio is a Mastery Ledger product decision, not a universal research claim.
+
+Every published item has four options, exactly one answer key, a supported explanation, misconception-based distractor rationales, objective and concept IDs, and canonical source references. The JSON bank and embedded exam questions use the application's real `options` and `correct_option_id` fields. A deterministic renderer maintains `questions/question-bank.md` for human review and future revision.
+
+The QTI 3 standard reinforces the separation between an assessment item, its choice interaction, uniquely identified choices, a response declaration, and response processing. Mastery Ledger does not claim QTI conformance, but its internal schema follows those useful boundaries. Retrieval-practice and pretesting research supports using questions as learning events, while also showing that failed pretests should be followed by supported learning and feedback; this does not justify treating the initial diagnostic as mastery evidence.
+
+### Publication gate
+
+`validate_study_pack.py --publication` rejects activation unless all of the following exist and agree:
+
+- ready manifest sources with non-empty `source/SRC-NNN.md` knowledge artifacts;
+- a non-empty valid `logs/events.jsonl` observable action log;
+- an approved, non-empty orchestration graph with required roles and completion envelopes;
+- contradiction review before citation verification and assessment validation after generation;
+- non-empty main-agent-approved claims;
+- complete chapter coverage and exact 80/20 question ratios;
+- the app-compatible question schema and Markdown review copy;
+- at least one embedded, validated `ready` exam.
+
+`advance_workflow.py` is the only supported writer of `workflow_state`; it permits only adjacent state transitions and runs the relevant gate. LLMs and workers must not edit the state directly.
+
+### Item 15 accepted decision
+
+Separate bounded calibration from research, require learner-visible topology authorization, compile a dependency-ordered worker graph, fail closed as `DRAFT_UNVERIFIED` without independent workers, enforce a per-chapter 80/20 selectable-item contract using the application's real schema, and make deterministic scripts—not prose—own publication and workflow advancement.
+
+### Item 15 research references
+
+- [OpenAI Codex manual: Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents.md)
+- [1EdTech QTI 3 specification documents](https://www.1edtech.org/standards/qti/index)
+- [1EdTech QTI 3 beginner's guide](https://www.imsglobal.org/spec/qti/v3p0/guide)
+- [Roediger and Karpicke, Test-Enhanced Learning](https://www.psychologicalscience.org/journals/psychological-science/j.1467-9280.2006.01693.x/)
+- [Richland, Kornell, and Kao, The pretesting effect](https://pubmed.ncbi.nlm.nih.gov/19751074/)
+- [AERA, APA, and NCME Standards for Educational and Psychological Testing](https://www.aera.net/Publications/Books/Standards-for----Educational-Psychological-Testing-2014-Edition)

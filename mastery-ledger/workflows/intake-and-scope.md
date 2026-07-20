@@ -40,6 +40,8 @@ Before multiple workers, inspect the supplied corpus or run one bounded scouting
 
 The scout is provisional. It does not approve claims or write the final curriculum.
 
+For `topic-research` and `hybrid`, run the learner calibration in `calibrate-and-authorize.md` before the scope card. Do not let repeated conversational questions substitute for the research task graph.
+
 ## 4. Present a scope card
 
 Use this shape:
@@ -72,7 +74,7 @@ Show a blast-radius classification:
 
 ## 5. Worker budget
 
-- **Lean:** main agent or one worker, up to 5 inspected sources.
+- **Lean:** one bounded research worker plus the required independent review phases, up to 5 inspected sources. Use only for a narrow researched topic.
 - **Standard:** 2–4 bounded workers, normally 8–15 inspected sources.
 - **Deep:** 5 or more workers, broader corpus, independent citation and pedagogy review.
 
@@ -89,6 +91,7 @@ Obtain user approval before:
 - branching into a separate study.
 
 Approval may be an explicit acceptance or an explicit edit to the scope card.
+For a researched course, include the exact worker topology in the same approval card; do not ask for a second approval unless the run later expands.
 
 ## Exit gate
 

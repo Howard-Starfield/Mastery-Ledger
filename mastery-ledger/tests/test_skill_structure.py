@@ -16,6 +16,7 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "agents" / "openai.yaml",
             ROOT / "workflows" / "runtime-onboarding.md",
             ROOT / "workflows" / "intake-and-scope.md",
+            ROOT / "workflows" / "calibrate-and-authorize.md",
             ROOT / "workflows" / "orchestrate-research.md",
             ROOT / "workflows" / "ingest-material.md",
             ROOT / "workflows" / "process-video.md",
@@ -31,6 +32,7 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "references" / "task-and-evidence-contract.md",
             ROOT / "references" / "topic-splitting-policy.md",
             ROOT / "references" / "pedagogy.md",
+            ROOT / "references" / "assessment-contract.md",
             ROOT / "references" / "mastery-model.md",
             ROOT / "references" / "quality-rubric.md",
             ROOT / "references" / "runtime-portability.md",
@@ -38,6 +40,12 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "assets" / "wiki.json",
             ROOT / "assets" / "wiki-page.md",
             ROOT / "assets" / "completion-envelope.json",
+            ROOT / "assets" / "exam.json",
+            ROOT / "assets" / "question-bank.md",
+            ROOT / "assets" / "lesson.md",
+            ROOT / "assets" / "approved-claims.json",
+            ROOT / "assets" / "assessment-validation.json",
+            ROOT / "assets" / "contradiction-review.json",
             ROOT / "assets" / "runtime-compatibility.json",
         ]
         missing = [str(path.relative_to(ROOT)) for path in required if not path.exists()]
@@ -100,12 +108,25 @@ class SkillStructureTests(unittest.TestCase):
     def test_course_initializer_uses_canonical_clean_layout(self) -> None:
         content = (ROOT / "scripts" / "init_study.py").read_text(encoding="utf-8")
         self.assertIn('"source/media"', content)
+        self.assertIn('"lessons"', content)
         self.assertIn('"wiki/pages"', content)
         self.assertIn('".work/orchestration/tasks"', content)
         self.assertIn('"questions/question-bank.json"', content)
         self.assertIn('"progress/learner-progress.json"', content)
+        self.assertIn('"questions/question-bank.md"', content)
+        self.assertIn('"evidence/approved-claims.json"', content)
         self.assertNotIn('"source-notes"', content)
         self.assertNotIn('"orchestration/tasks"', content)
+
+        self.assertTrue((ROOT / "scripts" / "create_assessment_plan.py").is_file())
+
+    def test_question_template_matches_application_delivery_contract(self) -> None:
+        payload = json.loads((ROOT / "assets" / "question-bank.json").read_text(encoding="utf-8"))
+        question = payload["questions"][0]
+        self.assertEqual("multiple-choice", question["type"])
+        self.assertEqual(4, len(question["options"]))
+        self.assertIn(question["correct_option_id"], {item["option_id"] for item in question["options"]})
+        self.assertNotIn("correct_answer", question)
 
     def test_direct_references_resolve(self) -> None:
         content = (ROOT / "SKILL.md").read_text(encoding="utf-8")

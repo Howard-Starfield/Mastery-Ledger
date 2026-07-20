@@ -2,15 +2,22 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_module(name: str, relative: str):
     path = ROOT / relative
+    scripts = str(ROOT / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Could not load {path}")
@@ -20,6 +27,39 @@ def load_module(name: str, relative: str):
 
 
 class EvidenceAndMasteryTests(unittest.TestCase):
+    @staticmethod
+    def canonical_question(question_id: str, chapter_id: str, format_name: str) -> dict:
+        return {
+            "question_id": question_id,
+            "chapter_id": chapter_id,
+            "concept_ids": ["concept-a"],
+            "objective_ids": ["OBJ-1"],
+            "type": "multiple-choice",
+            "format": format_name,
+            "difficulty": 2,
+            "prompt": f"What is the supported choice for {question_id}?",
+            "options": [
+                {"option_id": "A", "text": "First misconception"},
+                {"option_id": "B", "text": "Supported answer"},
+                {"option_id": "C", "text": "Adjacent concept"},
+                {"option_id": "D", "text": "Overgeneralized claim"},
+            ],
+            "correct_option_id": "B",
+            "correct_explanation": "The cited section directly supports option B.",
+            "distractor_rationales": {
+                "A": "Targets misconception one.",
+                "C": "Confuses adjacent concepts.",
+                "D": "Overgeneralizes the claim.",
+            },
+            "source_refs": [{
+                "source_id": "SRC-1",
+                "locator": {"kind": "section", "value": "1", "label": "Section 1"},
+                "supports": ["correct_answer", "explanation"],
+                "support_strength": "direct",
+            }],
+            "quality_status": "validated",
+        }
+
     def test_evidence_validator_rejects_missing_locator(self) -> None:
         tool = load_module("validate_evidence", "scripts/validate_evidence.py")
         sources = {"SRC-1"}
@@ -124,6 +164,70 @@ class EvidenceAndMasteryTests(unittest.TestCase):
         self.assertEqual([], errors)
         self.assertEqual(["TASK-CITATIONS"], ready)
 
+    def test_orchestration_gate_orders_assessment_after_citations(self) -> None:
+        tool = load_module("validate_orchestration_assessment", "scripts/validate_orchestration.py")
+        tasks = [
+            {"task_id": "R", "role": "research-worker", "status": "submitted", "dependencies": [], "output_path": ".work/reports/r.json", "completion_path": ".work/completions/r.json"},
+            {"task_id": "X", "role": "contradiction-reviewer", "status": "submitted", "dependencies": ["R"], "output_path": ".work/reports/x.json", "completion_path": ".work/completions/x.json"},
+            {"task_id": "C", "role": "citation-verifier", "status": "planned", "dependencies": ["X"], "output_path": ".work/reviews/c.json", "completion_path": ".work/completions/c.json"},
+            {"task_id": "G", "role": "assessment-generator", "status": "planned", "dependencies": ["C"], "output_path": ".work/reports/g.json", "completion_path": ".work/completions/g.json"},
+            {"task_id": "V", "role": "assessment-validator", "status": "planned", "dependencies": ["G"], "output_path": ".work/reviews/v.json", "completion_path": ".work/completions/v.json"},
+        ]
+        errors, _, ready = tool.validate_plan({"task_graph": tasks})
+        self.assertEqual([], errors)
+        self.assertEqual(["C"], ready)
+        tasks[2]["status"] = "submitted"
+        _, _, ready = tool.validate_plan({"task_graph": tasks})
+        self.assertEqual(["G"], ready)
+        tasks[3]["status"] = "submitted"
+        _, _, ready = tool.validate_plan({"task_graph": tasks})
+        self.assertEqual(["V"], ready)
+
+    def test_question_bank_enforces_app_schema_and_exact_eighty_twenty_mix(self) -> None:
+        tool = load_module("validate_study_pack_mix", "scripts/validate_study_pack.py")
+        questions = [
+            self.canonical_question(f"Q-{index:02d}", "CH-1", "standalone_mcq" if index <= 8 else "passage_mcq")
+            for index in range(1, 11)
+        ]
+        payload = {
+            "source_ref_schema": "source-ref-v1",
+            "chapters": [{"chapter_id": "CH-1", "title": "Core", "class": "core", "lesson_path": "lessons/CH-1.md"}],
+            "questions": questions,
+        }
+        errors, _ = tool.validate_question_bank(payload, source_ids={"SRC-1"}, concept_ids={"concept-a"}, publication=True)
+        self.assertEqual([], errors)
+        payload["questions"][7]["format"] = "passage_mcq"
+        errors, _ = tool.validate_question_bank(payload, source_ids={"SRC-1"}, concept_ids={"concept-a"}, publication=True)
+        self.assertTrue(any("8 standalone_mcq and 2 passage_mcq" in error for error in errors))
+        legacy = self.canonical_question("Q-LEGACY", "CH-1", "standalone_mcq")
+        legacy.pop("options")
+        legacy.pop("correct_option_id")
+        legacy["correct_answer"] = "Supported answer"
+        legacy["distractors"] = ["First misconception", "Adjacent concept", "Overgeneralized claim"]
+        errors, _ = tool.validate_question_bank({"source_ref_schema": "source-ref-v1", "questions": [legacy]}, source_ids={"SRC-1"}, concept_ids={"concept-a"})
+        self.assertTrue(any("exactly four options" in error for error in errors))
+
+    def test_publication_gate_rejects_hollow_learning_active_course(self) -> None:
+        tool = load_module("validate_study_pack_regression", "scripts/validate_study_pack.py")
+        with tempfile.TemporaryDirectory() as directory:
+            studies = Path(directory)
+            subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Hollow Active", "--studies-dir", str(studies)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            course = studies / "hollow-active"
+            study_path = course / "study.yaml"
+            study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
+            study["workflow_state"] = "LEARNING_ACTIVE"
+            study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
+            errors, _ = tool.validate_workspace(course, publication=True)
+            self.assertTrue(any("non-empty orchestration task graph" in error for error in errors))
+            self.assertTrue(any("action log" in error for error in errors))
+            self.assertTrue(any("ready exam" in error for error in errors))
+            self.assertTrue(any("extracted knowledge" in error for error in errors))
+
     def test_orchestration_gate_rejects_early_verifier_and_workspace_clutter(self) -> None:
         tool = load_module("validate_orchestration_invalid", "scripts/validate_orchestration.py")
         tasks = [
@@ -155,7 +259,10 @@ class EvidenceAndMasteryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             course_root = Path(directory)
             completion = course_root / ".work" / "orchestration" / "completions" / "research.json"
+            output = course_root / ".work" / "orchestration" / "reports" / "research.json"
             completion.parent.mkdir(parents=True)
+            output.parent.mkdir(parents=True)
+            output.write_text("{}", encoding="utf-8")
             completion.write_text(
                 json.dumps(
                     {

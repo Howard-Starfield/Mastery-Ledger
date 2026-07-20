@@ -23,13 +23,17 @@ Do not concatenate worker reports.
 Create:
 
 - `study-guide.md`
+- one source-grounded `lessons/<chapter-id>.md` file for every declared chapter
 - `concept-map.md`
 - `glossary.md`
 - `wiki/wiki.json` and approved Markdown pages under `wiki/pages/`
 - `questions/question-bank.json`
+- `questions/question-bank.md`, generated from the JSON bank
 - `progress/learner-progress.json`
 - `evidence/contradictions.json`
 - `evidence/gaps.json`
+- `evidence/approved-claims.json`
+- at least one `exams/<exam-id>/exam.json` for an exam-building run
 
 Use templates from `assets/`.
 
@@ -72,12 +76,22 @@ Hard prerequisites require main-agent or user approval. LLM-proposed relationshi
 
 Each question must map to objectives, concepts, and canonical `source-ref-v1` objects from [citation contract](../references/citation-contract.md). Important concepts need recall and application questions. Explanations must address common wrong answers without exposing answers before an attempt.
 
+Follow [assessment contract](../references/assessment-contract.md) exactly. Core chapters contain 10 selectable items: 8 `standalone_mcq` and 2 `passage_mcq`. Short or optional chapters contain 5: 4 standalone and 1 passage. Use four options and exactly one correct option. Generate the Markdown review copy and build the ready exam only after independent assessment validation:
+
+```bash
+# For a provided-source course without a research graph:
+python scripts/create_assessment_plan.py studies/my-study --authorized
+# Dispatch only the validator-reported ready task IDs, then:
+python scripts/render_question_bank.py studies/my-study/questions/question-bank.json
+python scripts/build_exam.py studies/my-study --exam-id EXAM-001 --title "Course exam" --ready
+```
+
 ## Validation
 
 Run:
 
 ```bash
-python scripts/validate_study_pack.py studies/my-study
+python scripts/validate_study_pack.py studies/my-study --publication
 ```
 
 Also perform semantic audits for citation faithfulness, pedagogy, and assessment ambiguity. An independent evaluator is preferred when available.
@@ -92,4 +106,6 @@ The phase is complete only when:
 - contradictions and gaps are visible;
 - prerequisite order is coherent;
 - validators pass;
+- the question mix and app-compatible schema pass;
+- an independently validated ready exam exists;
 - limitations and untested assumptions are recorded.

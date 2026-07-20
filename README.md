@@ -81,11 +81,13 @@ Mastery Ledger has two cooperating layers: a local application for learner-facin
 | Source intake and scope | Registers learner-provided files and links, records rights and provenance before processing, and supports adding sources to existing or new courses | Application preview + Codex skill workflow |
 | Web and document ingestion | Runs recoverable jobs through isolated staging, promotes source Markdown and originals into a portable course, and records hashes, status, and recovery steps | Application preview |
 | Video and audio processing | Uses the `yt-dlp` Python API, probes one public item, prefers human then automatic captions, and permits local `faster-whisper` transcription only after explicit approval and model configuration | Application preview + skill scripts |
-| Research orchestration | Splits independent research into bounded tasks, routes completed reports through verification, and prevents reviewers from running before their dependencies | Codex skill workflow |
+| Learner calibration | Announces and records a bounded 3-8 question pre-research diagnostic, then proposes up to five classified adjacent branches without treating provisional answers as mastery | Codex skill workflow |
+| Research orchestration | Compiles an authorized worker graph, requires independent workers for publishable researched courses, and gates contradiction, citation, generation, and assessment validation in dependency order | Codex skill workflow |
 | Evidence and contradiction control | Separates claims, sources, contradictions, gaps, verification decisions, and approved evidence before learner-facing synthesis | Codex skill workflow |
 | Knowledge Wiki | Browses approved and derived concepts, relationships, learner proficiency, contradictions, page Markdown, and exact source locators | Application preview + Codex skill artifacts |
 | Evidence & Activity | Projects approved and rejected claims, contradictions, gaps, and observable action events without exposing hidden reasoning | Application preview |
-| Course and assessment generation | Builds source-grounded study guides, knowledge pages, question banks, and exam definitions from approved evidence | Codex skill workflow |
+| Course and assessment generation | Builds source-grounded study guides, knowledge pages, an exact per-chapter 80/20 standalone-to-passage MCQ bank, a Markdown review copy, and app-compatible ready exams | Codex skill workflow |
+| Publication gate | Rejects researched courses that lack extracted source notes, worker outputs, completion envelopes, approved claims, action logs, validated question coverage, or a ready exam | Skill scripts |
 | Citation validation | Validates source IDs, structured locators, support targets, answer explanations, and evidence packets before publication | Skill scripts |
 | Mastery records | Persists attempts, restores interrupted sessions, updates each question's interval, and records idempotent concept evidence | Application preview |
 | Tutoring and course updates | Runs source-grounded tutoring passes and reopens affected evidence, questions, and contradictions when sources or goals change | Codex skill workflow |
@@ -154,6 +156,8 @@ First-run onboarding belongs to the application because it validates and persist
 - Knowledge Wiki concept index and pages with relationship navigation, learner state, contradiction counts, and a collated grounding ledger.
 - Evidence Ledger and Activity Feed over portable evidence JSON and safe observable JSONL action fields.
 - Canonical `wiki-v1`, completion-envelope, runtime-compatibility, and `.work/orchestration` skill artifacts with executable dependency-order validation.
+- Deterministic calibration records, authorized research-plan compilation, fail-closed `DRAFT_UNVERIFIED` fallback, and gated workflow-state advancement.
+- App-compatible `question-bank-v2` items with four options and one answer key, exact 80/20 chapter mixes, Markdown review copies, independent assessment decisions, and ready-exam publication validation.
 - Prebuilt frontend assets served from the Python package; Node.js is not required at learner runtime.
 
 ## Install and test the preview

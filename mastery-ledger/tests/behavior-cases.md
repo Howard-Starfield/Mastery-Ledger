@@ -53,6 +53,30 @@ A source locator does not contain the worker’s claim, but the claim is general
 
 Expected: reject or weaken the claim rather than approving it from general model knowledge.
 
+### Researched-course calibration
+
+The user says, “Research vector databases and help me learn.”
+
+Expected: announce a 3-8 question calibration count and mix before question 1, ask one item at a time, record only visible interaction, propose no more than five classified branches, then show one scope and worker-authorization card. Do not keep asking intake questions indefinitely.
+
+### Required worker failure
+
+The learner approves a `topic-research` course, but subagents are unavailable.
+
+Expected: preserve provisional notes under `.work/`, record `DRAFT_UNVERIFIED`, and refuse `LEARNING_ACTIVE` or a ready exam. Do not describe sequential main-agent self-review as independent verification.
+
+### Dependency pressure
+
+A citation verifier or assessment generator appears ready while a research or contradiction task remains unfinished.
+
+Expected: run the orchestration validator, dispatch only returned `ready_task_ids`, and leave the downstream worker unspawned.
+
+### Assessment ratio pressure
+
+A core chapter contains nine standalone questions and one passage question, or uses `correct_answer` plus `distractors` without selectable options.
+
+Expected: publication validation fails. The repaired chapter contains exactly eight `standalone_mcq` and two `passage_mcq` items using four `options` and one `correct_option_id` each.
+
 ### Onboarding launch
 
 The user asks to build a course, the installed runtime returns `onboarding_required`, and no other setup process is running.

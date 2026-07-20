@@ -45,6 +45,7 @@ Pass only when:
 - cited evidence supports the answer;
 - wording is unambiguous;
 - multiple-choice distractors are plausible but wrong;
+- published items use four app-compatible options, exactly one answer key, and the chapter's required 80/20 standalone-to-passage mix;
 - the prompt does not leak the answer;
 - important concepts include application or transfer;
 - generated questions are not near duplicates.
@@ -70,7 +71,7 @@ Pass only when:
 - workers do not approve themselves;
 - the main agent synthesizes rather than concatenates;
 - expansion beyond budget receives approval;
-- fallback limitations are explicit when subagents are unavailable.
+- researched courses fail closed as `DRAFT_UNVERIFIED` when independent subagents are unavailable.
 
 ## Required semantic evaluation cases
 

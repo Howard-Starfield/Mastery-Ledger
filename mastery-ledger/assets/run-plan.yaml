@@ -1,4 +1,4 @@
-schema_version: "1.0"
+schema_version: research-run-plan-v1
 run_id: RUN-001
 study_id: STUDY-001
 goal: Build a source-grounded study pack
@@ -15,6 +15,11 @@ capabilities:
   scripts: true
   subagents: false
   parallel_subagents: false
+authorization:
+  status: pending
+  approved_at: null
+  scope: null
+publication_intent: false
 workflow_state: scoped
 concept_map_version: "0.1"
 task_graph: []

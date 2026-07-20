@@ -15,6 +15,8 @@ STARTED_STATES = {"in_progress", *SUBMITTED_STATES}
 RESEARCH_ROLES = {"corpus-mapper", "source-extractor", "research-worker"}
 CONTRADICTION_ROLE = "contradiction-reviewer"
 CITATION_ROLE = "citation-verifier"
+ASSESSMENT_GENERATOR_ROLE = "assessment-generator"
+ASSESSMENT_VALIDATOR_ROLE = "assessment-validator"
 
 
 def _clean_work_path(value: object) -> bool:
@@ -132,6 +134,11 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
         ancestor_roles = {str(tasks[item].get("role")) for item in ancestors}
         if role == CONTRADICTION_ROLE and tasks and not (ancestor_roles & RESEARCH_ROLES):
             errors.append(f"{task_id} must depend on submitted research or extraction work")
+        if role == CONTRADICTION_ROLE:
+            research_ids = {other_id for other_id, other in tasks.items() if str(other.get("role")) in RESEARCH_ROLES}
+            missing_research = research_ids - ancestors
+            if missing_research:
+                errors.append(f"{task_id} must depend on every research task: {', '.join(sorted(missing_research))}")
         if role == CITATION_ROLE:
             if CONTRADICTION_ROLE not in ancestor_roles:
                 errors.append(f"{task_id} must depend on a contradiction-reviewer")
@@ -145,8 +152,39 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
             ]
             if state in STARTED_STATES and unfinished_early:
                 errors.append(f"{task_id} started before all extraction, research, and contradiction work finished: {', '.join(unfinished_early)}")
+        if role == ASSESSMENT_GENERATOR_ROLE:
+            has_research = any(str(other.get("role")) in RESEARCH_ROLES for other in tasks.values())
+            if has_research and CITATION_ROLE not in ancestor_roles:
+                errors.append(f"{task_id} must depend on final citation verification")
+            unfinished = [other_id for other_id, other in tasks.items() if str(other.get("role")) == CITATION_ROLE and other.get("status") not in SUBMITTED_STATES]
+            if state in STARTED_STATES and unfinished:
+                errors.append(f"{task_id} started before citation verification finished: {', '.join(unfinished)}")
+        if role == ASSESSMENT_VALIDATOR_ROLE:
+            if ASSESSMENT_GENERATOR_ROLE not in ancestor_roles:
+                errors.append(f"{task_id} must depend on assessment generation")
+            unfinished = [other_id for other_id, other in tasks.items() if str(other.get("role")) == ASSESSMENT_GENERATOR_ROLE and other.get("status") not in SUBMITTED_STATES]
+            if state in STARTED_STATES and unfinished:
+                errors.append(f"{task_id} started before assessment generation finished: {', '.join(unfinished)}")
 
         if course_root is not None and state in SUBMITTED_STATES:
+            output_relative = task.get("output_path")
+            output = _safe_course_path(course_root, output_relative)
+            if output is None:
+                errors.append(f"{task_id} output escapes the course .work boundary")
+            elif not output.is_file() or output.is_symlink():
+                errors.append(f"{task_id} is {state} but its declared output is missing")
+            else:
+                try:
+                    output_payload = json.loads(output.read_text(encoding="utf-8"))
+                except (OSError, UnicodeError, json.JSONDecodeError):
+                    errors.append(f"{task_id} declared output is unreadable JSON")
+                else:
+                    expected_schema = task.get("required_schema")
+                    if expected_schema and (
+                        not isinstance(output_payload, dict)
+                        or output_payload.get("schema_version") != expected_schema
+                    ):
+                        errors.append(f"{task_id} output must use {expected_schema}")
             completion_relative = task.get("completion_path")
             completion = _safe_course_path(course_root, completion_relative)
             if completion is None:
@@ -181,11 +219,28 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
             ]
             if unfinished:
                 continue
+        if task.get("role") == ASSESSMENT_GENERATOR_ROLE:
+            if any(str(other.get("role")) == CITATION_ROLE and other.get("status") not in SUBMITTED_STATES for other in tasks.values()):
+                continue
+        if task.get("role") == ASSESSMENT_VALIDATOR_ROLE:
+            if any(str(other.get("role")) == ASSESSMENT_GENERATOR_ROLE and other.get("status") not in SUBMITTED_STATES for other in tasks.values()):
+                continue
         ready.append(task_id)
     if errors:
         ready = []
     if not tasks:
-        warnings.append("The run plan has no tasks.")
+        if payload.get("publication_intent") is True:
+            errors.append("A publication-intent run plan must contain tasks.")
+            ready = []
+        else:
+            warnings.append("The run plan has no tasks.")
+    if tasks and payload.get("publication_intent") is True:
+        if payload.get("authorization", {}).get("status") != "approved":
+            errors.append("A publication-intent plan requires approved authorization.")
+        if not payload.get("capabilities", {}).get("subagents"):
+            errors.append("A publication-intent researched course requires subagents.")
+        if errors:
+            ready = []
     return errors, warnings, ready
 
 

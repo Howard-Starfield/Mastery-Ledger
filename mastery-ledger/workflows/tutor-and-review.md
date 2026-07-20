@@ -8,6 +8,8 @@ Run a coherent learner-facing session using the validated study pack and persist
 
 Keep ordinary learner interaction single-agent. Ask one question at a time. A specialist verifier may be consulted only for a genuinely uncertain or disputed factual issue; the tutor returns one coherent response.
 
+Do not enter durable tutoring when `workflow_state` is `DRAFT_UNVERIFIED` or when the publication validator fails. Provisional conversation may continue, but do not update the spaced-review schedule from it.
+
 ## Learning modes
 
 - **Socratic:** use questions and hints; delay direct explanation.
@@ -27,6 +29,8 @@ Do not force Socratic behavior when the learner lacks a prerequisite or explicit
 5. Invite repair when the learner is close.
 6. Update proficiency and misconceptions using an explicit evaluation record.
 7. Select the next question based on goals, prerequisites, recency, and assistance used.
+
+Record the learner-visible prompt, response, feedback, hints, confidence when supplied, and proficiency update. Do not record hidden reasoning. In exam delivery, leave the source panel collapsed after both wrong and right answers; make its contents available after a correct answer or in final review only.
 
 Do not praise generically. State exactly what was correct and what needs work.
 

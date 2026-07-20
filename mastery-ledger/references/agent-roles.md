@@ -50,11 +50,11 @@ Optionally drafts one module from a frozen outline and approved evidence. It may
 
 ## Assessment generator
 
-Creates questions from approved concepts and evidence. It must map questions to concept IDs, objectives, correct-answer elements, common errors, hints, and source locators.
+Runs only after final citation verification. It creates questions from approved concepts and evidence, follows `assessment-contract.md`, and maps every item to a chapter, format, concept IDs, objectives, four options, one answer key, misconception-based distractor rationales, an explanation, and source locators. It writes only to its assigned `.work/` path.
 
 ## Assessment validator
 
-Checks whether a question is answerable, unambiguous, appropriately difficult, free from answer leakage, and supported by cited evidence. It flags multiple-valid-answer cases.
+Runs only after assessment generation. It checks whether each question is answerable, unambiguous, appropriately difficult, free from answer leakage, supported by cited evidence, app-compatible, and compliant with the exact per-chapter 80/20 mix. It rejects multiple-valid-answer cases and must not be the assessment generator.
 
 ## Pedagogy reviewer
 
@@ -70,4 +70,4 @@ Attempts to find unsupported claims, misleading simplifications, stale facts, so
 - Verifiers receive the source, report, and rubric—not the expected verdict.
 - Evaluators submit recommendations; they do not silently edit approved artifacts.
 - Research and extraction workers submit independently. The contradiction reviewer runs only after their completion envelopes are accepted, and citation verification runs last, after contradiction review has rejected or retained candidate claims.
-- When no subagents are available, the main agent performs separated passes and labels the loss of independence.
+- When no subagents are available, the main agent may preserve separated provisional passes for the live conversation, but a researched course remains `DRAFT_UNVERIFIED` and cannot become a ready exam or active mastery course.

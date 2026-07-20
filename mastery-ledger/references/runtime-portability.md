@@ -33,10 +33,12 @@ When subagents exist:
 
 When absent:
 
-- execute task contracts sequentially;
-- use fresh bounded passes where possible;
-- record `self-review-fallback`;
+- use fresh bounded main-agent passes only for provisional live assistance;
+- record `DRAFT_UNVERIFIED` for `topic-research` and `hybrid`;
+- do not publish researched evidence, activate mastery, or mark an exam ready;
 - avoid claiming evaluator independence.
+
+A single user-provided source may still use the file-only workflow without subagents when no external research or publishable independent verification is requested.
 
 ## Application runtime and optional connectors
 

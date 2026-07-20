@@ -15,7 +15,7 @@ Record whether the runtime supports:
 - web and file tools inside workers;
 - independent model selection.
 
-If workers are unavailable, run each task sequentially as a fresh, bounded pass. Preserve the same task and report files. Mark verification as `self-review-fallback` when no independent reviewer exists.
+For `topic-research` or `hybrid`, independent workers are a publication requirement. If they are unavailable or declined, preserve provisional work under `.work/`, advance to `DRAFT_UNVERIFIED`, and stop before evidence approval, study-pack validation, learning activation, or a ready exam. A sequential main-agent pass may support the live conversation but cannot publish researched material.
 
 ## Main-agent responsibilities
 
@@ -50,6 +50,10 @@ After every source extractor and research worker in the run has submitted, route
 ### Pass D: final citation verification
 
 Run citation verification only on the claims retained after contradiction review. This is the final worker phase before the main agent approves evidence, which avoids reopening locators for material already rejected as contradictory, stale, duplicated, or out of scope.
+
+### Pass E: assessment generation and validation
+
+After final citation verification and main-agent evidence approval, dispatch one assessment generator. When it completes, dispatch a different assessment validator. The validator checks answer-key support, ambiguity, distractors, duplicates, chapter coverage, and the exact 80/20 format contract. It must not approve its own generated items.
 
 ## Task rules
 
@@ -94,14 +98,15 @@ A citation verifier may mark `VERIFIED`; only the main agent may mark `APPROVED`
 
 ## Executable dispatch gate
 
-Before spawning any task, and again whenever a completion arrives, run:
+Compile the approved plan instead of hand-authoring it, then run the gate before spawning any task and whenever a completion arrives:
 
 ```bash
+python scripts/create_research_plan.py studies/my-study --research-workers 3 --authorized
 python scripts/validate_orchestration.py studies/my-study/.work/orchestration/run-plan.yaml \
   --course-root studies/my-study
 ```
 
-Dispatch only task IDs listed in `ready_task_ids`. A citation verifier will not appear there until every extraction, research, and contradiction-review task has submitted. A task marked submitted without a matching `completion-envelope-v1` record fails validation. The main agent updates task state and reruns this gate; workers and the completion router never infer readiness themselves.
+Dispatch only task IDs listed in `ready_task_ids`. Citation verification remains unavailable until every extraction, research, and contradiction task submits. Assessment generation remains unavailable until citation verification submits; assessment validation remains unavailable until generation submits. A submitted task without a matching `completion-envelope-v1` fails validation. The main agent updates task state and reruns this gate; workers and the completion router never infer readiness themselves.
 
 ## Cost controls
 

@@ -1,0 +1,12 @@
+{
+  "schema_version": "exam-v1",
+  "exam_id": "EXAM-001",
+  "course_id": "STUDY-001",
+  "title": "Example exam",
+  "status": "draft",
+  "source_status": "review_needed",
+  "question_count": 0,
+  "estimated_minutes": 5,
+  "concept_ids": [],
+  "questions": []
+}

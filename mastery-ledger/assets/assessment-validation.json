@@ -1,0 +1,16 @@
+{
+  "schema_version": "assessment-validation-v1",
+  "decision": "changes_required",
+  "validated_question_ids": [],
+  "rejected_question_ids": [],
+  "checks": {
+    "answer_key_support": "pending",
+    "ambiguity": "pending",
+    "distractors": "pending",
+    "duplicates": "pending",
+    "chapter_coverage": "pending",
+    "format_ratio": "pending",
+    "app_compatibility": "pending"
+  },
+  "issues": []
+}

@@ -7,6 +7,7 @@ Build a bounded, current, source-grounded corpus for an on-the-fly learning topi
 ## Preconditions
 
 The learning outcome, scope, exclusions, source policy, and worker budget must be approved. If they are not, return to `intake-and-scope.md`.
+The calibration disposition and authorized deterministic run plan must also exist. If subagents are unavailable, stop at `DRAFT_UNVERIFIED`; do not convert a conversational self-review into publishable evidence.
 
 ## Scout before fan-out
 
@@ -38,6 +39,8 @@ Open and inspect a source before citing it. Record publication date, subject dat
 Respect the approved source limit. Stop when objectives and prerequisites are adequately supported. More sources are not automatically better.
 
 Create a source manifest entry for every inspected source. Workers submit claims through evidence packets, not prose-only summaries.
+
+For every retained source, create `source/SRC-NNN.md` containing the extracted knowledge and exact locators. Keep downloaded originals and media under `source/media/SRC-NNN/`. Set `knowledge_path` in the manifest and do not mark the source `ready` until the Markdown artifact exists and is non-empty.
 
 ## Current and disputed material
 

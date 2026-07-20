@@ -9,6 +9,7 @@ sources:
     source_type: local_document
     original_location: /absolute/path/to/source.md
     local_path: source/media/SRC-001/source.md
+    knowledge_path: source/SRC-001.md
     publication_date: null
     subject_date: null
     retrieved_at: "2026-07-19T00:00:00Z"
@@ -26,4 +27,6 @@ sources:
     supersedes: null
     superseded_by: null
     items: []
-    artifacts: []
+    artifacts:
+      - kind: extracted_knowledge
+        path: source/SRC-001.md

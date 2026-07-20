@@ -1,29 +1,42 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "question-bank-v2",
   "source_ref_schema": "source-ref-v1",
   "study_id": "STUDY-001",
+  "chapters": [
+    {
+      "chapter_id": "CH-001",
+      "title": "Example chapter",
+      "class": "core",
+      "lesson_path": "lessons/CH-001.md"
+    }
+  ],
   "questions": [
     {
-      "question_id": "Q-001",
+      "question_id": "Q-CH1-001",
+      "chapter_id": "CH-001",
       "concept_ids": ["concept-id"],
       "objective_ids": ["OBJ-001"],
-      "type": "free-recall",
+      "type": "multiple-choice",
+      "format": "standalone_mcq",
       "difficulty": 2,
-      "prompt": "Explain the concept in your own words.",
-      "correct_answer": "A concise reference answer.",
-      "acceptable_answer_elements": ["required element"],
-      "common_wrong_answers": [],
-      "distractors": [],
-      "explanation": "Why the answer is correct.",
-      "hint_ladder": ["retrieval cue", "conceptual clue"],
+      "prompt": "Which option best demonstrates the example concept?",
+      "options": [
+        {"option_id": "A", "text": "A plausible misconception"},
+        {"option_id": "B", "text": "The source-supported application"},
+        {"option_id": "C", "text": "A related but different concept"},
+        {"option_id": "D", "text": "An overgeneralization"}
+      ],
+      "correct_option_id": "B",
+      "correct_explanation": "Option B applies the concept as supported by the cited source.",
+      "distractor_rationales": {
+        "A": "Targets a common misconception.",
+        "C": "Confuses two adjacent concepts.",
+        "D": "Extends the claim beyond its supported scope."
+      },
       "source_refs": [
         {
           "source_id": "SRC-001",
-          "locator": {
-            "kind": "section",
-            "value": "1",
-            "label": "Section 1"
-          },
+          "locator": {"kind": "section", "value": "1", "label": "Section 1"},
           "supports": ["correct_answer", "explanation"],
           "support_strength": "direct"
         }
