@@ -1,6 +1,6 @@
-# LinkVault Learning design decisions
+# Mastery Ledger design decisions
 
-This document records product and architecture decisions while the `linkvault-learning` skill is revised. It stays outside the packaged skill so that the skill contains only runtime instructions, reusable references, scripts, and output assets.
+This document records product and architecture decisions for the `mastery-ledger` skill and application. It stays outside the packaged skill so that the skill contains only runtime instructions, reusable references, scripts, and output assets.
 
 ## Decision status
 
@@ -23,7 +23,7 @@ This document records product and architecture decisions while the `linkvault-le
 This is provisional until decisions 2, 4, 5, 7, and 8 are examined.
 
 ```text
-<workspace>/linkvault-courses/<course-id>/
+<workspace>/mastery-ledger-courses/<course-id>/
   course.yaml
   source/
     *.md
@@ -45,9 +45,9 @@ The packaged skill contains reusable templates, schemas, scripts, and workflow i
 
 ## First-run workspace and registry
 
-On the first learning request, when no valid workspace has been configured, ask the learner where to create the LinkVault Learning workspace. Combine this with the mandatory source invitation so the first response contains no more than two high-impact questions:
+On the first learning request, when no valid workspace has been configured, ask the learner where to create the Mastery Ledger workspace. Combine this with the mandatory source invitation so the first response contains no more than two high-impact questions:
 
-> Where should I create your LinkVault Learning workspace? Suggested: `<current-workspace>/linkvault-courses`. You can provide another absolute folder path.
+> Where should I create your Mastery Ledger workspace? Suggested: `<current-workspace>/mastery-ledger-courses`. You can provide another absolute folder path.
 >
 > Do you have any documents, links, websites, videos, audio, subtitles, or existing course material you want included or excluded?
 
@@ -63,7 +63,7 @@ Persist the preference in a small per-user runtime registry, not in the installe
     {
       "workspace_id": "WS-001",
       "name": "Primary learning workspace",
-      "root": "D:/Learning/linkvault-courses",
+      "root": "D:/Learning/mastery-ledger-courses",
       "created_at": "2026-07-19T18:00:00Z",
       "last_used_at": "2026-07-19T18:00:00Z"
     }
@@ -86,7 +86,7 @@ Create a focused, professional exam interface inspired by computer-based CPA tes
 Keep presentation code fixed and keep LLM-generated content structured:
 
 ```text
-linkvault-learning/
+mastery-ledger/
   assets/
     exam-template/
       index.html
@@ -112,7 +112,7 @@ The fixed JavaScript reads the data and controls navigation, scoring, feedback, 
 Package the reusable interface with the skill:
 
 ```text
-linkvault-learning/
+mastery-ledger/
   assets/
     exam-app/
       index.html
@@ -357,7 +357,7 @@ Use status text and icons in addition to color. On smaller screens, collapse the
 
 #### Revised implementation direction
 
-Build the first template from the approved LinkVault contracts. Use the projects above as interaction references, not runtime dependencies. Create screenshots of setup, active exam, correct feedback, incorrect feedback, submission confirmation, results, and review states as explicit visual acceptance artifacts before calling the template polished.
+Build the first template from the approved Mastery Ledger contracts. Use the projects above as interaction references, not runtime dependencies. Create screenshots of setup, active exam, correct feedback, incorrect feedback, submission confirmation, results, and review states as explicit visual acceptance artifacts before calling the template polished.
 
 #### Selected Focused Question interaction contract
 
@@ -392,7 +392,7 @@ Record these implementation lessons in the future `references/assessment-scoring
 - **Numbas:** treats each question part as a credit proportion multiplied by available marks, rejects invalid answers before scoring, can delay feedback, supports penalties for revealed steps, and encourages unit tests for marking algorithms.
 - **PrairieLearn:** lets an autograder return a score from `0` through `1`, which is multiplied by the points assigned to that test or question.
 
-For the initial LinkVault exam:
+For the initial Mastery Ledger exam:
 
 1. Score single-answer multiple choice as exactly `1` for the correct option and `0` otherwise.
 2. Score unanswered questions as `0` and report them separately from incorrect answers.
@@ -591,7 +591,7 @@ Never silently rewrite past attempts or review events. Every question progress r
 ### Required reusable additions
 
 ```text
-linkvault-learning/
+mastery-ledger/
   scripts/
     render_question_bank.py
     validate_question_bank.py
@@ -927,7 +927,7 @@ Do not create citation-verifier tasks during initial fan-out. Create them after 
 
 ### Paperclip-inspired reception desk
 
-Paperclip's useful pattern is not the corporate job titles themselves. It is the control plane behind them: explicit reporting lines, atomic task ownership, dependency-aware work queues, inbox state, approvals, budgets, and an audit trail. LinkVault should adopt those mechanics without keeping a large hierarchy of always-running manager agents. See the [Paperclip repository](https://github.com/paperclipai/paperclip) and [Paperclip documentation](https://docs.paperclip.ing/).
+Paperclip's useful pattern is not the corporate job titles themselves. It is the control plane behind them: explicit reporting lines, atomic task ownership, dependency-aware work queues, inbox state, approvals, budgets, and an audit trail. Mastery Ledger should adopt those mechanics without keeping a large hierarchy of always-running manager agents. See the [Paperclip repository](https://github.com/paperclipai/paperclip) and [Paperclip documentation](https://docs.paperclip.ing/).
 
 Use this topology:
 
@@ -1209,7 +1209,7 @@ Never store downloaded articles, videos, subtitles, transcripts, generated exams
 The default writable course root should be:
 
 ```text
-<active-workspace>/linkvault-courses/<course-id>/
+<active-workspace>/mastery-ledger-courses/<course-id>/
 ```
 
 When no writable workspace exists, use a user data location such as `~/ExamLedger/courses/<course-id>/`. Record the resolved absolute course root for the current run, but keep paths inside `course.yaml` relative so the course folder remains movable.
@@ -1366,7 +1366,7 @@ Keep the fragile behavior in packaged Python scripts rather than LLM-generated s
 ### Item 7 decisions to confirm
 
 1. Keep the installed skill immutable and store generated course data outside it.
-2. Default to `<workspace>/linkvault-courses/<course-id>` with a user-data fallback.
+2. Default to `<workspace>/mastery-ledger-courses/<course-id>` with a user-data fallback.
 3. Pass an explicit resolved `course_root` through every agent, script, log, and web-app action.
 4. Keep only source Markdown and `media/` at the root of `source/`.
 5. Use a bounded subtitle-first `yt-dlp` pipeline, followed by authorized audio download and local ASR only when needed.
@@ -1387,7 +1387,7 @@ The packaged skill frontmatter must contain only:
 
 ```yaml
 ---
-name: linkvault-learning
+name: mastery-ledger
 description: <trigger description>
 ---
 ```
@@ -1403,14 +1403,14 @@ This project is no longer a LinkVault feature. The standalone product is **Maste
 Keep the application and skill adapter in one repository initially so schemas, runtime commands, question formats, and web assets are released together:
 
 ```text
-exam-ledger/
+mastery-ledger/
   pyproject.toml
-  src/exam_ledger/          # Python application, runtime, scheduler, and local server
+  src/mastery_ledger/       # Python application, runtime, scheduler, and local server
   web/                      # frontend source
-  src/exam_ledger/web/      # prebuilt frontend included in application releases
+  src/mastery_ledger/web/   # prebuilt frontend included in application releases
   requirements/             # release lock files
   scripts/                  # developer/release bootstrap tools
-  skills/exam-ledger/       # optional thin Codex skill adapter
+  skills/mastery-ledger/    # optional thin Codex skill adapter
   tests/
 ```
 
@@ -1418,10 +1418,10 @@ Do not create a separate dependency repository. Third-party Python packages come
 
 Produce two release artifacts from the same version:
 
-1. **Exam Ledger application/runtime** — installed once and usable without Codex. It owns the web app, course workspace, scheduler, Python environment, yt-dlp integration, transcription, logs, and local API/CLI.
-2. **Exam Ledger skill adapter** — optional and lightweight. It teaches Codex when and how to call the installed runtime, how to ask intake questions, and how to interpret structured results. It does not contain the web application, third-party packages, models, native binaries, or generated course data.
+1. **Mastery Ledger application/runtime** — installed once and usable without Codex. It owns the web app, course workspace, scheduler, Python environment, yt-dlp integration, transcription, logs, and local API/CLI.
+2. **Mastery Ledger skill adapter** — optional and lightweight. It teaches Codex when and how to call the installed runtime, how to ask intake questions, and how to interpret structured results. It does not contain the web application, third-party packages, models, native binaries, or generated course data.
 
-The skill may be bundled as an optional component of the application installer or installed separately from the same release. In either case, the skill first runs `exam-ledger doctor --json`. If the application runtime is absent or incompatible, return `needs_user_action` with the official installer location. Do not make the skill clone a repository, run an unpinned package installation, or assemble its own competing runtime.
+The skill may be bundled as an optional component of the application installer or installed separately from the same release. In either case, the skill first runs `mastery-ledger doctor --json`. If the application runtime is absent or incompatible, return `needs_user_action` with the official installer location. Do not make the skill clone a repository, run an unpinned package installation, or assemble its own competing runtime.
 
 ### Installation and onboarding boundary
 
@@ -1431,7 +1431,7 @@ Keep installation and onboarding distinct:
 Install application release
   -> validate locked Python runtime and bundled web assets
   -> optionally install the matching Codex skill adapter
-  -> run exam-ledger doctor
+  -> run mastery-ledger doctor
   -> start first-run learner onboarding
 ```
 
@@ -1458,13 +1458,13 @@ connectors/
 
 The core source contract accepts files, URLs, pasted text, and local media without LinkVault. A LinkVault connector may later translate LinkVault records into the same source contract, but it must not own courses, exams, progress, or orchestration.
 
-### Rename guardrail
+### Rename status and guardrail
 
-The current `linkvault-learning/` folder and this decision-document filename remain historical implementation names until the standalone rename is performed as one atomic migration. Do not partially mix `linkvault-learning`, `Exam Ledger`, and a third name across package metadata, commands, schemas, and storage paths. The migration must update the skill name, Python package, CLI, web-app labels, default directories, tests, and documentation together.
+The standalone identity migration is complete: the skill folder, decision record, metadata, command contract, Python package plan, default directories, tests, and documentation use `mastery-ledger`. Keep **Exam Ledger** as the assessment interface name and LinkVault as an optional connector. Do not reintroduce historical product identifiers into core schemas, storage paths, commands, or web-app labels.
 
 ### Item 10 decisions to confirm
 
-1. Make Exam Ledger a standalone application that functions without LinkVault or Codex.
+1. Make Mastery Ledger a standalone application that functions without LinkVault or Codex; Exam Ledger is its assessment interface.
 2. Keep application source and the optional Codex skill adapter in one repository and version them together.
 3. Install the application/runtime separately; keep the skill adapter thin and incapable of silently constructing another runtime.
 4. Install locked Python dependencies with the application, while downloading ASR models only on demand after displaying their size.

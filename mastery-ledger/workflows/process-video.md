@@ -52,7 +52,7 @@ python scripts/download_media.py "https://example.invalid/video" \
   --mode subtitles --languages "en.*,zh.*"
 ```
 
-This wrapper requires `yt-dlp`, does not accept cookies, and writes a job manifest. Use the existing LinkVault ingestion service instead when it has an audited, durable downloader API.
+This wrapper requires `yt-dlp`, does not accept cookies, and writes a job manifest. Use the installed Mastery Ledger runtime instead when it exposes an audited, durable downloader API.
 
 ### Local ASR
 
@@ -67,7 +67,7 @@ This optionally uses `faster-whisper`. Record model, version, source hash, langu
 
 ## Durable product integration
 
-For the LinkVault application, downloading and transcription should be durable backend jobs, not conversation-only processes. Use states:
+For the Mastery Ledger application, downloading and transcription should be durable backend jobs, not conversation-only processes. Use states:
 
 `QUEUED`, `RUNNING`, `NEEDS_USER_ACTION`, `PARTIAL`, `COMPLETE`, `FAILED`, `CANCELLED`.
 

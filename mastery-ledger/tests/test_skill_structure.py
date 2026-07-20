@@ -31,7 +31,7 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "references" / "mastery-model.md",
             ROOT / "references" / "quality-rubric.md",
             ROOT / "references" / "runtime-portability.md",
-            ROOT / "references" / "linkvault-integration.md",
+            ROOT / "references" / "linkvault-connector.md",
         ]
         missing = [str(path.relative_to(ROOT)) for path in required if not path.exists()]
         self.assertEqual([], missing, f"Missing required files: {missing}")
@@ -43,8 +43,31 @@ class SkillStructureTests(unittest.TestCase):
         frontmatter = match.group(1) if match else ""
         keys = re.findall(r"(?m)^([a-zA-Z][a-zA-Z0-9_-]*):", frontmatter)
         self.assertEqual(["name", "description"], keys)
-        self.assertRegex(frontmatter, r"(?m)^name: linkvault-learning$")
+        self.assertRegex(frontmatter, r"(?m)^name: mastery-ledger$")
         self.assertRegex(frontmatter, r"(?m)^description: .+")
+
+    def test_package_uses_mastery_ledger_identity(self) -> None:
+        self.assertEqual("mastery-ledger", ROOT.name)
+        metadata = (ROOT / "agents" / "openai.yaml").read_text(encoding="utf-8")
+        self.assertIn('display_name: "Mastery Ledger"', metadata)
+        self.assertIn("$mastery-ledger", metadata)
+
+    def test_linkvault_is_isolated_to_optional_connector(self) -> None:
+        allowed = {
+            ROOT / "SKILL.md",
+            ROOT / "references" / "runtime-portability.md",
+            ROOT / "references" / "linkvault-connector.md",
+        }
+        violations: list[str] = []
+        for path in ROOT.rglob("*"):
+            if not path.is_file() or path in allowed or "tests" in path.parts:
+                continue
+            if path.suffix.lower() not in {".md", ".py", ".yaml", ".yml", ".json"}:
+                continue
+            content = path.read_text(encoding="utf-8")
+            if re.search(r"linkvault", content, re.IGNORECASE):
+                violations.append(str(path.relative_to(ROOT)))
+        self.assertEqual([], violations, f"LinkVault leaked outside optional connector: {violations}")
 
     def test_root_controller_stays_small_and_portable(self) -> None:
         content = (ROOT / "SKILL.md").read_text(encoding="utf-8")

@@ -38,9 +38,9 @@ When absent:
 - record `self-review-fallback`;
 - avoid claiming evaluator independence.
 
-## MCP and LinkVault
+## Application runtime and optional connectors
 
-The skill may call an installed LinkVault MCP or local service when exposed by the runtime. Tool names and schemas must be discovered rather than invented. If no service exists, use workspace files and bundled scripts for the supported subset.
+The skill may call an installed Mastery Ledger runtime when exposed. Tool names and schemas must be discovered rather than invented. If no runtime exists, use workspace files and bundled scripts for the supported subset. Read the optional LinkVault connector contract only when the learner asks to use it.
 
 The durable application service should own operational state. The skill should not open or mutate an application database directly unless that database contract explicitly allows it.
 

@@ -1,8 +1,8 @@
-# LinkVault integration
+# Optional LinkVault connector
 
 ## Principle
 
-Use the real LinkVault service or exported course bundle when available. Do not invent tool names, database tables, folder layouts, or downloader capabilities from this skill.
+Read this reference only when the learner explicitly provides LinkVault material or asks to use a LinkVault service. LinkVault is an optional source connector, not a Mastery Ledger dependency or storage owner. Use the real service or exported course bundle when available. Do not invent tool names, database tables, folder layouts, or downloader capabilities.
 
 ## Integration order
 

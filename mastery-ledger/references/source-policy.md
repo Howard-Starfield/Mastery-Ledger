@@ -8,7 +8,7 @@ Use only the supplied corpus. Mark questions that cannot be answered. Do not bro
 
 ### Existing-library
 
-Import existing LinkVault or course artifacts. Preserve the course, module, lesson, and media hierarchy.
+Import existing course artifacts. Preserve the course, module, lesson, and media hierarchy. Optional connector-specific imports follow their own reference contract.
 
 ### Topic-research
 

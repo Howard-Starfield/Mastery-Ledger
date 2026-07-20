@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the structural integrity of a LinkVault learning workspace."""
+"""Validate the structural integrity of a Mastery Ledger course workspace."""
 
 from __future__ import annotations
 

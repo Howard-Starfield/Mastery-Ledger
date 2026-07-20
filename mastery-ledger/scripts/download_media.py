@@ -2,7 +2,7 @@
 """Rights-aware wrapper around yt-dlp for permitted media acquisition.
 
 The script refuses unknown rights, does not accept cookies or credentials, and
-writes a manifest of produced files. Prefer an audited LinkVault backend when
+writes a manifest of produced files. Prefer an audited durable ingestion backend when
 one is available.
 """
 

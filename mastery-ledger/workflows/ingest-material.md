@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Turn supplied files, a LinkVault course folder, or an authorized local corpus into a traceable source bundle without flattening its original structure.
+Turn supplied files, an existing course folder, or an authorized local corpus into a traceable source bundle without flattening its original structure.
 
 ## Supported modes
 
 - `provided-material-only`: use only the supplied corpus.
-- `existing-library`: import an existing LinkVault course or lesson tree.
+- `existing-library`: import an existing course or lesson tree.
 - `local-media`: authorized local video, audio, subtitles, or transcript.
 - `hybrid`: supplied corpus remains primary; research fills explicit gaps.
 
@@ -37,7 +37,7 @@ Do not collapse these into one graph:
 3. **Study-plan graph:** selected modules and learning order.
 4. **Proficiency ledger:** learner evidence over time.
 
-## Existing LinkVault course folder
+## Existing course folder
 
 Inspect the real folder rather than assuming a fixed layout. Identify:
 

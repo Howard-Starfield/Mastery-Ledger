@@ -61,13 +61,13 @@ Question content is data, not generated interface code. A fixed local web templa
 README.md                                product overview and workflow
 demo/study-ledger-course/                attributed, source-grounded demo
 design-mockups/                          dashboard and exam-interface concepts
-linkvault-learning/                      current pre-rename skill prototype
-LINKVAULT_LEARNING_DESIGN_DECISIONS.md   architecture decision record
+mastery-ledger/                         installable skill prototype
+MASTERY_LEDGER_DESIGN_DECISIONS.md      architecture decision record
 LLM Wiki.md                              original knowledge-wiki concept notes
 LICENSE                                  MIT license
 ```
 
-The `linkvault-learning` identifiers are historical prototype names. The application, CLI, storage paths, tests, and installable skill will move to the `mastery-ledger` namespace together in one migration.
+The installable skill now uses the `mastery-ledger` identity. LinkVault appears only as an optional source connector; it is not a runtime dependency or storage owner.
 
 ## Attribution
 

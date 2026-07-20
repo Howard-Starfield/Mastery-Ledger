@@ -128,4 +128,4 @@ created_at: "..."
 updated_at: "..."
 ```
 
-The durable LinkVault service—not the agent conversation—should own job state, retries, cancellation, and crash recovery.
+The durable Mastery Ledger runtime—not the agent conversation—should own job state, retries, cancellation, and crash recovery.

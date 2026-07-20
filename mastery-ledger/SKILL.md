@@ -1,9 +1,9 @@
 ---
-name: linkvault-learning
-description: Use when a user wants to learn from supplied documents, an existing course folder, authorized video or audio, subtitles, or a researched topic; also use to build or resume a cited study, scope subtopics, quiz the learner, review weak concepts, or decide whether an adjacent branch should become a separate study.
+name: mastery-ledger
+description: Build and maintain source-grounded learning courses from documents, websites, video, audio, or researched material; create a cited knowledge wiki and exam-style assessments; track attempts and schedule long-term mastery reviews. Use when a learner asks to study, understand, research, ingest learning sources, generate an exam, revisit a course, or review due questions.
 ---
 
-# LinkVault Learning
+# Mastery Ledger
 
 ## Core principle
 
@@ -31,7 +31,7 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 
 ## Route by phase
 
-- Supplied files or a LinkVault course folder: read [ingest material](workflows/ingest-material.md) and, when connecting to the application, [LinkVault integration](references/linkvault-integration.md).
+- Supplied files or an existing course folder: read [ingest material](workflows/ingest-material.md). When the learner explicitly uses LinkVault, additionally read [optional LinkVault connector](references/linkvault-connector.md).
 - Video, audio, SRT, or VTT: additionally read [process video](workflows/process-video.md) and [video transcript contract](references/video-transcript-contract.md).
 - Topic requiring external research: read [research topic](workflows/research-topic.md) and [source policy](references/source-policy.md).
 - Two or more independent research tasks: read [orchestrate research](workflows/orchestrate-research.md), [agent roles](references/agent-roles.md), and [task and evidence contract](references/task-and-evidence-contract.md).
@@ -102,4 +102,4 @@ Use [quality rubric](references/quality-rubric.md), [topic splitting policy](ref
 - [Mastery model](references/mastery-model.md)
 - [Quality rubric](references/quality-rubric.md)
 - [Runtime portability](references/runtime-portability.md)
-- [LinkVault integration](references/linkvault-integration.md)
+- [Optional LinkVault connector](references/linkvault-connector.md)
