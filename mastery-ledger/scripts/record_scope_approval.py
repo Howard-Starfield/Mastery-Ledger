@@ -25,8 +25,8 @@ def main() -> int:
     args = parser.parse_args()
     if not 1 <= args.source_limit <= 20:
         parser.error("Source limit must be 1-20.")
-    if not 0 <= args.research_workers <= 5:
-        parser.error("Research worker count must be 0-5.")
+    if args.research_workers != 0:
+        parser.error("research_workers must be 0; new runs use source-specific extractors instead of concept-research workers.")
 
     root = args.course_root.resolve()
     path = root / "study.yaml"
@@ -34,10 +34,10 @@ def main() -> int:
     if not isinstance(study, dict):
         parser.error("study.yaml must contain a YAML object.")
     mode = str(study.get("mode", ""))
-    if mode in {"topic-research", "hybrid"} and args.research_workers < 1:
-        parser.error("A researched publishable course requires at least one research worker.")
-    if mode not in {"topic-research", "hybrid"} and args.research_workers != 0:
-        parser.error("Provided-source modes use zero research workers; assessment validation is recorded separately.")
+    if mode in {"topic-research", "hybrid"} and args.source_limit > 5:
+        parser.error("Verified Course research may retain at most five sources; the default is three.")
+    if mode == "hybrid" and args.source_limit < 2:
+        parser.error("Anchor-plus-corroboration requires room for at least one anchor and one corroborating source.")
 
     now = datetime.now(timezone.utc).isoformat()
     study["scope_approval"] = {
@@ -50,6 +50,7 @@ def main() -> int:
         "excluded": args.excluded,
     }
     study["learner_goal"] = args.summary.strip()
+    study["source_policy"] = mode
     study["learning_contract"] = {
         "status": "approved",
         "approved_at": now,
@@ -59,6 +60,14 @@ def main() -> int:
         "excluded": args.excluded,
         "source_limit": args.source_limit,
         "research_workers": args.research_workers,
+        "output_contract": {
+            "lesson_schema": "lesson-v1",
+            "default_chapter_range": "1-3",
+            "standard_lesson_words": "1200-1800",
+            "question_tier": "standard",
+            "questions_per_chapter": 10,
+            "ready_exam_required": True,
+        },
     }
     study.setdefault("workflow_target", "LEARNING_ACTIVE")
     study["updated_at"] = now

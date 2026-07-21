@@ -4,7 +4,7 @@
 
 ### Provided-material-only
 
-Use only the supplied corpus. Mark questions that cannot be answered. Do not browse or silently add general knowledge.
+This is the default for supplied documents, webpages, and extracted text. Use `local-media` instead when anchor-only video or audio requires media processing, and `existing-library` for imported course trees. Treat the supplied corpus as the anchor and use only that corpus. Mark questions that cannot be answered. Do not browse or silently add general knowledge.
 
 ### Existing-library
 
@@ -16,7 +16,7 @@ Use current high-quality external sources within the approved scope and source b
 
 ### Hybrid
 
-Treat supplied material as the primary curriculum. Use external research only for approved prerequisites, gaps, corrections, updates, or comparisons.
+Use only after the learner explicitly chooses anchor plus corroboration. Treat supplied material as the primary curriculum. Register the anchor first, then run bounded source discovery and register at least one retained corroborating source. Use external research only for approved prerequisites, gaps, corrections, updates, or comparisons.
 
 ## Evidence hierarchy
 
@@ -43,14 +43,15 @@ Source priority is contextual. A user-experience question may require user repor
 
 ## Rights basis for media
 
-Remote media acquisition requires:
+Public-page inspection and metadata-only probing do not require a media rights declaration and must record `not_applicable_metadata_probe`. Remote caption, audio, or video acquisition requires one internal basis:
 
 - `user_owned`
 - `platform_permitted_download`
 - `public_license`
 - `explicit_permission`
+- `user_attested_authorized_use`
 
-`unknown` means do not download. Never ask for cookies or credentials inside the skill, manifests, reports, or logs. Never bypass DRM, authentication, paywalls, or access controls.
+Do not expose these identifiers as a learner question. Immediately before acquisition, ask: `May I save captions or audio from this video locally for your personal study? Please confirm you have the necessary permission. If not or unsure, I’ll continue without downloading and use only the public page and other sources.` A clear confirmation may be recorded as `user_attested_authorized_use`; use a more specific basis when the learner states one. `unknown` means do not download. Never ask for cookies or credentials inside the skill, manifests, reports, or logs. Never bypass DRM, authentication, paywalls, or access controls.
 
 ## Privacy and processing
 

@@ -139,7 +139,7 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
     with tempfile.TemporaryDirectory() as directory:
         studies = Path(directory)
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Publishable Course", "--studies-dir", str(studies)],
+            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Publishable Course", "--mode", "topic-research", "--studies-dir", str(studies)],
             check=True,
             capture_output=True,
             text=True,
@@ -153,7 +153,7 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
             text=True,
         )
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Publish the bounded fixture", "--source-limit", "5", "--research-workers", "2", "--accepted-branch", "concept-id", "--excluded", "out-of-scope"],
+            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Publish the bounded fixture", "--source-limit", "5", "--research-workers", "0", "--accepted-branch", "concept-id", "--excluded", "out-of-scope"],
             check=True,
             capture_output=True,
             text=True,
@@ -174,7 +174,7 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
             text=True,
         )
         assert sources_ready.returncode == 2, sources_ready.stdout + sources_ready.stderr
-        assert json.loads(sources_ready.stdout)["current_state"] == "SOURCES_READY"
+        assert json.loads(sources_ready.stdout)["current_state"] == "CORPUS_MAPPED"
 
         bank_path = course / "questions" / "question-bank.json"
         bank = {
@@ -193,7 +193,7 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
         }, indent=2) + "\n", encoding="utf-8")
 
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "create_research_plan.py"), str(course), "--research-workers", "2", "--authorized"],
+            [sys.executable, str(ROOT / "scripts" / "create_research_plan.py"), str(course), "--research-workers", "0", "--authorized"],
             check=True,
             capture_output=True,
             text=True,
@@ -201,7 +201,6 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
         plan_path = course / ".work" / "orchestration" / "run-plan.yaml"
         plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
         question_ids = [item["question_id"] for item in bank["questions"]]
-        research_task_ids = [item["task_id"] for item in plan["task_graph"] if item["role"] == "research-worker"]
         extractor_task_ids = [item["task_id"] for item in plan["task_graph"] if item["role"] == "source-extractor"]
 
         def complete_task(task_id: str, output: dict) -> dict:
@@ -246,33 +245,8 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
             assert json.loads(routed.stdout)["status"] == "accepted"
             return yaml.safe_load(plan_path.read_text(encoding="utf-8"))
 
-        mapper_output = {
-            "schema_version": "corpus-map-v1",
-            "run_id": plan["run_id"],
-            "task_id": "TASK-MAP",
-            "worker_role": "corpus-mapper",
-            "status": "proposed_unapproved",
-            "sources_used": ["SRC-001"],
-            "concepts": [{"concept_id": "concept-id", "name": "Concept", "coverage_source_ids": ["SRC-001"], "prerequisite_candidates": [], "ambiguities": [], "gaps": []}],
-            "proposed_tasks": [
-                {"task_id": task_id, "objective": f"Investigate bounded lane {task_id}.", "scope_included": ["concept-id"], "scope_excluded": ["out-of-scope"], "concept_ids": ["concept-id"], "source_ids": ["SRC-001"]}
-                for task_id in research_task_ids
-            ],
-            "ambiguities": [],
-            "gaps": [],
-        }
-        complete_task("TASK-MAP", mapper_output)
         for task_id in extractor_task_ids:
             complete_task(task_id, {"schema_version": "evidence-packet-v1", "source_ref_schema": "source-ref-v1", "report_id": f"REPORT-{task_id}", "task_id": task_id, "worker_role": "source-extractor", "scope": {"included": ["concept-id"], "excluded": ["out-of-scope"]}, "sources_used": ["SRC-001"], "claims": [], "contradictions": [], "unresolved_questions": [], "suggested_concepts": [], "scope_drift": [], "quality_notes": []})
-        frozen = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "freeze_corpus_map.py"), str(course)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        assert frozen.returncode == 0, frozen.stdout + frozen.stderr
-        for task_id in research_task_ids:
-            complete_task(task_id, {"schema_version": "evidence-packet-v1", "source_ref_schema": "source-ref-v1", "report_id": f"REPORT-{task_id}", "task_id": task_id, "worker_role": "research-worker", "scope": {"included": ["concept-id"], "excluded": ["out-of-scope"]}, "sources_used": ["SRC-001"], "claims": [], "contradictions": [], "unresolved_questions": [], "suggested_concepts": [], "scope_drift": [], "quality_notes": []})
         complete_task("TASK-CONTRADICTIONS", {"schema_version": "contradiction-review-v1", "status": "complete", "retained_claim_ids": ["CLM-001"], "rejected_claim_ids": [], "contradictions": [], "gaps": []})
         complete_task("TASK-CITATIONS", {"schema_version": "citation-review-v1", "decision": "verified", "verified_claim_ids": ["CLM-001"], "rejected_claim_ids": [], "issues": [], "checked_source_ids": ["SRC-001"], "remaining_gaps": []})
 
@@ -292,7 +266,6 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
             text=True,
         )
         assert assessment.returncode == 0, assessment.stdout + assessment.stderr
-        complete_task("TASK-ASSESSMENT-GENERATE", bank)
         complete_task("TASK-ASSESSMENT-VALIDATE", {"schema_version": "assessment-validation-v1", "decision": "approved", "validated_question_ids": question_ids, "rejected_question_ids": [], "issues": []})
 
         build = subprocess.run(
@@ -374,7 +347,7 @@ def test_calibration_record_is_bounded_and_workflow_cannot_skip_gates() -> None:
     with tempfile.TemporaryDirectory() as directory:
         studies = Path(directory)
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Calibration Course", "--studies-dir", str(studies)],
+            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Calibration Course", "--mode", "topic-research", "--studies-dir", str(studies)],
             check=True,
             capture_output=True,
             text=True,
@@ -425,11 +398,11 @@ def test_calibration_record_is_bounded_and_workflow_cannot_skip_gates() -> None:
         assert study["publication_status"] == "DRAFT_UNVERIFIED"
 
 
-def test_provided_source_assessment_plan_starts_with_generator_only() -> None:
+def test_provided_source_assessment_plan_starts_with_independent_validator() -> None:
     with tempfile.TemporaryDirectory() as directory:
         studies = Path(directory)
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Provided Course", "--studies-dir", str(studies)],
+            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Provided Course", "--mode", "provided-material-only", "--studies-dir", str(studies)],
             check=True,
             capture_output=True,
             text=True,
@@ -445,7 +418,8 @@ def test_provided_source_assessment_plan_starts_with_generator_only() -> None:
         assert compiled.returncode == 0, compiled.stdout + compiled.stderr
         plan = yaml.safe_load((course / ".work" / "orchestration" / "run-plan.yaml").read_text(encoding="utf-8"))
         assert plan["plan_origin"] == {"kind": "generated", "compiler": "create_assessment_plan.py"}
-        assert plan["execution_requirements"] == {"independent_workers": True, "parallelism_required": False}
+        assert plan["execution_requirements"]["dispatch_mode"] == "capacity_queue"
+        assert plan["execution_requirements"]["normal_active_limit"] == 3
         assert "capabilities" not in plan
         preflight = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "validate_orchestration.py"), str(course / ".work" / "orchestration" / "run-plan.yaml"), "--course-root", str(course)],
@@ -456,9 +430,9 @@ def test_provided_source_assessment_plan_starts_with_generator_only() -> None:
         assert preflight.returncode == 0, preflight.stdout + preflight.stderr
         preflight_payload = json.loads(preflight.stdout)
         assert preflight_payload["ready_task_ids"] == []
-        assert preflight_payload["context_required_task_ids"] == ["TASK-ASSESSMENT-GENERATE"]
+        assert preflight_payload["context_required_task_ids"] == ["TASK-ASSESSMENT-VALIDATE"]
         context = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "compile_worker_context.py"), str(course), "TASK-ASSESSMENT-GENERATE", "--json"],
+            [sys.executable, str(ROOT / "scripts" / "compile_worker_context.py"), str(course), "TASK-ASSESSMENT-VALIDATE", "--json"],
             check=False,
             capture_output=True,
             text=True,
@@ -472,14 +446,14 @@ def test_provided_source_assessment_plan_starts_with_generator_only() -> None:
         )
         assert checked.returncode == 0, checked.stdout + checked.stderr
         payload = json.loads(checked.stdout)
-        assert payload["ready_task_ids"] == ["TASK-ASSESSMENT-GENERATE"]
+        assert payload["ready_task_ids"] == ["TASK-ASSESSMENT-VALIDATE"]
 
 
 def test_hand_authored_assessment_tasks_cannot_masquerade_as_research_plan() -> None:
     with tempfile.TemporaryDirectory() as directory:
         studies = Path(directory)
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Incident Course", "--studies-dir", str(studies)],
+            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Incident Course", "--mode", "provided-material-only", "--studies-dir", str(studies)],
             check=True,
             capture_output=True,
             text=True,
@@ -538,7 +512,7 @@ def test_legacy_terminal_draft_is_migrated_to_resumable_publication_status() -> 
     with tempfile.TemporaryDirectory() as directory:
         studies = Path(directory)
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Legacy Draft", "--studies-dir", str(studies)],
+            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Legacy Draft", "--mode", "topic-research", "--studies-dir", str(studies)],
             check=True,
             capture_output=True,
             text=True,
@@ -575,7 +549,7 @@ def test_reconciliation_returns_exact_next_work_and_stops_repeated_no_progress()
     with tempfile.TemporaryDirectory() as directory:
         studies = Path(directory)
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Recursive Course", "--studies-dir", str(studies)],
+            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Recursive Course", "--mode", "topic-research", "--studies-dir", str(studies)],
             check=True,
             capture_output=True,
             text=True,
@@ -612,7 +586,7 @@ def test_reconciliation_returns_exact_next_work_and_stops_repeated_no_progress()
             text=True,
         )
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Research the approved topic", "--source-limit", "5", "--research-workers", "1"],
+            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Research the approved topic", "--source-limit", "5", "--research-workers", "0"],
             check=True,
             capture_output=True,
             text=True,
@@ -631,7 +605,7 @@ def test_dispatch_gate_rejects_tampered_compiled_context() -> None:
     with tempfile.TemporaryDirectory() as directory:
         studies = Path(directory)
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Tamper Course", "--studies-dir", str(studies)],
+            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Tamper Course", "--mode", "provided-material-only", "--studies-dir", str(studies)],
             check=True,
             capture_output=True,
             text=True,
@@ -645,7 +619,7 @@ def test_dispatch_gate_rejects_tampered_compiled_context() -> None:
             text=True,
         )
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "compile_worker_context.py"), str(course), "TASK-ASSESSMENT-GENERATE", "--json"],
+            [sys.executable, str(ROOT / "scripts" / "compile_worker_context.py"), str(course), "TASK-ASSESSMENT-VALIDATE", "--json"],
             check=True,
             capture_output=True,
             text=True,

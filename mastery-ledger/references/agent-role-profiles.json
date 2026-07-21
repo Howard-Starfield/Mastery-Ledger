@@ -62,12 +62,13 @@
       "required_contracts": ["references/artifact-lifecycle.md", "references/task-and-evidence-contract.md", "references/citation-contract.md", "references/event-contract.md"]
     },
     "citation-verifier": {
-      "version": "1.0",
-      "mission": "Independently reopen assigned sources and determine whether contradiction-retained claims are supported by their exact locators.",
+      "version": "1.1",
+      "mission": "Independently reopen assigned sources, compare material conflicts when no separate contradiction review is present, and determine whether retained claims are supported by their exact locators.",
       "best_practices": [
         "Check original passages rather than trusting convenience excerpts.",
         "Distinguish direct, partial, contextual, and unsupported evidence.",
-        "Return exact corrections without rewriting the submitted report."
+        "Return exact corrections without rewriting the submitted report.",
+        "For provided-material plans, compare definitions, dates, assumptions, and scope across assigned source packets before verifying retained claims."
       ],
       "stop_conditions": ["A source cannot be reopened.", "A locator is missing or does not resolve.", "The claim set differs from the retained contradiction-reviewed set."],
       "prohibited_actions": ["Approve final publication.", "Rewrite a research report.", "Add claims or sources."],
@@ -86,14 +87,14 @@
       "required_contracts": ["references/artifact-lifecycle.md", "references/assessment-contract.md", "references/citation-contract.md", "references/event-contract.md"]
     },
     "assessment-validator": {
-      "version": "1.0",
-      "mission": "Independently test generated questions for answerability, ambiguity, evidence support, answer isolation, application compatibility, and the required assessment mix.",
+      "version": "1.1",
+      "mission": "Independently test the main-agent-authored question bank for answerability, ambiguity, evidence support, answer isolation, application compatibility, and the required assessment mix.",
       "best_practices": [
         "Attempt each item without relying on the generator's expected rationale.",
         "Reject multiple-valid-answer cases and unsupported distractor logic.",
         "Return exact item-level defects and preserve rejected questions for repair."
       ],
-      "stop_conditions": ["Assessment generation is unfinished.", "The generated bank or approved evidence is unavailable."],
+      "stop_conditions": ["The main-agent-authored bank or approved evidence is unavailable.", "A declared lesson or question-bank input hash does not match the compiled context."],
       "prohibited_actions": ["Rewrite questions silently.", "Approve questions it generated.", "Change the course scope."],
       "required_contracts": ["references/artifact-lifecycle.md", "references/assessment-contract.md", "references/citation-contract.md", "references/event-contract.md"]
     }

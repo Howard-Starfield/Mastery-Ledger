@@ -49,7 +49,22 @@ def route(root: Path, task_id: str) -> dict[str, Any]:
     task = _task(plan, task_id)
     if task.get("context_status") != "compiled":
         raise ValueError(f"Task context is not compiled: {task_id}")
-    if task.get("status") in {"submitted", "verified", "approved", "merged"}:
+    accepted_task_states = {"submitted", "verified", "approved", "merged"}
+    if task.get("status") in {"blocked", "rejected", "superseded"}:
+        raise ValueError(f"Task is terminal and cannot accept another completion: {task_id}")
+    lease = task.get("worker_runtime")
+    if isinstance(lease, dict):
+        lease_state = str(lease.get("lease_state") or "idle")
+        managed = bool(lease.get("agent_id")) or lease_state != "idle"
+        allowed_lease_states = {"returned"}
+        if task.get("status") in accepted_task_states:
+            allowed_lease_states.add("closed")
+        if managed and lease_state not in allowed_lease_states:
+            raise ValueError(
+                f"Managed worker must be marked returned before completion routing: {task_id} "
+                f"(lease_state={lease_state})"
+            )
+    if task.get("status") in accepted_task_states:
         errors, warnings, ready = validate_plan(plan, course_root=root)
         if errors:
             return {

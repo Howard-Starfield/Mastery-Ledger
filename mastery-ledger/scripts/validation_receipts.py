@@ -43,6 +43,8 @@ def write_validation_receipt(root: Path, plan: dict[str, Any], task: dict[str, A
     completion_path = root / str(task.get("completion_path") or "")
     output = json.loads(output_path.read_text(encoding="utf-8"))
     completion = json.loads(completion_path.read_text(encoding="utf-8"))
+    context_path = root / str(task.get("context_path") or "")
+    context = json.loads(context_path.read_text(encoding="utf-8"))
     result = {key: output[key] for key in RESULT_FIELDS if key in output}
     receipt = {
         "schema_version": RECEIPT_SCHEMA,
@@ -64,6 +66,7 @@ def write_validation_receipt(root: Path, plan: dict[str, Any], task: dict[str, A
         },
         "dependency_task_ids": task.get("dependencies", []),
         "context_sha256": task.get("context_sha256"),
+        "input_artifacts": context.get("allowed_inputs", []),
         "output": {
             "path": task.get("output_path"),
             "sha256": sha256_file(output_path),

@@ -32,6 +32,7 @@ When subagents exist:
 - use bounded workers for independent read-heavy tasks;
 - keep the main agent accountable;
 - use independent verification where justified.
+- follow `worker-runtime-contract.md`: reserve, spawn, and attach sequentially; use three normal child-agent slots and keep the fourth reserved; close completed agents before refilling capacity.
 
 When absent:
 
@@ -40,7 +41,7 @@ When absent:
 - do not publish researched evidence, activate mastery, or mark an exam ready;
 - avoid claiming evaluator independence.
 
-A single user-provided source may still use the file-only workflow without subagents when no external research or publishable independent verification is requested.
+A supplied source may still support provisional live teaching without workers, but publishable Fast Course artifacts and spaced-review questions require the declared independent checks.
 
 ## Application boundary and optional connectors
 

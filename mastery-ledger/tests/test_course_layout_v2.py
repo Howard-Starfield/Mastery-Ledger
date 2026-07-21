@@ -23,7 +23,7 @@ def run_script(name: str, *args: str, check: bool = True) -> subprocess.Complete
 
 def test_initializer_creates_v2_without_retired_wiki_artifacts() -> None:
     with tempfile.TemporaryDirectory() as directory:
-        run_script("init_study.py", "Clean Course", "--studies-dir", directory)
+        run_script("init_study.py", "Clean Course", "--mode", "provided-material-only", "--studies-dir", directory)
         course = Path(directory) / "clean-course"
         assert (course / "index.md").is_file()
         assert (course / "records" / "source-manifest.yaml").is_file()
@@ -68,12 +68,11 @@ def test_legacy_migration_preserves_sources_and_quarantines_retired_content() ->
 
 def test_provided_material_plan_orders_extractors_before_reviewers() -> None:
     with tempfile.TemporaryDirectory() as directory:
-        run_script("init_study.py", "Provided Course", "--studies-dir", directory)
+        run_script("init_study.py", "Provided Course", "--mode", "provided-material-only", "--studies-dir", directory)
         course = Path(directory) / "provided-course"
         study_path = course / "study.yaml"
         study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
-        study["mode"] = "provided-material-only"
-        study["workflow_state"] = "SOURCES_READY"
+        study["workflow_state"] = "CORPUS_MAPPED"
         study["learning_contract"] = {
             "status": "approved",
             "approved_at": "2026-07-21T00:00:00Z",
@@ -103,17 +102,61 @@ def test_provided_material_plan_orders_extractors_before_reviewers() -> None:
         run_script("create_provided_evidence_plan.py", str(course), "--authorized")
         plan = yaml.safe_load((course / ".work" / "orchestration" / "run-plan.yaml").read_text(encoding="utf-8"))
         roles = [task["role"] for task in plan["task_graph"]]
-        assert roles == ["source-extractor", "source-extractor", "contradiction-reviewer", "citation-verifier"]
-        contradiction = next(task for task in plan["task_graph"] if task["role"] == "contradiction-reviewer")
+        assert roles == ["source-extractor", "source-extractor", "citation-verifier"]
         verifier = next(task for task in plan["task_graph"] if task["role"] == "citation-verifier")
         extractor_ids = {task["task_id"] for task in plan["task_graph"] if task["role"] == "source-extractor"}
-        assert set(contradiction["dependencies"]) == extractor_ids
-        assert set(verifier["dependencies"]) == extractor_ids | {contradiction["task_id"]}
+        assert set(verifier["dependencies"]) == extractor_ids
+        assert plan["execution_requirements"]["normal_active_limit"] == 3
+        assert plan["execution_requirements"]["hard_agent_limit"] == 4
+
+
+def test_one_source_plan_dispatches_extractor_without_contradiction_review() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        run_script("init_study.py", "One Source", "--mode", "provided-material-only", "--studies-dir", directory)
+        course = Path(directory) / "one-source"
+        run_script(
+            "record_scope_approval.py",
+            str(course),
+            "--summary",
+            "Learn from the supplied anchor",
+            "--source-limit",
+            "1",
+            "--research-workers",
+            "0",
+        )
+        knowledge = course / "records" / "source" / "SRC-001.md"
+        knowledge.write_text("# Anchor\n\nSubstantive locator-preserving source knowledge.\n", encoding="utf-8")
+        run_script(
+            "register_source.py",
+            str(course),
+            "--source-id",
+            "SRC-001",
+            "--title",
+            "Anchor",
+            "--location",
+            "https://example.invalid/anchor",
+            "--knowledge-path",
+            "records/source/SRC-001.md",
+        )
+        reconciled = run_script("reconcile_workflow.py", str(course), "--json", check=False)
+        assert reconciled.returncode == 2
+        assert json.loads(reconciled.stdout)["current_state"] == "CORPUS_MAPPED"
+
+        run_script("create_provided_evidence_plan.py", str(course), "--authorized")
+        plan_path = course / ".work" / "orchestration" / "run-plan.yaml"
+        plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
+        assert [task["role"] for task in plan["task_graph"]] == ["source-extractor", "citation-verifier"]
+
+        run_script("compile_worker_context.py", str(course), "TASK-EXTRACT-SRC-001", "--json")
+        checked = run_script("validate_orchestration.py", str(plan_path), "--course-root", str(course))
+        payload = json.loads(checked.stdout)
+        assert payload["errors"] == []
+        assert payload["ready_task_ids"] == ["TASK-EXTRACT-SRC-001"]
 
 
 def test_short_outline_cannot_pass_as_a_published_lesson() -> None:
     with tempfile.TemporaryDirectory() as directory:
-        run_script("init_study.py", "Short Lesson", "--studies-dir", directory)
+        run_script("init_study.py", "Short Lesson", "--mode", "provided-material-only", "--studies-dir", directory)
         course = Path(directory) / "short-lesson"
         checked = run_script(
             "validate_lesson.py",
@@ -126,3 +169,24 @@ def test_short_outline_cannot_pass_as_a_published_lesson() -> None:
         assert checked.returncode == 1
         payload = json.loads(checked.stdout)
         assert any("standard publication requires at least 1200" in error for error in payload["errors"])
+
+
+def test_study_pack_draft_gate_rejects_initialized_lesson_shell() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        run_script("init_study.py", "Draft Gate", "--mode", "provided-material-only", "--studies-dir", directory)
+        course = Path(directory) / "draft-gate"
+        study_path = course / "study.yaml"
+        study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
+        study["workflow_state"] = "EVIDENCE_APPROVED"
+        study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
+        blocked = run_script(
+            "advance_workflow.py",
+            str(course),
+            "STUDY_PACK_DRAFTED",
+            "--reason",
+            "Attempt to advance initialized shells",
+            check=False,
+        )
+        assert blocked.returncode != 0
+        assert "substantive learner-facing course map" in blocked.stderr
+        assert "source_refs must be non-empty for a substantive lesson" in blocked.stderr

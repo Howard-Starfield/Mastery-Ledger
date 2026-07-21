@@ -69,6 +69,16 @@ class MediaToolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             tool.validate_source_id("../outside")
 
+    def test_metadata_probe_needs_no_rights_declaration_but_acquisition_does(self) -> None:
+        tool = load_module("download_media_rights", "scripts/download_media.py")
+        self.assertEqual("not_applicable_metadata_probe", tool.resolve_rights_basis("probe", None))
+        self.assertEqual(
+            "user_attested_authorized_use",
+            tool.resolve_rights_basis("human_subtitles", "user_attested_authorized_use"),
+        )
+        with self.assertRaisesRegex(ValueError, "learner-confirmed authorization"):
+            tool.resolve_rights_basis("automatic_subtitles", None)
+
     def test_srt_parser_preserves_cue_ids_and_timestamps(self) -> None:
         tool = load_module("normalize_subtitles", "scripts/normalize_subtitles.py")
         content = (ROOT / "tests" / "fixtures" / "sample.srt").read_text(encoding="utf-8")

@@ -1,5 +1,12 @@
 # Intake and scope
 
+## Primary course paths
+
+- Supplied attachment, path, pasted material, or link: announce a **Fast Course**, use the supplied material, and begin without open-web corroboration.
+- Topic only: announce a **Verified Course**, obtain a bounded source-search scope, and use independent source discovery and review.
+
+Keep internal source modes separate from publication status. A Fast Course may become `VERIFIED` after its required checks pass. Offer `hybrid` corroboration only as a later explicit upgrade.
+
 ## Purpose
 
 Turn the user’s request into an explicit learning contract and an approved boundary before expensive ingestion or research.
@@ -11,6 +18,8 @@ The `SKILL.md` first-turn gate runs before this workflow for a new topic-only co
 Do not ask `What do you already know?` again. For a topic-research course, pass the response into `calibrate-and-authorize.md` as the opening calibration seed. If the learner answered `nothing` or equivalent, assume a beginner starting point and continue.
 
 When the first request contains an attachment, local path, URL, pasted source excerpt, or identified existing source, the first-turn gate is skipped. Acknowledge the supplied material, classify the source mode, and continue intake without asking whether the learner has a source. Additional sources may be added later under the same approved course scope.
+
+For supplied material, select the Fast Course mode directly: `local-media` for video or audio processing, `existing-library` for an imported course tree, or `provided-material-only` otherwise. Do not ask for corroboration before producing the first course. If the learner later requests external checking or expansion, show a bounded upgrade card before switching to legacy-compatible `hybrid`.
 
 ## 1. Resume or create
 
@@ -70,6 +79,7 @@ Use this shape:
 **Proposed sources:**
 **Proposed workers:**
 **Expected modules:**
+**Output contract:** 1-3 `lesson-v1` book-like chapters by default, 1,200-1,800 words each, at least the standard 10-question tier per chapter, and one independently validated ready exam.
 ```
 
 Show a blast-radius classification:
@@ -82,9 +92,9 @@ Show a blast-radius classification:
 
 ## 5. Worker budget
 
-- **Lean:** one bounded research worker plus the required independent review phases, up to 5 inspected sources. Use only for a narrow researched topic.
-- **Standard:** 2–4 bounded workers, normally 8–15 inspected sources.
-- **Deep:** 5 or more workers, broader corpus, independent citation and pedagogy review.
+- **Fast:** supplied sources only, one extractor task per source through the three-slot queue, then ordered validation.
+- **Verified:** one scout, normally three retained authoritative sources, queued extractors, contradiction review, citation verification, and assessment validation.
+- **Expanded verified:** at most five retained sources after explicit scope expansion; tasks remain queued rather than increasing simultaneous workers.
 
 Do not estimate dollar cost unless the runtime exposes reliable pricing. Explain cost in worker runs, source count, and verification depth.
 
@@ -92,8 +102,8 @@ Do not estimate dollar cost unless the runtime exposes reliable pricing. Explain
 
 Obtain user approval before:
 
-- launching more than one research worker;
-- adding more than five sources after the approved scope;
+- expanding a Verified Course beyond three retained sources;
+- adding external sources to a supplied-material Fast Course;
 - ingesting or transcribing substantial media;
 - changing the learning outcome;
 - branching into a separate study.
@@ -102,6 +112,14 @@ Approval may be an explicit acceptance or an explicit edit to the scope card.
 For a researched course, include the exact worker topology in the same approval card; do not ask for a second approval unless the run later expands.
 
 After explicit approval, persist the scope with `record_scope_approval.py` using an absolute script path resolved from `SKILL_ROOT`, then return to the original `reconcile_workflow.py` target. Do not enter `SCOPED` from conversational inference alone.
+
+Initialize only after the source policy is known:
+
+```bash
+python scripts/init_study.py "COURSE_TITLE" --mode provided-material-only --studies-dir "PARENT"
+# Use --mode topic-research when the learner supplied only a topic.
+# Reserve hybrid for a later explicitly approved corroboration upgrade.
+```
 
 ## Exit gate
 

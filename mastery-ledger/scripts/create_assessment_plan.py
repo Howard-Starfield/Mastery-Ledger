@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the independent assessment plan for a provided-source course."""
+"""Compile one independent validator for the main-agent-authored assessment."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 
 from course_paths import APPROVED_CLAIMS, INDEX, QUESTION_BANK, SOURCE_MANIFEST, relative_text
-from create_research_plan import task
+from create_research_plan import scheduler_requirements, task
 from plan_store import is_placeholder, load_active_plan, save_active_plan
 from record_action import append_event
 from validate_evidence import load_source_ids
@@ -70,6 +70,7 @@ def main() -> int:
             lesson,
             source_ids=source_ids,
             publication=False,
+            substantive=True,
             expected_chapter_id=str(chapter.get("chapter_id") or ""),
         )
         if errors or warnings:
@@ -95,31 +96,22 @@ def main() -> int:
                 parser.error("Active run is unfinished or invalid; repair it or provide --supersede-reason explicitly: " + details)
             predecessor_relation = "supersedes" if unfinished or plan_errors else "evidence"
     run_id = f"RUN-{uuid.uuid4().hex[:8].upper()}"
-    generator = task(
-        run_id,
-        "TASK-ASSESSMENT-GENERATE",
-        "assessment-generator",
-        [],
-        schema="question-bank-v2",
-        scope_included=["Approved course objectives and chapter assessment contract"],
-        input_artifacts=[relative_text(APPROVED_CLAIMS), relative_text(INDEX), *lesson_artifacts],
-    )
     validator = task(
         run_id,
         "TASK-ASSESSMENT-VALIDATE",
         "assessment-validator",
-        ["TASK-ASSESSMENT-GENERATE"],
+        [],
         "reviews",
         "assessment-validation-v1",
         scope_included=["Generated question bank and approved evidence"],
-        input_artifacts=[relative_text(APPROVED_CLAIMS)],
+        input_artifacts=[relative_text(APPROVED_CLAIMS), relative_text(INDEX), relative_text(QUESTION_BANK), *lesson_artifacts],
     )
     now = datetime.now(timezone.utc).isoformat()
     payload = {
         "schema_version": "assessment-run-plan-v1",
         "run_id": run_id,
         "study_id": study.get("study_id"),
-        "goal": "Generate and independently validate a ready exam from approved provided-source evidence",
+        "goal": "Independently validate the main-agent-authored course assessment against approved evidence",
         "mode": mode,
         "course_target": study.get("workflow_target", "LEARNING_ACTIVE"),
         "predecessor_run_id": predecessor_run_id,
@@ -128,9 +120,9 @@ def main() -> int:
         "authorization": {"status": "approved", "approved_at": now, "scope": "displayed-assessment-card"},
         "publication_intent": True,
         "plan_origin": {"kind": "generated", "compiler": "create_assessment_plan.py"},
-        "execution_requirements": {"independent_workers": True, "parallelism_required": False},
+        "execution_requirements": scheduler_requirements(),
         "workflow_state": "tasks_planned",
-        "task_graph": [generator, validator],
+        "task_graph": [validator],
         "created_at": now,
         "updated_at": now,
     }
@@ -139,15 +131,15 @@ def main() -> int:
     path = save_active_plan(root, payload)
     append_event(root, {
         "action": "assessment.plan_compiled", "actor": "main-agent", "status": "complete",
-        "summary": "Compiled an authorized generation and independent validation plan.",
+        "summary": "Compiled one independent validation task for the main-agent-authored assessment.",
         "artifacts": [".work/orchestration/run-plan.yaml"], "decision": "approved",
-        "justification": "A ready exam requires independent assessment validation.",
+        "justification": "The main agent authors the bank; a distinct worker independently validates every item before readiness.",
     })
     print(yaml.safe_dump({
         "status": "complete",
         "run_id": run_id,
         "path": str(path),
-        "first_context_task_ids": ["TASK-ASSESSMENT-GENERATE"],
+        "first_context_task_ids": ["TASK-ASSESSMENT-VALIDATE"],
         "first_ready_task_ids": [],
     }, sort_keys=False))
     return 0

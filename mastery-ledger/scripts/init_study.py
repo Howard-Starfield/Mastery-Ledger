@@ -46,16 +46,26 @@ def slugify(value: str) -> str:
     return value or "study"
 
 
-def replace_tokens(text: str, *, study_id: str, title: str) -> str:
+MODES = ("provided-material-only", "existing-library", "local-media", "topic-research", "hybrid")
+
+
+def replace_tokens(text: str, *, study_id: str, title: str, mode: str) -> str:
     text = text.replace("STUDY-001", study_id)
     text = text.replace("Example study", title)
     text = text.replace("2026-07-19", date.today().isoformat())
+    text = text.replace("__STUDY_MODE__", mode)
     return text
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("title")
+    parser.add_argument(
+        "--mode",
+        choices=MODES,
+        required=True,
+        help="Approved source workflow. Supplied-source courses default to provided-material-only unless corroboration is authorized.",
+    )
     parser.add_argument("--studies-dir", type=Path, default=Path("studies"))
     args = parser.parse_args()
 
@@ -101,7 +111,7 @@ def main() -> int:
     for source_name, target_name in mapping.items():
         text = (assets / source_name).read_text(encoding="utf-8")
         (target / target_name).write_text(
-            replace_tokens(text, study_id=study_id, title=args.title),
+            replace_tokens(text, study_id=study_id, title=args.title, mode=args.mode),
             encoding="utf-8",
         )
     (target / CONTRADICTIONS).write_text("{\n  \"contradictions\": []\n}\n", encoding="utf-8")
@@ -127,6 +137,7 @@ def main() -> int:
             {
                 "status": "complete",
                 "study_id": study_id,
+                "mode": args.mode,
                 "workspace": str(target),
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }

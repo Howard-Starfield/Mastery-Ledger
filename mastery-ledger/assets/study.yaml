@@ -3,7 +3,7 @@ layout_schema: course-layout-v2
 study_id: STUDY-001
 parent_study_id: null
 title: Example study
-mode: topic-research
+mode: __STUDY_MODE__
 workflow_state: intake
 workflow_target: LEARNING_ACTIVE
 publication_status: DRAFT
@@ -11,7 +11,7 @@ learner_goal: Build working competence in the topic
 assumed_prior_knowledge: []
 target_depth: working
 learning_mode: coached
-source_policy: topic-research
+source_policy: __STUDY_MODE__
 processing_mode: cloud_allowed
 worker_budget: lean
 scope_approval:

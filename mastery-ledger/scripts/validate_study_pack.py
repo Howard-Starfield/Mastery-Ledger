@@ -212,6 +212,67 @@ def validate_question_bank(
     return errors, warnings
 
 
+def validate_learning_materials(root: Path) -> list[str]:
+    """Require substantive book-like chapters before assessment planning begins."""
+    errors: list[str] = []
+    index_path = root / INDEX
+    try:
+        index_text = index_path.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError) as error:
+        return [f"Cannot read {relative_text(INDEX)}: {error}"]
+    placeholder_markers = (
+        "replace this structural shell",
+        "replace with a concise chapter summary",
+        "no substantive knowledge is published during initialization",
+    )
+    if len(index_text) < 200 or any(marker in index_text.casefold() for marker in placeholder_markers):
+        errors.append("index.md must be a substantive learner-facing course map before assessment planning")
+
+    try:
+        payload = json.loads((root / QUESTION_BANK).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        return [*errors, f"Cannot read {relative_text(QUESTION_BANK)}: {error}"]
+    chapters = payload.get("chapters") if isinstance(payload, dict) else None
+    if not isinstance(chapters, list) or not chapters:
+        return [*errors, "question-bank.json must declare at least one chapter before assessment planning"]
+
+    source_ids = load_source_ids(root / SOURCE_MANIFEST)
+    seen_chapter_ids: set[str] = set()
+    lessons_root = (root / "lessons").resolve()
+    for index, chapter in enumerate(chapters):
+        prefix = f"chapters[{index}]"
+        if not isinstance(chapter, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+        chapter_id = str(chapter.get("chapter_id") or "").strip()
+        if not chapter_id or chapter_id in seen_chapter_ids:
+            errors.append(f"{prefix}.chapter_id is missing or duplicated")
+            continue
+        seen_chapter_ids.add(chapter_id)
+        lesson_relative = chapter.get("lesson_path")
+        if not isinstance(lesson_relative, str) or not lesson_relative.startswith("lessons/") or not lesson_relative.endswith(".md"):
+            errors.append(f"{prefix}.lesson_path must name a Markdown file under lessons/")
+            continue
+        lesson = (root / lesson_relative).resolve(strict=False)
+        try:
+            lesson.relative_to(lessons_root)
+        except ValueError:
+            errors.append(f"{prefix}.lesson_path escapes lessons/")
+            continue
+        if not lesson.is_file() or lesson.is_symlink():
+            errors.append(f"{prefix}.lesson_path must resolve to a regular lesson file")
+            continue
+        lesson_errors, lesson_warnings = validate_lesson(
+            lesson,
+            source_ids=source_ids,
+            publication=False,
+            substantive=True,
+            expected_chapter_id=chapter_id,
+        )
+        errors.extend(f"{lesson_relative}: {message}" for message in [*lesson_errors, *lesson_warnings])
+    return errors
+
+
 def _publication_errors(root: Path, source_ids: set[str], *, require_ready_exam: bool = True) -> list[str]:
     errors: list[str] = []
     study = yaml.safe_load((root / "study.yaml").read_text(encoding="utf-8"))
@@ -298,7 +359,7 @@ def _publication_errors(root: Path, source_ids: set[str], *, require_ready_exam:
 
     evidence_roles = {"source-extractor", "citation-verifier"}
     if research_mode:
-        evidence_roles.update({"corpus-mapper", "research-worker", "contradiction-reviewer"})
+        evidence_roles.add("contradiction-reviewer")
     evidence_runs = [
         items for items in by_run.values()
         if evidence_roles.issubset({str(item.get("role")) for item in items})
@@ -334,13 +395,13 @@ def _publication_errors(root: Path, source_ids: set[str], *, require_ready_exam:
         if not verified_evidence_run:
             errors.append("No generated evidence run has durable verification receipts covering every approved claim")
 
-    assessment_roles = {"assessment-generator", "assessment-validator"}
+    assessment_roles = {"assessment-validator"}
     assessment_runs = [
         items for items in by_run.values()
         if assessment_roles.issubset({str(item.get("role")) for item in items})
     ]
     if not assessment_runs:
-        errors.append("A ready exam requires durable receipts for independent assessment generation and validation")
+        errors.append("A ready exam requires a durable receipt from an independent assessment validator")
     else:
         validated_assessment_run = False
         for items in assessment_runs:
@@ -350,18 +411,20 @@ def _publication_errors(root: Path, source_ids: set[str], *, require_ready_exam:
             }
             if plan_pairs != {("assessment-run-plan-v1", "create_assessment_plan.py")}:
                 continue
-            generators = [item for item in items if item.get("role") == "assessment-generator"]
             validators = [item for item in items if item.get("role") == "assessment-validator"]
-            if not generators or not validators:
+            if not validators:
                 continue
             result = validators[-1].get("result", {})
             validated_ids = {str(item) for item in result.get("validated_question_ids", [])}
-            validator_dependencies = {str(item) for item in validators[-1].get("dependency_task_ids", [])}
+            validated_inputs = {
+                (str(item.get("path")), str(item.get("sha256")))
+                for item in validators[-1].get("input_artifacts", [])
+                if isinstance(item, dict)
+            }
             if (
                 result.get("decision") == "approved"
                 and validated_ids == bank_ids
-                and generators[-1].get("output", {}).get("sha256") == bank_hash
-                and str(generators[-1].get("task_id")) in validator_dependencies
+                and (relative_text(QUESTION_BANK), bank_hash) in validated_inputs
             ):
                 validated_assessment_run = True
                 break

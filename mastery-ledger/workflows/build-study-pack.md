@@ -45,16 +45,17 @@ Read and follow [lesson contract](../references/lesson-contract.md). A standard 
 
 Each question must map to objectives, concepts, and canonical `source-ref-v1` objects from [citation contract](../references/citation-contract.md). Important concepts need recall and application questions. Explanations must address common wrong answers without exposing answers before an attempt.
 
-Follow [assessment contract](../references/assessment-contract.md) exactly. Every chapter declares a question tier: standard 10 (8 standalone, 2 passage), expanded 15 (12/3), or large 20 (16/4). Use four options and exactly one correct option. After evidence approval, write and validate `index.md` and every lesson, then create a separate assessment run. Generate the Markdown review copy and build the ready exam only after independent assessment validation:
+Follow [assessment contract](../references/assessment-contract.md) exactly. Every chapter declares a question tier: standard 10 (8 standalone, 2 passage), expanded 15 (12/3), or large 20 (16/4). Use four options and exactly one correct option. After evidence approval, the main agent writes and validates `index.md`, every lesson, and the canonical JSON question bank. Reconciliation requires substantive lessons; source notes, transcript summaries, and initialized shells cannot advance. Generate the Markdown review copy and ready exam only after one independent assessment validator checks that exact bank:
 
 ```bash
 python scripts/create_assessment_plan.py studies/my-study --authorized
-# Compile, dispatch, and route only validator-reported ready task IDs, then:
+# Compile TASK-ASSESSMENT-VALIDATE, dispatch it through manage_worker_runtime.py,
+# route its return, and close the validator agent, then:
 python scripts/render_question_bank.py studies/my-study/questions/question-bank.json
 python scripts/build_exam.py studies/my-study --exam-id EXAM-001 --title "Course exam" --ready
 ```
 
-`create_assessment_plan.py` requires `EVIDENCE_APPROVED` (or a later draft state), non-empty approved claims, a substantive index, contract-valid lessons, and a finished predecessor evidence run when one exists. It records that predecessor before activating the assessment plan. This deliberate phase boundary ensures rejected evidence never consumes assessment-generation tokens.
+`create_assessment_plan.py` requires `EVIDENCE_APPROVED` (or a later draft state), non-empty approved claims, a substantive index, contract-valid lessons, the main-agent-authored question bank, and a finished predecessor evidence run when one exists. It compiles only `TASK-ASSESSMENT-VALIDATE`; new runs have no assessment-generator worker.
 
 If validation identifies an invalid legacy or hand-authored active plan, do not edit that YAML. After showing the exact validation errors and obtaining learner approval to replace that run, invoke `create_assessment_plan.py --authorized --supersede-reason "<observable reason>"`. The compiler snapshots the rejected plan, creates a clean assessment run, and excludes the superseded plan from the publication chain.
 

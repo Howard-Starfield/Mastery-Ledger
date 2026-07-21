@@ -20,7 +20,7 @@ Never treat `.work/` as evidence, curriculum, or a durable audit store. Never pl
 
 ## Initialization
 
-Use `scripts/init_study.py`; do not hand-create a course layout. Initialization creates canonical empty templates, durable audit destination, and disposable run roots. It may create empty or placeholder artifacts, but substantive source-grounded knowledge remains unpublished until evidence approval.
+Use `scripts/init_study.py TITLE --mode MODE --studies-dir PARENT`; do not hand-create a course layout. The required mode records the approved source policy at creation time. Initialization creates canonical empty templates, durable audit destination, and disposable run roots. It may create empty or placeholder artifacts, but substantive source-grounded knowledge remains unpublished until evidence approval.
 
 If an existing application-created course has `course.yaml` but lacks `study.yaml`, run `scripts/adopt_course.py <COURSE_ROOT>`. It adds only missing canonical templates and preserves existing source, media, manifest, and audit artifacts. Do not approximate the full layout by hand.
 

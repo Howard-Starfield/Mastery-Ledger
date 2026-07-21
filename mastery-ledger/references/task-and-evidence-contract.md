@@ -7,20 +7,19 @@ Every delegated task must use this conceptual shape:
 ```yaml
 task_id: TASK-001
 run_id: RUN-001
-role: research-worker
-role_profile_id: research-worker
+role: source-extractor
+role_profile_id: source-extractor
 role_profile_version: "1.0"
 role_profile_sha256: "sha256:<compiled-profile-hash>"
-objective: Explain the policy-gradient theorem and REINFORCE
+objective: Extract the assigned source into locator-preserving evidence
 scope_included:
-  - policy-gradient theorem
-  - likelihood-ratio estimator
+  - approved course concepts covered by SRC-001
 scope_excluded:
   - PPO
   - actor-critic implementation
-concept_ids: [policy-gradient, reinforce]
-input_source_ids: []
-source_limit: 5
+concept_ids: []
+input_source_ids: [SRC-001]
+source_limit: 1
 dependencies: [TASK-000]
 task_work_dir: .work/runs/RUN-001/tasks/TASK-001
 brief_path: .work/runs/RUN-001/tasks/TASK-001/task-brief.json
@@ -38,7 +37,7 @@ acceptance_criteria:
 status: planned
 ```
 
-Do not dispatch this conceptual brief directly. Run `compile_worker_context.py`, which freezes a `worker-task-brief-v1`, `worker-context-v1`, role-specific output template, prefilled completion template, required contract hashes, allowed inputs, and dispatch message inside the assigned task directory. Then run the orchestration validator and dispatch only IDs in `ready_task_ids`.
+Do not dispatch this conceptual brief directly. Run `compile_worker_context.py`, which freezes a `worker-task-brief-v1`, `worker-context-v1`, role-specific output template, prefilled completion template, required contract hashes, allowed inputs, and dispatch message inside the assigned task directory. Then run the orchestration validator and `manage_worker_runtime.py status`; `ready_task_ids` are dependency-eligible, while only capacity-bounded `dispatch_task_ids` may be reserved and spawned.
 
 Every worker writes only its assigned event shard, submission, and one `completion-envelope-v1` JSON record copied from its compiled `completion-template.json`. Do not ask the worker to infer field names from prose or the generic asset. The envelope acknowledges the exact task, role profile, context, and contract hashes. It contains an observable summary, artifacts, blockers, and next actions; it must not contain prompts, hidden reasoning, scratch notes, or chain-of-thought. Scratch remains inside the task's `tmp/` directory and is never promoted. Every return is accepted or repaired through `route_worker_completion.py`; the main agent must not hand-edit task status.
 
@@ -49,7 +48,7 @@ Every worker writes only its assigned event shard, submission, and one `completi
   "source_ref_schema": "source-ref-v1",
   "report_id": "REPORT-001",
   "task_id": "TASK-001",
-  "worker_role": "research-worker",
+  "worker_role": "source-extractor",
   "scope": {
     "included": ["policy-gradient theorem"],
     "excluded": ["PPO"]

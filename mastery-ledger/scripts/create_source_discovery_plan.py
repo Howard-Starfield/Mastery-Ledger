@@ -10,9 +10,11 @@ from pathlib import Path
 
 import yaml
 
-from create_research_plan import task
+from course_paths import SOURCE_MANIFEST, relative_text
+from create_research_plan import scheduler_requirements, task
 from plan_store import is_placeholder, load_active_plan, save_active_plan
 from record_action import append_event
+from source_registry import load_manifest, source_errors
 
 
 def main() -> int:
@@ -39,6 +41,17 @@ def main() -> int:
     if not 1 <= source_limit <= 20:
         parser.error("The approved learning contract has an invalid source limit.")
 
+    manifest = load_manifest(root)
+    existing_sources = [item for item in manifest.get("sources", []) if isinstance(item, dict)]
+    existing_source_ids = [str(item.get("source_id")) for item in existing_sources if item.get("source_id")]
+    if study.get("mode") == "hybrid":
+        problems = source_errors(root, manifest, require_nonempty=True)
+        if problems:
+            parser.error("Hybrid corroboration requires a registered anchor source first: " + "; ".join(problems))
+        if len(existing_sources) >= source_limit:
+            parser.error("Hybrid corroboration has no remaining source-budget slot beyond the registered anchor source(s).")
+    remaining_source_budget = source_limit - len(existing_sources)
+
     active_path = root / ".work" / "orchestration" / "run-plan.yaml"
     if active_path.is_file() and not is_placeholder(load_active_plan(root)):
         parser.error("An active run already exists; resume it instead of creating another source scout.")
@@ -55,7 +68,9 @@ def main() -> int:
         schema="source-candidate-ledger-v1",
         scope_included=included,
         scope_excluded=excluded,
-        source_limit=source_limit,
+        input_source_ids=existing_source_ids,
+        input_artifacts=[relative_text(SOURCE_MANIFEST)] if existing_source_ids else [],
+        source_limit=remaining_source_budget,
     )
     now = datetime.now(timezone.utc).isoformat()
     payload = {
@@ -69,11 +84,13 @@ def main() -> int:
             "approved_at": approval.get("approved_at") or now,
             "scope": goal,
             "source_limit": source_limit,
+            "registered_anchor_source_ids": existing_source_ids,
+            "remaining_source_budget": remaining_source_budget,
             "source_scouts": 1,
         },
         "publication_intent": True,
         "plan_origin": {"kind": "generated", "compiler": "create_source_discovery_plan.py"},
-        "execution_requirements": {"independent_workers": True, "parallelism_required": False},
+        "execution_requirements": scheduler_requirements(),
         "workflow_state": "source_discovery",
         "task_graph": [scout],
         "created_at": now,
@@ -84,7 +101,11 @@ def main() -> int:
         "action": "source.discovery_plan_compiled",
         "actor": "main-agent",
         "status": "complete",
-        "summary": "Compiled one bounded source-scout task before source acquisition.",
+        "summary": (
+            "Compiled one bounded source-scout task to corroborate the registered anchor source(s)."
+            if study.get("mode") == "hybrid"
+            else "Compiled one bounded source-scout task before source acquisition."
+        ),
         "artifacts": [".work/orchestration/run-plan.yaml"],
         "decision": "approved",
         "justification": "A researched course requires an observable delegated source search before evidence work.",

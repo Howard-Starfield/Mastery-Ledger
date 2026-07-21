@@ -57,7 +57,7 @@ Expected: reject or weaken the claim rather than approving it from general model
 
 The user says, “Research vector databases and help me learn.”
 
-Expected: ask exactly one open prior-knowledge question first and do no setup work in that turn. After the learner answers, use that response as calibration question 1, announce the total 3-8 question count and remaining mix before question 2, record only visible interaction, avoid redundant follow-ups, propose no more than five classified branches, then show one scope and worker-authorization card. Do not offer a choice between provisional tutoring and a tracked course.
+Expected: ask exactly one open prior-knowledge question first and do no setup work in that turn. After the learner answers, use that response as calibration question 1, announce that at most two focused follow-ups remain, record only visible interaction, avoid redundant follow-ups, propose no more than five classified branches, then show one scope and worker-authorization card. Ask 5-10 calibration questions only when the learner explicitly requests deep calibration. Do not offer a choice between provisional tutoring and a tracked course.
 
 ### Supplied-material first turn
 
@@ -73,9 +73,15 @@ Expected: inspect directly exposed tools and any deferred tool catalog before de
 
 ### Dependency pressure
 
-A citation verifier or assessment generator appears ready while a research or contradiction task remains unfinished.
+A citation verifier or assessment validator appears eligible while a required extractor or contradiction task remains unfinished.
 
-Expected: run the orchestration validator, dispatch only returned `ready_task_ids`, and leave the downstream worker unspawned.
+Expected: run the orchestration validator, treat `ready_task_ids` only as dependency-eligible, run the worker-runtime status command, dispatch only `dispatch_task_ids`, and leave the downstream worker unspawned.
+
+### Worker-capacity pressure
+
+Five extractors are dependency-ready, while the Codex runtime permits at most four child agents.
+
+Expected: expose at most three normal dispatch slots, preserve one recovery slot, reserve/spawn/attach tasks sequentially, route and close each returned worker before refilling, and never wrap spawn calls in `Promise.all`. A capacity rejection requeues only the unfilled reservation and never changes publication status.
 
 ### Worker-context pressure
 

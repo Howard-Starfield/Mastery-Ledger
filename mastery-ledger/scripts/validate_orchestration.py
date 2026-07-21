@@ -50,20 +50,20 @@ PLAN_CONTRACTS = {
     },
     "research-run-plan-v1": {
         "compiler": "create_research_plan.py",
-        "exact_roles": {"corpus-mapper": 1, "contradiction-reviewer": 1, "citation-verifier": 1},
-        "minimum_roles": {"source-extractor": 1, "research-worker": 1},
-        "allowed_roles": {*RESEARCH_ROLES, CONTRADICTION_ROLE, CITATION_ROLE},
+        "exact_roles": {"contradiction-reviewer": 1, "citation-verifier": 1},
+        "minimum_roles": {"source-extractor": 1},
+        "allowed_roles": {"source-extractor", CONTRADICTION_ROLE, CITATION_ROLE},
     },
     "provided-evidence-plan-v1": {
         "compiler": "create_provided_evidence_plan.py",
         "exact_roles": {CITATION_ROLE: 1},
         "minimum_roles": {"source-extractor": 1},
-        "allowed_roles": {"source-extractor", CONTRADICTION_ROLE, CITATION_ROLE},
+        "allowed_roles": {"source-extractor", CITATION_ROLE},
     },
     "assessment-run-plan-v1": {
         "compiler": "create_assessment_plan.py",
-        "exact_roles": {ASSESSMENT_GENERATOR_ROLE: 1, ASSESSMENT_VALIDATOR_ROLE: 1},
-        "allowed_roles": {ASSESSMENT_GENERATOR_ROLE, ASSESSMENT_VALIDATOR_ROLE},
+        "exact_roles": {ASSESSMENT_VALIDATOR_ROLE: 1},
+        "allowed_roles": {ASSESSMENT_VALIDATOR_ROLE},
     },
 }
 
@@ -90,6 +90,17 @@ def _plan_contract_errors(payload: dict[str, Any], tasks: dict[str, dict[str, An
         errors.append("A publication run plan requires independent_workers=true")
     elif not isinstance(requirements.get("parallelism_required"), bool):
         errors.append("execution_requirements.parallelism_required must be a Boolean")
+    else:
+        expected_scheduler = {
+            "dispatch_mode": "capacity_queue",
+            "hard_agent_limit": 4,
+            "normal_active_limit": 3,
+            "reserve_agent_slots": 1,
+            "max_stall_restarts": 1,
+        }
+        for field, expected in expected_scheduler.items():
+            if requirements.get(field) != expected:
+                errors.append(f"execution_requirements.{field} must be {expected!r}")
 
     counts = Counter(str(task.get("role") or "") for task in tasks.values())
     allowed = set(contract["allowed_roles"])
@@ -433,6 +444,12 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
                 errors.append(f"{task_id}.context_status must be pending or compiled")
         if task.get("status") not in {"planned", "in_progress", "submitted", "verified", "approved", "merged", "changes_required", "rejected", "blocked", "superseded"}:
             errors.append(f"{task_id}.status is invalid")
+        if strict_dispatch:
+            worker_runtime = task.get("worker_runtime")
+            if not isinstance(worker_runtime, dict):
+                errors.append(f"{task_id}.worker_runtime is required")
+            elif worker_runtime.get("lease_state") not in {"idle", "reserved", "active", "returned", "repairing", "close_required", "closed"}:
+                errors.append(f"{task_id}.worker_runtime.lease_state is invalid")
         if not isinstance(task.get("dependencies", []), list):
             errors.append(f"{task_id}.dependencies must be a list")
             task["dependencies"] = []
@@ -460,7 +477,9 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
             if missing_research:
                 errors.append(f"{task_id} must depend on every research task: {', '.join(sorted(missing_research))}")
         if role == CITATION_ROLE:
-            if CONTRADICTION_ROLE not in ancestor_roles:
+            plan_schema = str(payload.get("schema_version") or "")
+            contradiction_required = plan_schema not in {"provided-evidence-plan-v1", "assessment-run-plan-v1"}
+            if contradiction_required and CONTRADICTION_ROLE not in ancestor_roles:
                 errors.append(f"{task_id} must depend on a contradiction-reviewer")
             if not (ancestor_roles & RESEARCH_ROLES):
                 errors.append(f"{task_id} must depend transitively on research or extraction work")
@@ -480,11 +499,9 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
             if state in STARTED_STATES and unfinished:
                 errors.append(f"{task_id} started before citation verification finished: {', '.join(unfinished)}")
         if role == ASSESSMENT_VALIDATOR_ROLE:
-            if ASSESSMENT_GENERATOR_ROLE not in ancestor_roles:
-                errors.append(f"{task_id} must depend on assessment generation")
-            unfinished = [other_id for other_id, other in tasks.items() if str(other.get("role")) == ASSESSMENT_GENERATOR_ROLE and other.get("status") not in SUBMITTED_STATES]
-            if state in STARTED_STATES and unfinished:
-                errors.append(f"{task_id} started before assessment generation finished: {', '.join(unfinished)}")
+            generators = [other for other in tasks.values() if str(other.get("role")) == ASSESSMENT_GENERATOR_ROLE]
+            if generators and ASSESSMENT_GENERATOR_ROLE not in ancestor_roles:
+                errors.append(f"{task_id} must depend on assessment generation when a generator task exists")
 
         profile = role_profiles.get(role)
         if course_root is not None and isinstance(profile, dict):

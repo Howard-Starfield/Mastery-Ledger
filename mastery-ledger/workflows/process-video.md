@@ -4,14 +4,23 @@
 
 Acquire or process authorized media, prefer existing captions, and produce timestamp-preserving transcript artifacts suitable for citation.
 
-## Rights gate
+## Metadata probe and rights gate
 
-For remote media, require one of:
+Inspecting a public page or running `download_media.py --mode probe` does not download captions, audio, or video and must not trigger a rights question. Run the probe without `--rights-basis`; it records `not_applicable_metadata_probe`.
+
+Only when the next step will save remote captions, audio, or video, display this plain-language question and end the response while waiting:
+
+```text
+May I save captions or audio from this video locally for your personal study? Please confirm you have the necessary permission. If not or unsure, I’ll continue without downloading and use only the public page and other sources.
+```
+
+Do not display internal enum names. After a clear confirmation, record the most specific known basis, or `user_attested_authorized_use` when the learner confirms authorization without identifying a more specific category:
 
 - `user_owned`
 - `platform_permitted_download`
 - `public_license`
 - `explicit_permission`
+- `user_attested_authorized_use`
 
 Refuse `unknown`. Never request browser cookies, credentials, DRM bypass, or access-control circumvention. The user remains responsible for platform terms and permissions.
 
@@ -53,11 +62,21 @@ Outputs:
 
 ### Download permitted remote material
 
+Probe first without a rights declaration:
+
+```text
+python "<SKILL_ROOT>/scripts/download_media.py" "https://example.invalid/video" \
+  --output-dir studies/my-study/.work/ingestion/JOB-001/probe \
+  --source-id SRC-001 --mode probe
+```
+
+After learner authorization, pass the internal basis only to the acquisition command:
+
 ```text
 python "<SKILL_ROOT>/scripts/download_media.py" "https://example.invalid/video" \
   --output-dir studies/my-study/.work/ingestion/JOB-001/media \
   --source-id SRC-001 \
-  --rights-basis explicit_permission \
+  --rights-basis user_attested_authorized_use \
   --mode human_subtitles --languages "en.*,zh.*"
 ```
 
@@ -100,7 +119,7 @@ Verify:
 
 The phase is complete only when:
 
-- rights basis is recorded;
+- acquisition rights basis is recorded, or metadata-only work records `not_applicable_metadata_probe`;
 - the original media or subtitle remains intact;
 - each transcript segment has source and item IDs plus timestamps;
 - provenance identifies human, platform, auto-caption, or local ASR;

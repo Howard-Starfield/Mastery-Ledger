@@ -11,7 +11,7 @@
 
 ## 1. Calibration versus published assessment
 
-Calibration is a 3-8 question provisional diagnostic across the course, with 10 as an explicit maximum. It may contain free recall and short scenarios. It discovers prerequisites, goals, misconceptions, and useful branches; it does not update durable mastery until sourced material and grading criteria exist.
+Topic-only calibration uses the opening prior-knowledge response plus at most two follow-ups by default. A learner may explicitly request a deeper 5-10 question diagnostic. Supplied-material Fast Courses use early sourced practice instead of blocking pre-course calibration. Calibration never updates durable mastery until sourced material and grading criteria exist.
 
 Published chapter banks are source-grounded selectable-response items. Use them for ready exams and spaced review.
 
@@ -106,7 +106,7 @@ The example's empty references and `draft` status are intentionally non-publisha
 
 ## 5. Independent validation
 
-Run assessment generation only after retained claims pass final citation verification. Give the assessment validator the frozen objectives, approved evidence, and generated bank—not the generator's hidden reasoning. It must reject or request changes for:
+The main agent authors the assessment only after retained claims pass final citation verification. Give the independent assessment validator the frozen objectives, approved evidence, and main-agent-authored bank—never hidden reasoning or scratch notes. It must reject or request changes for:
 
 - more than one defensible answer;
 - a key unsupported by the cited locator;

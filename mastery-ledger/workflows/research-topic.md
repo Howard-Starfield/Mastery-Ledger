@@ -59,7 +59,7 @@ For disagreement:
 
 ## External-research boundaries
 
-In `provided-material-only` mode, do not browse. In `hybrid` mode, use research only to fill approved gaps, prerequisites, corrections, or updates. Clearly label external additions.
+In supplied-material Fast Course modes, do not browse. `topic-research` is the primary Verified Course path: dispatch one scout, retain a small authoritative corpus, register it, then use queued source extractors and ordered reviewers. `hybrid` is only an explicit later corroboration upgrade for an existing supplied-source course. New runs do not add concept-research workers after source registration.
 
 ## Exit gate
 

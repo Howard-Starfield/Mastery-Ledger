@@ -23,7 +23,7 @@ Each JSONL line is one object containing:
   "run_id": "RUN-001",
   "task_id": "TASK-001",
   "action": "evidence.extraction.completed",
-  "actor": "research-worker",
+  "actor": "source-extractor",
   "status": "complete",
   "summary": "Submitted five located claims and one unresolved gap.",
   "artifacts": [".work/runs/RUN-001/tasks/TASK-001/submission.json"],

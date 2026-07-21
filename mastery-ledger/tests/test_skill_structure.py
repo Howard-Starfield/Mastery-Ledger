@@ -122,6 +122,14 @@ class SkillStructureTests(unittest.TestCase):
         self.assertIn("ask exactly one open prior-knowledge question and end the turn", controller)
         self.assertIn("If supplied material exists, skip the open question", controller)
         self.assertIn("ask once for the absolute parent directory", controller)
+        self.assertIn("Emit every learner question, including calibration questions, verbatim in normal learner-visible response text", controller)
+        calibration = (ROOT / "workflows" / "calibrate-and-authorize.md").read_text(encoding="utf-8")
+        self.assertIn("Every calibration question must appear verbatim in the normal learner-visible response", calibration)
+        self.assertIn("End the response and wait", calibration)
+        self.assertIn("Do not mark a calibration question asked or answered unless it was actually displayed", calibration)
+        self.assertIn("Allow public-page and metadata inspection without a media rights declaration", controller)
+        self.assertIn("must not trigger a rights question", media)
+        self.assertIn("May I save captions or audio from this video locally for your personal study?", media)
         self.assertIn("deferred tool catalog", controller)
         self.assertIn("not a guessed Boolean in the run plan", controller)
         self.assertIn("Never treat the learner's statements as factual evidence", intake)
@@ -168,6 +176,8 @@ class SkillStructureTests(unittest.TestCase):
         self.assertNotIn('Path("wiki")', content)
 
         self.assertTrue((ROOT / "scripts" / "create_assessment_plan.py").is_file())
+        self.assertTrue((ROOT / "scripts" / "manage_worker_runtime.py").is_file())
+        self.assertTrue((ROOT / "references" / "worker-runtime-contract.md").is_file())
 
     def test_role_profiles_are_bounded_and_versioned(self) -> None:
         payload = json.loads((ROOT / "references" / "agent-role-profiles.json").read_text(encoding="utf-8"))
@@ -184,7 +194,7 @@ class SkillStructureTests(unittest.TestCase):
         }
         self.assertEqual(required_roles, set(payload["profiles"]))
         for role, profile in payload["profiles"].items():
-            self.assertEqual("1.0", profile["version"], role)
+            self.assertRegex(profile["version"], r"^1\.[0-9]+$", role)
             self.assertTrue(profile["mission"], role)
             self.assertTrue(profile["best_practices"], role)
             self.assertTrue(profile["stop_conditions"], role)

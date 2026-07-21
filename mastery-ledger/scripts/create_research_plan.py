@@ -12,13 +12,25 @@ from pathlib import Path
 
 import yaml
 
-from course_paths import SOURCE_MANIFEST, relative_text
 from record_action import append_event
 from plan_store import is_placeholder, load_active_plan, save_active_plan
 from source_registry import load_manifest, source_errors
 
 
 ROLE_PROFILES_PATH = Path(__file__).resolve().parents[1] / "references" / "agent-role-profiles.json"
+
+
+def scheduler_requirements() -> dict[str, object]:
+    """Return the fixed Codex child-agent capacity contract for generated plans."""
+    return {
+        "independent_workers": True,
+        "parallelism_required": False,
+        "dispatch_mode": "capacity_queue",
+        "hard_agent_limit": 4,
+        "normal_active_limit": 3,
+        "reserve_agent_slots": 1,
+        "max_stall_restarts": 1,
+    }
 
 
 def _canonical_hash(value: object) -> str:
@@ -82,27 +94,36 @@ def task(
         "attempt_count": 0,
         "max_attempts": 2,
         "status": "planned",
+        "worker_runtime": {
+            "lease_state": "idle",
+            "agent_id": None,
+            "reservation_id": None,
+            "silent_polls": 0,
+            "stall_restart_count": 0,
+            "agent_history": [],
+        },
     }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("course_root", type=Path)
-    parser.add_argument("--research-workers", type=int, default=3)
+    parser.add_argument("--research-workers", type=int, default=0, help="Legacy compatibility; concept-research workers are no longer used.")
     parser.add_argument("--authorized", action="store_true")
     parser.add_argument("--supersede-reason")
     args = parser.parse_args()
     if not args.authorized:
         parser.error("Explicit scope and worker authorization is required.")
-    if not 1 <= args.research_workers <= 5:
-        parser.error("Research worker count must be 1-5.")
+    if args.research_workers != 0:
+        parser.error("The simplified researched-course graph uses source scout and extractor tasks; --research-workers must be 0.")
     root = args.course_root.resolve()
     study = yaml.safe_load((root / "study.yaml").read_text(encoding="utf-8"))
     mode = str(study.get("mode", ""))
     if mode not in {"topic-research", "hybrid"}:
         parser.error("This compiler is only for topic-research or hybrid studies.")
-    if str(study.get("workflow_state", "")).strip().replace("-", "_").upper() != "SOURCES_READY":
-        parser.error("Research planning requires workflow_state SOURCES_READY.")
+    state = str(study.get("workflow_state", "")).strip().replace("-", "_").upper()
+    if state not in {"SOURCES_READY", "CORPUS_MAPPED"}:
+        parser.error("Research planning requires workflow_state SOURCES_READY or CORPUS_MAPPED.")
     approval = study.get("learning_contract")
     if not isinstance(approval, dict) or approval.get("status") != "approved":
         parser.error("Research planning requires an approved canonical learning contract.")
@@ -142,18 +163,6 @@ def main() -> int:
     accepted_branches = [str(item) for item in approval.get("accepted_branches", [])]
     excluded = [str(item) for item in approval.get("excluded", [])]
     run_id = f"RUN-{uuid.uuid4().hex[:8].upper()}"
-    mapper = task(
-        run_id,
-        "TASK-MAP",
-        "corpus-mapper",
-        [],
-        schema="corpus-map-v1",
-        scope_included=accepted_branches or [scope_summary],
-        scope_excluded=excluded,
-        input_source_ids=source_ids,
-        input_artifacts=[relative_text(SOURCE_MANIFEST)],
-        source_limit=len(source_ids),
-    )
     extractors = [task(
         run_id,
         f"TASK-EXTRACT-{source_id}",
@@ -165,20 +174,11 @@ def main() -> int:
         source_limit=1,
     ) for source_id in source_ids]
     extractor_ids = [item["task_id"] for item in extractors]
-    research = [task(
-        run_id,
-        f"TASK-RESEARCH-{index:02d}",
-        "research-worker",
-        ["TASK-MAP"],
-        scope_excluded=excluded,
-        source_limit=approved_source_limit,
-    ) for index in range(1, args.research_workers + 1)]
-    research_ids = [item["task_id"] for item in research]
     contradiction = task(
         run_id,
         "TASK-CONTRADICTIONS",
         "contradiction-reviewer",
-        [*extractor_ids, *research_ids],
+        extractor_ids,
         schema="contradiction-review-v1",
         scope_included=accepted_branches or [scope_summary],
         scope_excluded=excluded,
@@ -187,7 +187,7 @@ def main() -> int:
         run_id,
         "TASK-CITATIONS",
         "citation-verifier",
-        ["TASK-CONTRADICTIONS", *extractor_ids, *research_ids],
+        ["TASK-CONTRADICTIONS", *extractor_ids],
         "reviews",
         "citation-review-v1",
         scope_included=accepted_branches or [scope_summary],
@@ -223,13 +223,9 @@ def main() -> int:
         "supersession_reason": args.supersede_reason,
         "publication_intent": True,
         "plan_origin": {"kind": "generated", "compiler": "create_research_plan.py"},
-        "execution_requirements": {
-            "independent_workers": True,
-            "parallelism_required": False,
-            "parallelism_preferred": args.research_workers > 1,
-        },
+        "execution_requirements": scheduler_requirements(),
         "workflow_state": "tasks_planned",
-        "task_graph": [mapper, *extractors, *research, contradiction, citation],
+        "task_graph": [*extractors, contradiction, citation],
         "created_at": now,
         "updated_at": now,
     }
@@ -238,15 +234,15 @@ def main() -> int:
     path = save_active_plan(root, payload)
     append_event(root, {
         "action": "research.plan_compiled", "actor": "main-agent", "status": "complete",
-        "summary": f"Compiled an authorized plan with {args.research_workers} research workers and ordered review phases.",
+        "summary": f"Compiled an authorized researched-course plan with {len(extractors)} queued source extractor task(s) and ordered review phases.",
         "artifacts": [".work/orchestration/run-plan.yaml"], "decision": "approved",
-        "justification": "The learner approved the displayed scope and worker topology."
+        "justification": "The learner approved the source budget; the capacity queue prevents over-dispatch."
     })
     print(yaml.safe_dump({
         "status": "complete",
         "run_id": run_id,
         "path": str(path),
-        "first_context_task_ids": ["TASK-MAP", *extractor_ids],
+        "first_context_task_ids": extractor_ids,
         "first_ready_task_ids": [],
     }, sort_keys=False))
     return 0

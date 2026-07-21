@@ -6,21 +6,31 @@ Measure the learner's starting point without letting conversation replace resear
 
 ## 1. Announce before asking
 
-Choose 3-8 calibration questions across the proposed course; use 10 only when the learner requests a deeper diagnostic. Ask one at a time.
+For a topic-only Verified Course, use the learner's first open prior-knowledge answer as calibration question 1. Ask at most two additional questions before research. Offer a deeper 5-10 question diagnostic only when the learner explicitly requests it. Ask one at a time.
+
+Every calibration question must appear verbatim in the normal learner-visible response. Internal reasoning may prepare a question, but it does not count as asking it. Never put the only copy in reasoning, a plan, a tool call, `.work/`, or the calibration record. End the response immediately after the single displayed question and wait for the learner's answer.
 
 For a topic-only request, count the first-turn open prior-knowledge response as calibration question 1. Once a course root is available, initialize the calibration record, preserve that exact learner-visible question and response, and record only the brief starting-level feedback shown to the learner. Before asking question 2, state the total count, remaining mix, estimated time, and what will be recorded. Use the opening response to avoid redundant follow-ups.
 
-When supplied material caused the first-turn question to be skipped, announce the exact count, mix, estimated time, and recording policy before calibration question 1 as usual.
+Supplied-material Fast Courses do not run this blocking calibration workflow. Their first sourced practice questions provide later learner-model evidence.
 
 Default announcement:
 
 ```text
-I will use what you just told me as calibration question 1 and ask 7 targeted follow-ups, one at a time: 5 concise concept questions and 2 short scenarios. This should take about 9 minutes. I will record each learner-visible question, your answer, confidence when given, and the feedback I show you. After question 8, I will propose up to 5 related branches and show the research-worker plan. You can begin, adjust the remaining count, or skip the follow-ups.
+I will use what you just told me as calibration question 1 and ask 2 targeted follow-ups, one at a time: 1 concise concept question and 1 short scenario. This should take about 3 minutes. I will record each learner-visible question, your answer, and the feedback I show you. Then I will propose the bounded source and course scope. You can begin, request a deeper diagnostic, or skip the follow-ups.
 ```
 
-For supplied-material runs without an opening seed, say `I will ask 8 calibration questions` and use the original 6-concept/2-scenario mix. Accept `begin`, `adjust`, or `skip`. Do not ask unrelated intake questions between calibration items. Calibration is provisional: do not write durable proficiency scores from unsourced questions, and never treat the learner's opening claims as course evidence.
+Calibration is provisional: do not write durable proficiency scores from unsourced questions, and never treat the learner's opening claims as course evidence.
 
 Record only observable interaction with `scripts/record_calibration.py`. Never record hidden reasoning.
+
+## Learner-visible turn loop
+
+1. Display the count/mix announcement and exactly one calibration question in learner-visible response text.
+2. End the response and wait. Do not answer the question yourself, continue to the next question, or perform hidden calibration as if the learner had responded.
+3. After the learner replies, prepare concise learner-visible feedback. Record the exact previously displayed question, learner answer, and feedback with `record_calibration.py`.
+4. Display that feedback and, when questions remain, exactly one next question in the same learner-visible response; then end the response and wait again.
+5. Do not mark a calibration question asked or answered unless it was actually displayed and the learner responded.
 
 ## 2. Ask a bounded diagnostic
 
@@ -47,10 +57,10 @@ Only learner-accepted branches enter this run. Do not silently expand the course
 
 ## 4. Show one authorization card
 
-For `topic-research` and `hybrid`, show the proposed source limit and topology before spawning workers. Use this shape:
+For `topic-research` and `hybrid`, show the proposed source limit and topology before spawning workers. In `hybrid`, state that the supplied anchor is registered first and one bounded source scout then finds corroborating candidates within the remaining source budget. Use this shape:
 
 ```text
-Research plan: 1 bounded source scout when no source is supplied -> 1 isolated extractor per retained source plus 3 bounded concept-research workers -> 1 contradiction reviewer -> 1 final citation verifier. After evidence approval, a separate run uses 1 assessment generator -> 1 independent assessment validator. Later phases wait for their dependencies. Extractor count cannot exceed the approved source limit. Drafts stay under `.work/`; accepted validation receipts and the append-only log stay under `records/`. Approve this scope and worker plan, or tell me what to adjust.
+Verified Course plan: use 1 bounded source scout, retain normally 3 authoritative sources, queue 1 isolated extractor per retained source with at most 3 active workers, then run 1 contradiction reviewer and 1 final citation verifier. I will author the lessons and at least 10 questions per chapter from approved evidence; a separate run uses 1 independent assessment validator. The fourth child-agent slot remains reserved for recovery. Approve this source and course scope, or tell me what to adjust.
 ```
 
 The learner's approval covers the displayed worker count, accepted branches, excluded topics, source limit, assumed level, and publication target. Record that approval as the canonical `learning_contract` in `study.yaml`. Ask again only when exceeding that boundary.
@@ -60,7 +70,7 @@ The learner's approval covers the displayed worker count, accepted branches, exc
 After approval, record the contract. Do not create the research/evidence run yet: source acquisition must first produce a valid `SOURCES_READY` course. When the course has no supplied source, reconciliation first requires the separate one-task source-discovery run described in `research-topic.md`.
 
 ```bash
-python scripts/record_scope_approval.py COURSE_ROOT --summary "APPROVED_SCOPE" --source-limit 10 --research-workers 3 --assumed-level "ASSUMED_LEVEL"
+python scripts/record_scope_approval.py COURSE_ROOT --summary "APPROVED_SCOPE" --source-limit 3 --research-workers 0 --assumed-level "ASSUMED_LEVEL"
 python scripts/reconcile_workflow.py COURSE_ROOT --json
 ```
 

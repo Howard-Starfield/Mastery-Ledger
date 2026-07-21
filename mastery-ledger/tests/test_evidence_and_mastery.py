@@ -16,15 +16,24 @@ ROOT = Path(__file__).resolve().parents[1]
 def substantive_lesson() -> str:
     template = (ROOT / "assets" / "lesson.md").read_text(encoding="utf-8")
     template = template.replace("estimated_minutes: 0", "estimated_minutes: 20")
+    template = template.replace(
+        "source_refs: []",
+        "source_refs:\n"
+        "  - ref_id: REF-001\n"
+        "    source_id: SRC-001\n"
+        "    locator: {kind: section, value: '1', label: 'Section 1'}\n"
+        "    supports: [claim]\n"
+        "    support_strength: direct",
+    )
     filler = "The learner follows the mechanism, compares alternatives, checks assumptions, and applies the supported idea to a concrete case. " * 38
-    return template.replace("Teach definitions, mechanisms, relationships, and consequences in progressive prose. Bind factual claims to structured frontmatter references using markers such as `[^REF-001]`.", filler).replace(
+    return template.replace("Teach definitions, mechanisms, relationships, and consequences in progressive prose. Bind factual claims to structured frontmatter references using markers such as `[^REF-001]`.", filler + " [^REF-001]").replace(
         "Model the complete reasoning or procedure step by step.", filler
     ).replace("Apply the idea to a transfer case, comparison, or counterexample.", filler).replace(
         "Explain at least one plausible wrong model and why it fails.", filler[:900]
     ).replace("State boundaries, disagreements, and uncovered gaps.", filler[:900]).replace(
         "Include 2-4 ungraded recall, explanation, comparison, or prediction checks.",
         "- Recall the central mechanism.\n- Compare it with a misconception.\n- Predict a transfer case."
-    )
+    ).replace("Add one learner-readable footnote for every structured `source_refs[].ref_id`.", "[^REF-001]: Anchor source, Section 1.")
 
 
 def load_module(name: str, relative: str):
@@ -255,7 +264,7 @@ class EvidenceAndMasteryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             studies = Path(directory)
             subprocess.run(
-                [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Hollow Active", "--studies-dir", str(studies)],
+                [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Hollow Active", "--mode", "provided-material-only", "--studies-dir", str(studies)],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -302,7 +311,7 @@ class EvidenceAndMasteryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             studies = Path(directory)
             subprocess.run(
-                [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Envelope Course", "--studies-dir", str(studies)],
+                [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Envelope Course", "--mode", "provided-material-only", "--studies-dir", str(studies)],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -319,6 +328,14 @@ class EvidenceAndMasteryTests(unittest.TestCase):
             )
             (course_root / "index.md").write_text("# Course\n\n" + ("Substantive course map. " * 20), encoding="utf-8")
             (course_root / "lessons" / "CH-001.md").write_text(substantive_lesson(), encoding="utf-8")
+            source = course_root / "records" / "source" / "SRC-001.md"
+            source.write_text("# Anchor\n\n## Section 1\n\nSource-grounded material for the lesson.\n", encoding="utf-8")
+            subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "register_source.py"), str(course_root), "--source-id", "SRC-001", "--title", "Anchor", "--location", "https://example.invalid/anchor", "--knowledge-path", "records/source/SRC-001.md"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             subprocess.run(
                 [sys.executable, str(ROOT / "scripts" / "create_assessment_plan.py"), str(course_root), "--authorized"],
                 check=True,
@@ -326,7 +343,7 @@ class EvidenceAndMasteryTests(unittest.TestCase):
                 text=True,
             )
             subprocess.run(
-                [sys.executable, str(ROOT / "scripts" / "compile_worker_context.py"), str(course_root), "TASK-ASSESSMENT-GENERATE", "--json"],
+                [sys.executable, str(ROOT / "scripts" / "compile_worker_context.py"), str(course_root), "TASK-ASSESSMENT-VALIDATE", "--json"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -337,7 +354,7 @@ class EvidenceAndMasteryTests(unittest.TestCase):
             output = course_root / task["output_path"]
             completion = course_root / task["completion_path"]
             event = course_root / task["event_path"]
-            output.write_text('{"schema_version":"question-bank-v2"}\n', encoding="utf-8")
+            output.write_text('{"schema_version":"assessment-validation-v1","decision":"approved","validated_question_ids":[],"rejected_question_ids":[],"issues":[]}\n', encoding="utf-8")
             event.write_text(json.dumps({
                 "schema_version": "action-event-v1",
                 "event_id": "EVT-ENVELOPE",

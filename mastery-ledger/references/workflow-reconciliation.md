@@ -30,12 +30,12 @@ Exit code `0` means complete, `2` means work or user input is required, and `3` 
 1. Confirm the course has one persistent target state.
 2. Run reconciliation once.
 3. If work is returned, read only the listed workflow files.
-4. Run the deterministic helper or the exact `ready_task_ids` reported by `validate_orchestration.py`.
+4. Compile dependency-eligible contexts, then run `manage_worker_runtime.py status`; treat `ready_task_ids` as eligibility and dispatch only the capacity-bounded `dispatch_task_ids`.
 5. For each `context_required_task_id`, compile its worker context and rerun orchestration validation before dispatch. Never compose a replacement prompt.
-6. Wait for the entire dispatched wave, route every completion through `route_worker_completion.py`, and merge only accepted worker event shards before rerunning the gate. A malformed return receives a same-task repair packet; it does not create a new plan.
+6. Reserve, spawn, and attach one worker at a time. Route each completion as it arrives, reuse the same live worker for a repair, and close accepted or exhausted workers before refilling the queue. Never wait for an entire wave before routing completed work.
 7. Record observable actions, decisions, evidence, and short justifications. Never record hidden reasoning.
 8. Rerun reconciliation after an artifact, task status, source, learner decision, or validation result changed.
-9. Stop on completion, required user input, declined/unavailable independent workers, or retry exhaustion. `DRAFT_UNVERIFIED` is a publication label and must not replace the primary workflow state, so a later authorized repair can resume from the same gate.
+9. Treat capacity exhaustion as queued work, not unavailable capability. Stop on completion, required user input, declined/unavailable independent workers, a second confirmed stall, or completion-repair exhaustion. `DRAFT_UNVERIFIED` remains a resumable publication label.
 
 Do not call the script in a tight loop. A return is a work order for the main agent, not permission to fabricate the missing artifact. Do not create a worker to run reconciliation; the main agent owns the loop.
 
@@ -45,7 +45,7 @@ Do not call the script in a tight loop. A return is a work order for the main ag
 | --- | --- | --- |
 | `SCOPED` | Learning contract, calibration disposition when applicable, and recorded scope approval | `intake-and-scope.md`, `calibrate-and-authorize.md` |
 | `SOURCES_READY` | At least one retained source with ready status, matching hash, and non-empty `records/source/SRC-NNN.md`; source-less research first requires an accepted source-scout ledger | `ingest-material.md`, `process-video.md`, or `research-topic.md` |
-| `CORPUS_MAPPED` | Submitted corpus mapper for researched modes; provided-source modes pass without one | `orchestrate-research.md` |
+| `CORPUS_MAPPED` | Compatibility checkpoint after registered sources; the main agent owns the small-course outline | `orchestrate-research.md` |
 | `TASKS_PLANNED` | Authorized, valid, non-empty dependency graph | `orchestrate-research.md` |
 | `EVIDENCE_SUBMITTED` | Required research/extraction and contradiction wave submitted, or direct provided-source claims recorded | `orchestrate-research.md`, `verify-evidence.md` |
 | `EVIDENCE_VERIFIED` | Final citation verifier submitted after contradiction review for researched modes | `verify-evidence.md` |
@@ -60,10 +60,10 @@ After the learner explicitly approves the displayed scope card, record the obser
 
 ```text
 python "<SKILL_ROOT>/scripts/record_scope_approval.py" "<COURSE_ROOT>" \
-  --summary "<APPROVED_SCOPE>" --source-limit 10 --research-workers 3
+  --summary "<APPROVED_SCOPE>" --source-limit 3 --research-workers 0
 ```
 
-Use `--accepted-branch` and `--excluded` once per item when applicable. Provided-source modes use `--research-workers 0`; the independent assessment validator is still required for a ready exam.
+Use `--accepted-branch` and `--excluded` once per item when applicable. New Fast and Verified paths both record `--research-workers 0`; scout and extractor roles are planned separately, and an independent assessment validator remains required.
 
 ## Failure boundaries
 

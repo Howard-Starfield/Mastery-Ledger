@@ -1,4 +1,4 @@
 interface:
   display_name: "Mastery Ledger"
-  short_description: "Build verified courses, exams, and reviews"
-  default_prompt: "Use $mastery-ledger to calibrate my starting point, research this topic with independent workers, and build a cited course and ready exam."
+  short_description: "Build source-grounded courses and exams"
+  default_prompt: "Use $mastery-ledger to turn my supplied material into a Fast Course or research a topic-only Verified Course with checked lessons and questions."

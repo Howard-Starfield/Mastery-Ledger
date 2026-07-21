@@ -67,6 +67,7 @@ def validate_lesson(
     *,
     source_ids: set[str],
     publication: bool = False,
+    substantive: bool = False,
     expected_chapter_id: str | None = None,
 ) -> tuple[list[str], list[str]]:
     errors: list[str] = []
@@ -105,8 +106,8 @@ def validate_lesson(
 
     refs = metadata.get("source_refs")
     refs = refs if isinstance(refs, list) else []
-    if publication and not refs:
-        errors.append(f"{prefix} source_refs must be non-empty for publication")
+    if (publication or substantive) and not refs:
+        errors.append(f"{prefix} source_refs must be non-empty for a substantive lesson")
     ref_ids: set[str] = set()
     for index, ref in enumerate(refs):
         if not isinstance(ref, dict):
@@ -161,7 +162,7 @@ def validate_lesson(
     words = _word_count(body)
     if words < 1200:
         message = f"{prefix} has {words} words; standard publication requires at least 1200"
-        (errors if publication else warnings).append(message)
+        (errors if publication or substantive else warnings).append(message)
     if words > 2500:
         errors.append(f"{prefix} has {words} words; split content above 2500 words")
     return errors, warnings
@@ -172,12 +173,14 @@ def main() -> int:
     parser.add_argument("lesson", type=Path)
     parser.add_argument("--source-manifest", type=Path, required=True)
     parser.add_argument("--publication", action="store_true")
+    parser.add_argument("--substantive", action="store_true", help="Require a complete source-grounded book-like draft without requiring validated status")
     parser.add_argument("--chapter-id")
     args = parser.parse_args()
     errors, warnings = validate_lesson(
         args.lesson,
         source_ids=load_source_ids(args.source_manifest),
         publication=args.publication,
+        substantive=args.substantive,
         expected_chapter_id=args.chapter_id,
     )
     print(json.dumps({"status": "pass" if not errors else "fail", "errors": errors, "warnings": warnings}, indent=2))
@@ -186,4 +189,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

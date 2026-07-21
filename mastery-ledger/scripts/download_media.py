@@ -2,8 +2,9 @@
 """Acquire permitted captions or media through the yt-dlp Python API.
 
 This helper never reads a user's global yt-dlp configuration, never accepts
-cookies or credentials, and defaults to one remote item. The caller must make
-the rights decision explicitly before any network acquisition is attempted.
+cookies or credentials, and defaults to one remote item. Metadata-only probing
+needs no rights declaration; the caller must confirm authorization before any
+caption, audio, or video file is saved.
 """
 
 from __future__ import annotations
@@ -23,8 +24,18 @@ ALLOWED_RIGHTS = {
     "platform_permitted_download",
     "public_license",
     "explicit_permission",
+    "user_attested_authorized_use",
 }
 MODES = {"probe", "human_subtitles", "automatic_subtitles", "audio", "video"}
+
+
+def resolve_rights_basis(mode: str, rights_basis: str | None) -> str:
+    """Keep metadata probing separate from authorized media acquisition."""
+    if mode == "probe":
+        return "not_applicable_metadata_probe"
+    if rights_basis not in ALLOWED_RIGHTS:
+        raise ValueError("remote caption, audio, or video acquisition requires learner-confirmed authorization")
+    return rights_basis
 
 
 def sha256_file(path: Path) -> str:
@@ -123,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("url")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--source-id", required=True)
-    parser.add_argument("--rights-basis", required=True)
+    parser.add_argument("--rights-basis", choices=sorted(ALLOWED_RIGHTS))
     parser.add_argument("--mode", choices=sorted(MODES), default="probe")
     parser.add_argument("--languages", default="en.*,en")
     parser.add_argument("--playlist", action="store_true")
@@ -134,10 +145,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if args.rights_basis not in ALLOWED_RIGHTS:
-        parser.error(
-            "remote acquisition requires an allowed --rights-basis; unknown rights are refused"
-        )
+    try:
+        rights_basis = resolve_rights_basis(args.mode, args.rights_basis)
+    except ValueError as error:
+        parser.error(str(error))
     if not args.url.startswith(("https://", "http://")):
         parser.error("URL must use http or https")
     try:
@@ -209,10 +220,10 @@ def main(argv: list[str] | None = None) -> int:
     probe_path.write_text(json.dumps(probe, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     manifest = {
         "schema_version": "media-download-v2",
-        "kind": "media_acquisition",
+        "kind": "media_probe" if args.mode == "probe" else "media_acquisition",
         "state": state,
         "source_id": source_id,
-        "rights_basis": args.rights_basis,
+        "rights_basis": rights_basis,
         "mode": args.mode,
         "url": args.url,
         "yt_dlp_version": version,

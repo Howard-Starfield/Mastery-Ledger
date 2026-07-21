@@ -90,4 +90,4 @@ The phase is complete only when:
 - missing or failed artifacts are recorded;
 - the corpus is ready for mapping or topic research.
 
-After at least one source registers successfully, rerun `reconcile_workflow.py COURSE_ROOT --json`. A research run plan may be created only when reconciliation has advanced the course to `SOURCES_READY`.
+After at least one source registers successfully, rerun `reconcile_workflow.py COURSE_ROOT --json`. In anchor-only mode, reconciliation may pass through the no-op `CORPUS_MAPPED` state before requesting the provided-evidence plan. In hybrid mode, the registered anchor is followed by authorized corroborating source discovery and registration. Compile only the plan named by reconciliation; never edit the state backward by hand.

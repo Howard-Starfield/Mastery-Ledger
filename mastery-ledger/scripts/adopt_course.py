@@ -130,6 +130,7 @@ def adopt(root: Path) -> dict[str, object]:
             (assets / source_name).read_text(encoding="utf-8"),
             study_id=study_id,
             title=title,
+            mode="provided-material-only",
         )
         _write_if_missing(target, text, created, root)
     if "study.yaml" in created:

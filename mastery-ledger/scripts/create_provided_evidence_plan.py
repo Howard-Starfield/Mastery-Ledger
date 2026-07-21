@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from create_research_plan import task
+from create_research_plan import scheduler_requirements, task
 from plan_store import is_placeholder, load_active_plan, save_active_plan
 from record_action import append_event
 from source_registry import load_manifest, source_errors
@@ -35,8 +35,8 @@ def main() -> int:
     if mode not in PROVIDED_MODES:
         parser.error("This compiler is only for provided-material, existing-library, or local-media studies.")
     state = str(study.get("workflow_state", "")).strip().replace("-", "_").upper()
-    if state != "SOURCES_READY":
-        parser.error("Provided evidence planning requires workflow_state SOURCES_READY.")
+    if state not in {"SOURCES_READY", "CORPUS_MAPPED"}:
+        parser.error("Provided evidence planning requires workflow_state SOURCES_READY or CORPUS_MAPPED.")
     approval = study.get("learning_contract")
     if not isinstance(approval, dict) or approval.get("status") != "approved":
         parser.error("Provided evidence planning requires an approved canonical learning contract.")
@@ -84,24 +84,11 @@ def main() -> int:
         for source_id in source_ids
     ]
     extractor_ids = [item["task_id"] for item in extractors]
-    contradiction = None
-    citation_dependencies = list(extractor_ids)
-    if len(source_ids) > 1:
-        contradiction = task(
-            run_id,
-            "TASK-CONTRADICTIONS",
-            "contradiction-reviewer",
-            extractor_ids,
-            schema="contradiction-review-v1",
-            scope_included=accepted_branches or [summary],
-            scope_excluded=excluded,
-        )
-        citation_dependencies = ["TASK-CONTRADICTIONS", *extractor_ids]
     citation = task(
         run_id,
         "TASK-CITATIONS",
         "citation-verifier",
-        citation_dependencies,
+        extractor_ids,
         "reviews",
         "citation-review-v1",
         scope_included=accepted_branches or [summary],
@@ -109,7 +96,7 @@ def main() -> int:
         input_source_ids=source_ids,
         source_limit=len(source_ids),
     )
-    tasks = [*extractors, *([contradiction] if contradiction else []), citation]
+    tasks = [*extractors, citation]
     now = datetime.now(timezone.utc).isoformat()
     payload = {
         "schema_version": "provided-evidence-plan-v1",
@@ -130,7 +117,7 @@ def main() -> int:
         "supersession_reason": args.supersede_reason,
         "publication_intent": True,
         "plan_origin": {"kind": "generated", "compiler": "create_provided_evidence_plan.py"},
-        "execution_requirements": {"independent_workers": True, "parallelism_required": False, "parallelism_preferred": len(extractors) > 1},
+        "execution_requirements": scheduler_requirements(),
         "workflow_state": "tasks_planned",
         "task_graph": tasks,
         "created_at": now,
@@ -148,7 +135,7 @@ def main() -> int:
             "summary": f"Compiled {len(extractors)} source extraction task(s) and ordered independent citation verification.",
             "artifacts": [".work/orchestration/run-plan.yaml"],
             "decision": "approved",
-            "justification": "Provided-source courses require extraction and verification but no concept research worker.",
+            "justification": "Provided-source courses use the fast extraction and final evidence-validation path without open-web research.",
         },
     )
     print(yaml.safe_dump({
@@ -163,4 +150,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
