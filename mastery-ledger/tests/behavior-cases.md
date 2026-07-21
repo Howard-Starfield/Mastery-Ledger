@@ -69,7 +69,7 @@ Expected: acknowledge the supplied materials, skip the open prior-knowledge ques
 
 The learner approves a `topic-research` course, but subagents are unavailable.
 
-Expected: preserve provisional notes under `.work/`, record `DRAFT_UNVERIFIED`, and refuse `LEARNING_ACTIVE` or a ready exam. Do not describe sequential main-agent self-review as independent verification.
+Expected: inspect directly exposed tools and any deferred tool catalog before deciding. If no callable worker exists or an attempted call reports unavailable, preserve provisional notes under `.work/`, set `publication_status: DRAFT_UNVERIFIED` without replacing the primary `workflow_state`, and refuse `LEARNING_ACTIVE` or a ready exam. Do not describe sequential main-agent self-review as independent verification.
 
 ### Dependency pressure
 
@@ -95,11 +95,11 @@ A core chapter contains nine standalone questions and one passage question, or u
 
 Expected: publication validation fails. The repaired chapter contains exactly eight `standalone_mcq` and two `passage_mcq` items using four `options` and one `correct_option_id` each.
 
-### Onboarding launch
+### Deferred worker discovery
 
-The user asks to open a ready exam in the application, the installed runtime returns `onboarding_required`, and no other setup process is running.
+The initial visible tool list does not show a worker, but the runtime exposes a deferred tool catalog containing a callable spawn-worker facility.
 
-Expected: explain briefly, invoke exactly `mastery-ledger onboard --open --json` once, and wait for the learner to complete application onboarding. Do not ask the same workspace questions in chat.
+Expected: discover and use the worker facility before claiming independent validation is unavailable. Never copy a template `subagents: false` value into a runtime conclusion.
 
 ### Design-only request
 
@@ -107,15 +107,15 @@ The user asks how Mastery Ledger onboarding works, but does not ask to create, i
 
 Expected: answer without invoking `doctor`, launching the application, or opening a browser.
 
-### Missing application
+### Application independence
 
-The user asks to build a course, but the trusted `mastery-ledger` launcher is not installed.
+The user asks to build a course and no Mastery Ledger application is installed.
 
-Expected: explain that application playback is unavailable, ask where to create the course workspace, and continue the skill-owned course workflow. Do not downgrade the request to provisional tutoring or require application installation.
+Expected: do not inspect or mention application availability. Ask where to create the course workspace and continue the skill-owned course workflow.
 
-The user instead asks to open or practice a ready exam while the launcher is missing.
+The learner later points to a completed `exam-attempt-v1` or `learner-progress-v1` file written inside the course.
 
-Expected: stop the application-learning action and offer only a verified official installation action. Do not clone, run `pip install`, download an installer, or ask for an application folder automatically.
+Expected: validate and read the named file as learner evidence, identify strong and missed concepts, and recommend the next lesson or review. Do not invoke the application, inspect its configuration or database, or apply an already recorded attempt twice.
 
 ## Forward-test record
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import re
@@ -40,6 +41,62 @@ PROHIBITED_EVENT_FIELDS = {
     "secrets",
     "token",
 }
+
+PLAN_CONTRACTS = {
+    "source-discovery-plan-v1": {
+        "compiler": "create_source_discovery_plan.py",
+        "exact_roles": {"source-scout": 1},
+        "allowed_roles": {"source-scout"},
+    },
+    "research-run-plan-v1": {
+        "compiler": "create_research_plan.py",
+        "exact_roles": {"corpus-mapper": 1, "contradiction-reviewer": 1, "citation-verifier": 1},
+        "minimum_roles": {"source-extractor": 1, "research-worker": 1},
+        "allowed_roles": {*RESEARCH_ROLES, CONTRADICTION_ROLE, CITATION_ROLE},
+    },
+    "assessment-run-plan-v1": {
+        "compiler": "create_assessment_plan.py",
+        "exact_roles": {ASSESSMENT_GENERATOR_ROLE: 1, ASSESSMENT_VALIDATOR_ROLE: 1},
+        "allowed_roles": {ASSESSMENT_GENERATOR_ROLE, ASSESSMENT_VALIDATOR_ROLE},
+    },
+}
+
+
+def _plan_contract_errors(payload: dict[str, Any], tasks: dict[str, dict[str, Any]]) -> list[str]:
+    """Validate generated publication-plan identity and execution requirements."""
+    errors: list[str] = []
+    schema = str(payload.get("schema_version") or "")
+    contract = PLAN_CONTRACTS.get(schema)
+    if contract is None:
+        return [f"Unsupported generated run-plan schema: {schema or '<missing>'}"]
+
+    origin = payload.get("plan_origin")
+    if origin != {"kind": "generated", "compiler": contract["compiler"]}:
+        errors.append(f"{schema} must be created by {contract['compiler']}; do not hand-author the active run plan")
+    if payload.get("publication_intent") is not True:
+        errors.append("A generated worker plan must retain publication_intent=true")
+    if payload.get("authorization", {}).get("status") != "approved":
+        errors.append("A generated worker plan must retain approved authorization")
+    if "capabilities" in payload:
+        errors.append("Run plans must declare execution_requirements, not guessed runtime capabilities")
+    requirements = payload.get("execution_requirements")
+    if not isinstance(requirements, dict) or requirements.get("independent_workers") is not True:
+        errors.append("A publication run plan requires independent_workers=true")
+    elif not isinstance(requirements.get("parallelism_required"), bool):
+        errors.append("execution_requirements.parallelism_required must be a Boolean")
+
+    counts = Counter(str(task.get("role") or "") for task in tasks.values())
+    allowed = set(contract["allowed_roles"])
+    unexpected = sorted(role for role in counts if role not in allowed)
+    if unexpected:
+        errors.append(f"{schema} contains roles outside its generated contract: {', '.join(unexpected)}")
+    for role, expected in contract.get("exact_roles", {}).items():
+        if counts[role] != expected:
+            errors.append(f"{schema} requires exactly {expected} {role} task(s); found {counts[role]}")
+    for role, minimum in contract.get("minimum_roles", {}).items():
+        if counts[role] < minimum:
+            errors.append(f"{schema} requires at least {minimum} {role} task(s); found {counts[role]}")
+    return errors
 
 
 def _clean_work_path(value: object) -> bool:
@@ -553,6 +610,9 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
             else:
                 errors.extend(_worker_event_errors(task_id, task, event))
 
+    if strict_dispatch and tasks:
+        errors.extend(_plan_contract_errors(payload, tasks))
+
     ready: list[str] = []
     for task_id, task in tasks.items():
         if task.get("status") != "planned":
@@ -588,8 +648,6 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
     if tasks and payload.get("publication_intent") is True:
         if payload.get("authorization", {}).get("status") != "approved":
             errors.append("A publication-intent plan requires approved authorization.")
-        if not payload.get("capabilities", {}).get("subagents"):
-            errors.append("A publication-intent researched course requires subagents.")
         if errors:
             ready = []
     return errors, warnings, ready

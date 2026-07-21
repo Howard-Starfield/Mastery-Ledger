@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-from advance_workflow import ORDER, advance_state, gate_requirements, normalize
+from advance_workflow import ORDER, advance_state, gate_requirements, normalize, recover_legacy_draft_state
 from record_action import append_event
 
 SCHEMA_VERSION = "workflow-reconciliation-v1"
@@ -73,15 +73,15 @@ def reconcile(root: Path, target: str, *, max_same_blocker: int) -> tuple[dict[s
         raise ValueError(f"Unknown target state: {target}")
     tracker_path = root / ".work" / "orchestration" / "reconciliation.json"
     advanced: list[dict[str, str]] = []
+    recover_legacy_draft_state(root)
 
     if target == "DRAFT_UNVERIFIED":
         study = _read_study(root)
         current = normalize(study.get("workflow_state"))
-        if current != target:
-            previous, entered = advance_state(root, target, reason="Reconciliation recorded an unverified terminal draft.")
-            advanced.append({"from": previous, "to": entered})
+        if normalize(study.get("publication_status")) != target:
+            advance_state(root, target, reason="Reconciliation recorded an unverified publication draft.")
         _atomic_json(tracker_path, {"schema_version": SCHEMA_VERSION, "status": "complete", "target_state": target})
-        return {"schema_version": SCHEMA_VERSION, "status": "complete", "target_state": target, "current_state": target, "advanced": advanced}, 0
+        return {"schema_version": SCHEMA_VERSION, "status": "complete", "target_state": target, "current_state": current, "publication_status": target, "advanced": advanced}, 0
 
     while True:
         study = _read_study(root)

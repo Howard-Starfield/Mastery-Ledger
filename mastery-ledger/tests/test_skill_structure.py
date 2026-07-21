@@ -14,7 +14,6 @@ class SkillStructureTests(unittest.TestCase):
         required = [
             ROOT / "SKILL.md",
             ROOT / "agents" / "openai.yaml",
-            ROOT / "workflows" / "runtime-onboarding.md",
             ROOT / "workflows" / "intake-and-scope.md",
             ROOT / "workflows" / "calibrate-and-authorize.md",
             ROOT / "workflows" / "orchestrate-research.md",
@@ -53,7 +52,6 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "assets" / "citation-review.json",
             ROOT / "assets" / "source-candidate-ledger.json",
             ROOT / "assets" / "source-record.example.yaml",
-            ROOT / "assets" / "runtime-compatibility.json",
             ROOT / "scripts" / "compile_worker_context.py",
             ROOT / "scripts" / "register_source.py",
             ROOT / "scripts" / "route_worker_completion.py",
@@ -81,20 +79,12 @@ class SkillStructureTests(unittest.TestCase):
         self.assertIn('display_name: "Mastery Ledger"', metadata)
         self.assertIn("$mastery-ledger", metadata)
 
-    def test_runtime_compatibility_asset_matches_application_version(self) -> None:
-        compatibility = json.loads(
-            (ROOT / "assets" / "runtime-compatibility.json").read_text(encoding="utf-8")
-        )
-        package = tomllib.loads((ROOT.parent / "pyproject.toml").read_text(encoding="utf-8"))
-        version = package["project"]["version"]
-        self.assertEqual(version, compatibility["skill_version"])
-        self.assertEqual("doctor-v2", compatibility["supported_application_contract"])
-        self.assertEqual(
-            f"mastery-ledger doctor --json --skill-version {version}",
-            compatibility["application_command"],
-        )
-        workflow = (ROOT / "workflows" / "runtime-onboarding.md").read_text(encoding="utf-8")
-        self.assertIn(compatibility["application_command"], workflow)
+    def test_skill_has_no_application_runtime_dependency(self) -> None:
+        self.assertFalse((ROOT / "assets" / "runtime-compatibility.json").exists())
+        self.assertFalse((ROOT / "workflows" / "runtime-onboarding.md").exists())
+        controller = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        self.assertNotIn("mastery-ledger doctor", controller)
+        self.assertIn("Never invoke, inspect, install, launch, or configure the Mastery Ledger application", controller)
 
     def test_linkvault_is_isolated_to_optional_connector(self) -> None:
         allowed = {
@@ -122,21 +112,26 @@ class SkillStructureTests(unittest.TestCase):
 
     def test_first_turn_and_runtime_routes_are_explicit(self) -> None:
         controller = (ROOT / "SKILL.md").read_text(encoding="utf-8")
-        runtime = (ROOT / "workflows" / "runtime-onboarding.md").read_text(encoding="utf-8")
         intake = (ROOT / "workflows" / "intake-and-scope.md").read_text(encoding="utf-8")
         media = (ROOT / "workflows" / "process-video.md").read_text(encoding="utf-8")
 
         self.assertIn("## First-turn learning gate", controller)
         self.assertIn("ask exactly one open prior-knowledge question and end the turn", controller)
         self.assertIn("If supplied material exists, skip the open question", controller)
-        self.assertIn("must not be blocked by a missing application", controller)
-        self.assertIn("`skill_course_build` may continue without the application", runtime)
-        self.assertIn("`application_learning` must pass the application gate", runtime)
-        self.assertIn("Never describe the skill as merely an application adapter", runtime)
+        self.assertIn("ask once for the absolute parent directory", controller)
+        self.assertIn("deferred tool catalog", controller)
+        self.assertIn("not a guessed Boolean in the run plan", controller)
         self.assertIn("Never treat the learner's statements as factual evidence", intake)
         self.assertNotIn("Source Inbox", media)
         self.assertNotIn("application-owned release runtime", media)
         self.assertIn("local application has no source-ingestion API", media)
+
+    def test_run_plan_template_has_requirements_not_capability_guesses(self) -> None:
+        plan = (ROOT / "assets" / "run-plan.yaml").read_text(encoding="utf-8")
+        self.assertIn("schema_version: run-plan-placeholder-v1", plan)
+        self.assertIn("execution_requirements:", plan)
+        self.assertNotIn("subagents:", plan)
+        self.assertNotIn("parallel_subagents:", plan)
 
     def test_retired_application_authoring_surfaces_are_absent(self) -> None:
         application_root = ROOT.parent / "src" / "mastery_ledger"

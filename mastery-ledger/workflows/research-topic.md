@@ -7,7 +7,7 @@ Build a bounded, current, source-grounded corpus for an on-the-fly learning topi
 ## Preconditions
 
 The learning outcome, scope, exclusions, source policy, and worker budget must be approved. If they are not, return to `intake-and-scope.md`.
-The calibration disposition and canonical learning contract must also exist. When no source is supplied, reconciliation requires an authorized deterministic source-discovery plan before source acquisition. The evidence run is compiled later, only after retained sources are registered and the course reaches `SOURCES_READY`. If subagents are unavailable, stop at `DRAFT_UNVERIFIED`; do not convert a conversational self-review into publishable evidence.
+The calibration disposition and canonical learning contract must also exist. When no source is supplied, reconciliation requires an authorized deterministic source-discovery plan before source acquisition. The evidence run is compiled later, only after retained sources are registered and the course reaches `SOURCES_READY`. Inspect direct and deferred tools before deciding workers are unavailable. When they truly are unavailable, set publication status to `DRAFT_UNVERIFIED`; do not replace the primary workflow state or convert a conversational self-review into publishable evidence.
 
 ## Scout before fan-out
 

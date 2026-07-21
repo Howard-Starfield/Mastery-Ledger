@@ -4,9 +4,9 @@
 
 Delegate independent, bounded work without surrendering evidence control or final synthesis.
 
-## Capability gate
+## Execution gate
 
-Record whether the runtime supports:
+Inspect whether the current runtime supports:
 
 - spawning subagents;
 - parallel workers;
@@ -15,7 +15,9 @@ Record whether the runtime supports:
 - web and file tools inside workers;
 - independent model selection.
 
-For `topic-research` or `hybrid`, independent workers are a publication requirement. If they are unavailable or declined, preserve provisional work under `.work/`, advance to `DRAFT_UNVERIFIED`, and stop before evidence approval, study-pack validation, learning activation, or a ready exam. A sequential main-agent pass may support the live conversation but cannot publish researched material.
+Search both directly exposed tools and any deferred tool catalog before declaring a worker facility unavailable. Record that observation in the action log; do not write availability Booleans into a run plan. The plan records required execution properties, and accepted routed completions prove they were satisfied.
+
+For `topic-research` or `hybrid`, independent workers are a publication requirement. If they are unavailable or declined, preserve provisional work under `.work/`, set publication status to `DRAFT_UNVERIFIED`, and stop before evidence approval, study-pack validation, learning activation, or a ready exam. A sequential main-agent pass may support the live conversation but cannot publish researched material.
 
 Before planning or dispatch, read [artifact lifecycle](../references/artifact-lifecycle.md), [event contract](../references/event-contract.md), [agent roles](../references/agent-roles.md), and [task and evidence contract](../references/task-and-evidence-contract.md) in full.
 
@@ -100,7 +102,7 @@ A citation verifier may mark `VERIFIED`; only the main agent may mark `APPROVED`
 
 ## Executable dispatch gate
 
-Once reconciliation reports `SOURCES_READY`, compile the approved plan instead of hand-authoring it, then run the gate before spawning any task and whenever a completion arrives:
+Once reconciliation reports `SOURCES_READY`, compile the approved plan instead of hand-authoring or editing `.work/orchestration/run-plan.yaml`, then run the gate before spawning any task and whenever a completion arrives:
 
 ```bash
 python scripts/create_research_plan.py studies/my-study --research-workers 3 --authorized

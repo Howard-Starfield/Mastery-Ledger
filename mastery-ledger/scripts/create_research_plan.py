@@ -119,9 +119,11 @@ def main() -> int:
     active_path = root / ".work" / "orchestration" / "run-plan.yaml"
     predecessor_run_id = None
     predecessor_relation = None
+    active_to_archive = None
     if active_path.is_file():
         active = load_active_plan(root)
         if not is_placeholder(active):
+            active_to_archive = active
             source_discovery_finished = (
                 active.get("schema_version") == "source-discovery-plan-v1"
                 and bool(active.get("task_graph"))
@@ -219,12 +221,19 @@ def main() -> int:
         "predecessor_relation": predecessor_relation,
         "supersession_reason": args.supersede_reason,
         "publication_intent": True,
-        "capabilities": {"filesystem": True, "web": True, "citations": True, "scripts": True, "subagents": True, "parallel_subagents": True},
+        "plan_origin": {"kind": "generated", "compiler": "create_research_plan.py"},
+        "execution_requirements": {
+            "independent_workers": True,
+            "parallelism_required": False,
+            "parallelism_preferred": args.research_workers > 1,
+        },
         "workflow_state": "tasks_planned",
         "task_graph": [mapper, *extractors, *research, contradiction, citation],
         "created_at": now,
         "updated_at": now,
     }
+    if active_to_archive is not None:
+        save_active_plan(root, active_to_archive)
     path = save_active_plan(root, payload)
     append_event(root, {
         "action": "research.plan_compiled", "actor": "main-agent", "status": "complete",

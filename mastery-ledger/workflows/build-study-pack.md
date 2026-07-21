@@ -87,6 +87,8 @@ python scripts/build_exam.py studies/my-study --exam-id EXAM-001 --title "Course
 
 `create_assessment_plan.py` requires `EVIDENCE_APPROVED` (or a later draft state), non-empty approved claims, substantive guide and concept map drafts, and a finished predecessor research run when one exists. It records that predecessor before activating the assessment plan. This deliberate phase boundary ensures rejected research never consumes assessment-generation or citation tokens.
 
+If validation identifies an invalid legacy or hand-authored active plan, do not edit that YAML. After showing the exact validation errors and obtaining learner approval to replace that run, invoke `create_assessment_plan.py --authorized --supersede-reason "<observable reason>"`. The compiler snapshots the rejected plan, creates a clean assessment run, and excludes the superseded plan from the publication chain.
+
 ## Validation
 
 Run:

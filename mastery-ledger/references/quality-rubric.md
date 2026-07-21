@@ -71,7 +71,7 @@ Pass only when:
 - workers do not approve themselves;
 - the main agent synthesizes rather than concatenates;
 - expansion beyond budget receives approval;
-- researched courses fail closed as `DRAFT_UNVERIFIED` when independent subagents are unavailable.
+- researched courses fail closed with publication status `DRAFT_UNVERIFIED` when independent workers are unavailable after runtime tool inspection.
 
 ## Required semantic evaluation cases
 

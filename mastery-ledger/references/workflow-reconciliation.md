@@ -35,7 +35,7 @@ Exit code `0` means complete, `2` means work or user input is required, and `3` 
 6. Wait for the entire dispatched wave, route every completion through `route_worker_completion.py`, and merge only accepted worker event shards before rerunning the gate. A malformed return receives a same-task repair packet; it does not create a new plan.
 7. Record observable actions, decisions, evidence, and short justifications. Never record hidden reasoning.
 8. Rerun reconciliation after an artifact, task status, source, learner decision, or validation result changed.
-9. Stop on completion, required user input, declined/unavailable independent workers, or retry exhaustion.
+9. Stop on completion, required user input, declined/unavailable independent workers, or retry exhaustion. `DRAFT_UNVERIFIED` is a publication label and must not replace the primary workflow state, so a later authorized repair can resume from the same gate.
 
 Do not call the script in a tight loop. A return is a work order for the main agent, not permission to fabricate the missing artifact. Do not create a worker to run reconciliation; the main agent owns the loop.
 
@@ -67,6 +67,6 @@ Use `--accepted-branch` and `--excluded` once per item when applicable. Provided
 
 ## Failure boundaries
 
-- If independent workers are unavailable or declined for a researched publishable course, enter `DRAFT_UNVERIFIED`; do not keep reconciling toward `LEARNING_ACTIVE`.
-- If a task returns `blocked`, `failed`, or malformed, use the completion router's bounded same-task retry. When retries exhaust, preserve provisional material under `.work/`, advance to `DRAFT_UNVERIFIED`, and report the exact blocker. Do not rewrite history or start dependent tasks.
+- If independent workers are unavailable or declined for a researched publishable course, set publication status to `DRAFT_UNVERIFIED`; do not keep reconciling toward `LEARNING_ACTIVE` in that run.
+- If a task returns `blocked`, `failed`, or malformed, use the completion router's bounded same-task retry. When retries exhaust, preserve provisional material under `.work/`, set publication status to `DRAFT_UNVERIFIED`, and report the exact blocker. Do not rewrite history or start dependent tasks.
 - If requirements change after work, the fingerprint resets because progress is observable. If the identical requirement recurs three times, the loop stops.

@@ -1,4 +1,4 @@
-schema_version: research-run-plan-v1
+schema_version: run-plan-placeholder-v1
 run_id: RUN-001
 study_id: STUDY-001
 goal: Build a source-grounded study pack
@@ -8,13 +8,7 @@ learner_profile:
   time_budget_minutes: 30
   deadline: null
 source_policy: topic-research
-capabilities:
-  filesystem: true
-  web: true
-  citations: true
-  scripts: true
-  subagents: false
-  parallel_subagents: false
+execution_requirements: {}
 authorization:
   status: pending
   approved_at: null

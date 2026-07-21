@@ -5,6 +5,7 @@ title: Example study
 mode: topic-research
 workflow_state: intake
 workflow_target: LEARNING_ACTIVE
+publication_status: DRAFT
 learner_goal: Build working competence in the topic
 assumed_prior_knowledge: []
 target_depth: working

@@ -66,13 +66,13 @@ python scripts/reconcile_workflow.py COURSE_ROOT --json
 
 The reconciliation response routes the next action to source ingestion or research. Only after registered sources make the course `SOURCES_READY` may the main agent compile the authorized research plan. Every task must receive the approved branches, exclusions, source limit, and learner goal from `learning_contract`; worker prompts must not reconstruct scope from conversation.
 
-Use absolute script paths resolved from `SKILL_ROOT` during an installed-skill run. If subagents are unavailable or the learner declines them, run:
+Use absolute script paths resolved from `SKILL_ROOT` during an installed-skill run. Inspect direct and deferred runtime tools before concluding that workers are unavailable. If no callable worker facility exists, an actual worker call reports unavailable, or the learner declines them, run:
 
 ```bash
 python scripts/advance_workflow.py COURSE_ROOT DRAFT_UNVERIFIED --reason "Independent workers unavailable or declined"
 ```
 
-You may still teach conversationally or preserve provisional notes, but do not publish a durable researched course, activate its mastery schedule, or create a `ready` exam.
+This sets a resumable publication label; it does not replace the course's primary workflow position. You may still teach conversationally or preserve provisional notes, but do not publish a durable researched course, activate its mastery schedule, or create a `ready` exam.
 
 ## Exit gate
 

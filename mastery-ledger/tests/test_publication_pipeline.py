@@ -340,6 +340,9 @@ def test_calibration_record_is_bounded_and_workflow_cannot_skip_gates() -> None:
             text=True,
         )
         assert draft.returncode == 0, draft.stdout + draft.stderr
+        study = yaml.safe_load((course / "study.yaml").read_text(encoding="utf-8"))
+        assert study["workflow_state"] == "intake"
+        assert study["publication_status"] == "DRAFT_UNVERIFIED"
 
 
 def test_provided_source_assessment_plan_starts_with_generator_only() -> None:
@@ -360,6 +363,10 @@ def test_provided_source_assessment_plan_starts_with_generator_only() -> None:
             text=True,
         )
         assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+        plan = yaml.safe_load((course / ".work" / "orchestration" / "run-plan.yaml").read_text(encoding="utf-8"))
+        assert plan["plan_origin"] == {"kind": "generated", "compiler": "create_assessment_plan.py"}
+        assert plan["execution_requirements"] == {"independent_workers": True, "parallelism_required": False}
+        assert "capabilities" not in plan
         preflight = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "validate_orchestration.py"), str(course / ".work" / "orchestration" / "run-plan.yaml"), "--course-root", str(course)],
             check=False,
@@ -386,6 +393,102 @@ def test_provided_source_assessment_plan_starts_with_generator_only() -> None:
         assert checked.returncode == 0, checked.stdout + checked.stderr
         payload = json.loads(checked.stdout)
         assert payload["ready_task_ids"] == ["TASK-ASSESSMENT-GENERATE"]
+
+
+def test_hand_authored_assessment_tasks_cannot_masquerade_as_research_plan() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        studies = Path(directory)
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Incident Course", "--studies-dir", str(studies)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        course = studies / "incident-course"
+        prepare_assessment_inputs(course)
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "create_assessment_plan.py"), str(course), "--authorized"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        plan_path = course / ".work" / "orchestration" / "run-plan.yaml"
+        plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
+        plan["schema_version"] = "research-run-plan-v1"
+        plan["plan_origin"] = {"kind": "generated", "compiler": "create_research_plan.py"}
+        plan["authorization"]["status"] = "pending"
+        plan["publication_intent"] = False
+        plan_path.write_text(yaml.safe_dump(plan, sort_keys=False), encoding="utf-8")
+
+        checked = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "validate_orchestration.py"), str(plan_path), "--course-root", str(course)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert checked.returncode != 0
+        payload = json.loads(checked.stdout)
+        joined = "\n".join(payload["errors"])
+        assert "publication_intent=true" in joined
+        assert "approved authorization" in joined
+        assert "roles outside its generated contract" in joined
+        assert payload["ready_task_ids"] == []
+
+        repaired = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "create_assessment_plan.py"),
+                str(course),
+                "--authorized",
+                "--supersede-reason",
+                "Replace the invalid hand-authored incident plan.",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert repaired.returncode == 0, repaired.stdout + repaired.stderr
+        replacement = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
+        assert replacement["schema_version"] == "assessment-run-plan-v1"
+        assert replacement["predecessor_relation"] == "supersedes"
+        assert (course / ".work" / "runs" / plan["run_id"] / "run-plan.yaml").is_file()
+
+
+def test_legacy_terminal_draft_is_migrated_to_resumable_publication_status() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        studies = Path(directory)
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "init_study.py"), "Legacy Draft", "--studies-dir", str(studies)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        course = studies / "legacy-draft"
+        study_path = course / "study.yaml"
+        study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
+        study["workflow_state"] = "DRAFT_UNVERIFIED"
+        study.pop("publication_status", None)
+        study["workflow_history"].append({
+            "from": "SCOPED",
+            "to": "DRAFT_UNVERIFIED",
+            "at": "2026-07-20T00:00:00Z",
+            "reason": "Worker availability was inferred incorrectly.",
+        })
+        study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
+
+        reconciled = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "reconcile_workflow.py"), str(course), "LEARNING_ACTIVE", "--json"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert reconciled.returncode == 2, reconciled.stdout + reconciled.stderr
+        payload = json.loads(reconciled.stdout)
+        assert payload["current_state"] == "SCOPED"
+        migrated = yaml.safe_load(study_path.read_text(encoding="utf-8"))
+        assert migrated["workflow_state"] == "SCOPED"
+        assert migrated["publication_status"] == "DRAFT_UNVERIFIED"
+        assert migrated["publication_blocker"] == "Worker availability was inferred incorrectly."
 
 
 def test_reconciliation_returns_exact_next_work_and_stops_repeated_no_progress() -> None:

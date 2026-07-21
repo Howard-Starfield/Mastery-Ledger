@@ -327,21 +327,92 @@ def gate_requirements(root: Path, target: str) -> list[dict[str, Any]]:
     return []
 
 
+def recover_legacy_draft_state(root: Path) -> bool:
+    """Move the retired terminal draft state into the resumable publication field."""
+    path = root / "study.yaml"
+    study = _read_yaml(path)
+    if normalize(study.get("workflow_state")) != "DRAFT_UNVERIFIED":
+        return False
+    prior_state = ""
+    reason = "Migrated the legacy terminal draft state."
+    for entry in reversed(study.get("workflow_history", [])):
+        if not isinstance(entry, dict) or normalize(entry.get("to")) != "DRAFT_UNVERIFIED":
+            continue
+        candidate = normalize(entry.get("from"))
+        if candidate in ORDER:
+            prior_state = candidate
+            reason = str(entry.get("reason") or reason)
+            break
+    if not prior_state:
+        raise ValueError("Legacy DRAFT_UNVERIFIED state has no recoverable prior workflow state.")
+
+    now = datetime.now(timezone.utc).isoformat()
+    study["workflow_state"] = prior_state
+    study["publication_status"] = "DRAFT_UNVERIFIED"
+    study["publication_blocker"] = reason
+    study["updated_at"] = now
+    study.setdefault("publication_history", []).append({
+        "from": "LEGACY_WORKFLOW_STATE",
+        "to": "DRAFT_UNVERIFIED",
+        "at": now,
+        "reason": reason,
+    })
+    atomic_yaml(path, study)
+    append_event(root, {
+        "action": "publication.legacy_draft_migrated", "actor": "workflow-reconciler", "status": "complete",
+        "summary": f"Restored primary workflow state {prior_state} and retained the unverified publication label.",
+        "artifacts": ["study.yaml"], "decision": "DRAFT_UNVERIFIED", "justification": reason,
+    })
+    return True
+
+
 def advance_state(root: Path, target: str, *, reason: str) -> tuple[str, str]:
     path = root / "study.yaml"
+    recover_legacy_draft_state(root)
     study = _read_yaml(path)
     current = normalize(study.get("workflow_state"))
     target = normalize(target)
-    if target != "DRAFT_UNVERIFIED" and (
+    if target == "DRAFT_UNVERIFIED":
+        if current not in ORDER:
+            raise ValueError(f"Cannot label publication from unknown workflow state: {current or '<missing>'}.")
+        now = datetime.now(timezone.utc).isoformat()
+        previous_status = normalize(study.get("publication_status")) or "DRAFT"
+        study["publication_status"] = "DRAFT_UNVERIFIED"
+        study["publication_blocker"] = reason
+        study["updated_at"] = now
+        study.setdefault("publication_history", []).append({
+            "from": previous_status,
+            "to": "DRAFT_UNVERIFIED",
+            "at": now,
+            "reason": reason,
+        })
+        atomic_yaml(path, study)
+        append_event(root, {
+            "action": "publication.mark_unverified", "actor": "main-agent", "status": "complete",
+            "summary": f"Marked publication unverified while preserving workflow state {current}.",
+            "artifacts": ["study.yaml"], "decision": "DRAFT_UNVERIFIED", "justification": reason,
+        })
+        return current, target
+
+    if (
         current not in ORDER or target not in ORDER or ORDER.index(target) != ORDER.index(current) + 1
     ):
         raise ValueError(f"Illegal workflow transition: {current or '<missing>'} -> {target}.")
-    missing = gate_requirements(root, target) if target != "DRAFT_UNVERIFIED" else []
+    missing = gate_requirements(root, target)
     if missing:
         raise ValueError(f"{target} gate failed: " + "; ".join(item["message"] for item in missing))
 
     now = datetime.now(timezone.utc).isoformat()
     study["workflow_state"] = target
+    if target == "LEARNING_ACTIVE":
+        study["publication_status"] = "READY"
+        study.pop("publication_blocker", None)
+    elif target == "STUDY_PACK_VALIDATED":
+        study["publication_status"] = "VERIFIED"
+        study.pop("publication_blocker", None)
+    elif normalize(study.get("publication_status")) == "DRAFT_UNVERIFIED":
+        study["publication_status"] = "IN_PROGRESS"
+        study.pop("publication_blocker", None)
     study["updated_at"] = now
     history = study.setdefault("workflow_history", [])
     history.append({"from": current, "to": target, "at": now, "reason": reason})
@@ -365,7 +436,14 @@ def main() -> int:
         current, target = advance_state(root, args.target_state, reason=args.reason)
     except ValueError as error:
         parser.error(str(error))
-    print(yaml.safe_dump({"status": "complete", "from": current, "to": target}, sort_keys=False))
+    payload = {"status": "complete", "from": current, "to": target}
+    if target == "DRAFT_UNVERIFIED":
+        payload = {
+            "status": "complete",
+            "workflow_state": current,
+            "publication_status": target,
+        }
+    print(yaml.safe_dump(payload, sort_keys=False))
     return 0
 
 

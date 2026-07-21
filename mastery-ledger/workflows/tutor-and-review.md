@@ -8,7 +8,7 @@ Run a coherent learner-facing session using the validated study pack and persist
 
 Keep ordinary learner interaction single-agent. Ask one question at a time. A specialist verifier may be consulted only for a genuinely uncertain or disputed factual issue; the tutor returns one coherent response.
 
-Do not enter durable tutoring when `workflow_state` is `DRAFT_UNVERIFIED` or when the publication validator fails. Provisional conversation may continue, but do not update the spaced-review schedule from it.
+Do not enter durable tutoring when `publication_status` is `DRAFT_UNVERIFIED` or when the publication validator fails. Provisional conversation may continue, but do not update the spaced-review schedule from it.
 
 Before the first durable session and after any source or assessment change, reconcile to `LEARNING_ACTIVE`. If reconciliation returns work, user input, or retry exhaustion, do not schedule from the provisional session.
 
@@ -71,6 +71,10 @@ python scripts/update_mastery.py \
 ```
 
 The script applies a transparent bounded rule. The semantic answer judgment remains the tutor’s responsibility.
+
+## Reading application results
+
+The application is not a skill dependency or handoff target. When the learner explicitly supplies a course path, attempt JSON, or `progress/learner-progress.json`, first verify that the file stays inside the named course and uses `exam-attempt-v1` or `learner-progress-v1`. Read completed attempts and progress as learner evidence, summarize missed and successful concepts, and choose the next lesson or review from those observable results. Never invoke application commands, inspect application configuration or databases, rewrite completed attempt files, or treat an in-progress answer as final. Use `update_mastery.py` only for learner interactions conducted by the tutor; do not apply an application attempt a second time when its ID is already recorded in `applied_attempt_ids`.
 
 ## Review scheduling
 

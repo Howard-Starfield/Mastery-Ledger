@@ -282,6 +282,8 @@ def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
             if not predecessor:
                 break
             predecessor_relation = str(cursor.get("predecessor_relation") or "").strip()
+            if predecessor_relation == "supersedes":
+                break
             predecessor_path = root / ".work" / "runs" / predecessor / "run-plan.yaml"
             if not predecessor_path.is_file() or predecessor_path.is_symlink():
                 errors.append(f"Publication orchestration predecessor is missing: {predecessor}")
@@ -293,8 +295,6 @@ def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
                 break
             if not isinstance(cursor, dict) or cursor.get("run_id") != predecessor:
                 errors.append(f"Publication orchestration predecessor identity is invalid: {predecessor}")
-                break
-            if predecessor_relation == "supersedes":
                 break
 
         tasks = []
@@ -319,8 +319,8 @@ def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
             item for item in plans
             if any(isinstance(task, dict) and task.get("role") == "assessment-validator" for task in item.get("task_graph", []))
         ]
-        if not assessment_plans or not assessment_plans[0].get("capabilities", {}).get("subagents"):
-            errors.append("A ready exam requires an independent assessment-validation subagent")
+        if not assessment_plans:
+            errors.append("A ready exam requires a generated independent assessment-validation plan")
         question_bank = json.loads((root / "questions" / "question-bank.json").read_text(encoding="utf-8"))
         bank_ids = {str(item.get("question_id")) for item in question_bank.get("questions", []) if isinstance(item, dict)}
         for task in tasks:

@@ -14,12 +14,14 @@ import yaml
 from create_research_plan import task
 from plan_store import is_placeholder, load_active_plan, save_active_plan
 from record_action import append_event
+from validate_orchestration import validate_plan
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("course_root", type=Path)
     parser.add_argument("--authorized", action="store_true")
+    parser.add_argument("--supersede-reason")
     args = parser.parse_args()
     if not args.authorized:
         parser.error("Explicit assessment authorization is required.")
@@ -41,18 +43,24 @@ def main() -> int:
         if not path.is_file() or path.is_symlink() or len(path.read_text(encoding="utf-8").strip()) < 100:
             parser.error(f"Assessment input is missing or not substantive: {relative}")
     predecessor_run_id = None
+    predecessor_relation = None
+    active_to_archive = None
     active_path = root / ".work" / "orchestration" / "run-plan.yaml"
     if active_path.is_file():
         active = load_active_plan(root)
         if not is_placeholder(active):
             predecessor_run_id = active.get("run_id")
+            active_to_archive = active
+            plan_errors, _, _ = validate_plan(active, course_root=root)
             unfinished = [
                 str(item.get("task_id"))
                 for item in active.get("task_graph", [])
                 if isinstance(item, dict) and item.get("status") not in {"submitted", "verified", "approved", "merged"}
             ]
-            if unfinished:
-                parser.error("Active research run is unfinished: " + ", ".join(unfinished))
+            if (unfinished or plan_errors) and not args.supersede_reason:
+                details = ", ".join(unfinished) if unfinished else "; ".join(plan_errors)
+                parser.error("Active run is unfinished or invalid; repair it or provide --supersede-reason explicitly: " + details)
+            predecessor_relation = "supersedes" if unfinished or plan_errors else "evidence"
     run_id = f"RUN-{uuid.uuid4().hex[:8].upper()}"
     generator = task(
         run_id,
@@ -82,15 +90,19 @@ def main() -> int:
         "mode": mode,
         "course_target": study.get("workflow_target", "LEARNING_ACTIVE"),
         "predecessor_run_id": predecessor_run_id,
-        "predecessor_relation": "evidence" if predecessor_run_id else None,
+        "predecessor_relation": predecessor_relation,
+        "supersession_reason": args.supersede_reason,
         "authorization": {"status": "approved", "approved_at": now, "scope": "displayed-assessment-card"},
         "publication_intent": True,
-        "capabilities": {"filesystem": True, "citations": True, "scripts": True, "subagents": True, "parallel_subagents": False},
+        "plan_origin": {"kind": "generated", "compiler": "create_assessment_plan.py"},
+        "execution_requirements": {"independent_workers": True, "parallelism_required": False},
         "workflow_state": "tasks_planned",
         "task_graph": [generator, validator],
         "created_at": now,
         "updated_at": now,
     }
+    if active_to_archive is not None:
+        save_active_plan(root, active_to_archive)
     path = save_active_plan(root, payload)
     append_event(root, {
         "action": "assessment.plan_compiled", "actor": "main-agent", "status": "complete",

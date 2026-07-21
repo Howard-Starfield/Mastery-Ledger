@@ -1,6 +1,6 @@
 ---
 name: mastery-ledger
-description: Build and maintain source-grounded learning courses from documents, websites, video, audio, or researched material; create a cited knowledge wiki and exam-style assessments; track attempts and schedule long-term mastery reviews. Use when a learner asks to study, understand, research, ingest learning sources, generate an exam, revisit a course, or review due questions.
+description: Build and maintain source-grounded learning courses from documents, websites, video, audio, or researched material; create a cited knowledge wiki and independently checked exam-style assessments; interpret learner results when supplied. Use when a learner asks to study, understand, research, ingest learning sources, generate an exam, revisit a course, or review prior results.
 ---
 
 # Mastery Ledger
@@ -20,7 +20,9 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 - Do not call adaptive tutoring “reinforcement learning” unless model weights or a policy are actually trained from reward.
 - Do not claim permanent mastery. Record evidence-based proficiency and uncertainty.
 - Never assume subagents, live skill reload, a particular skills directory, or cloud privacy behavior.
-- Never publish a researched course through a single-agent self-review. If required subagents are unavailable or declined, stop at `DRAFT_UNVERIFIED` and explain what remains.
+- Never infer worker availability from a course file, template, application command, or previous run. Inspect the current runtime's directly exposed tools and, when present, its deferred tool catalog for a callable worker or subagent facility before declaring workers unavailable.
+- Never publish a researched course through a single-agent self-review. If required workers are unavailable or declined, label publication `DRAFT_UNVERIFIED` and explain what remains; do not replace the current primary workflow state.
+- Never invoke, inspect, install, launch, or configure the Mastery Ledger application. The skill owns course curation. Application attempt and progress files are ordinary learner-supplied evidence only when the learner explicitly points to them.
 - Resolve this installed `SKILL.md` location as `SKILL_ROOT`. Invoke bundled scripts by absolute path under `SKILL_ROOT`; never assume the current directory is the skill directory.
 - Never edit `workflow_state` by hand. Drive every durable workflow target with `scripts/reconcile_workflow.py`.
 - Before the first durable course action, read [artifact lifecycle](references/artifact-lifecycle.md) and [event contract](references/event-contract.md) in full. These required contracts are not optional background.
@@ -29,7 +31,7 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 
 ## First-turn learning gate
 
-Apply this gate before runtime detection, workspace questions, browsing, file creation, or tutoring for a new learning request.
+Apply this gate before capability detection, workspace questions, browsing, file creation, or tutoring for a new learning request.
 
 1. Inspect the learner's first request for supplied material: an attachment, local file or folder path, URL, pasted source excerpt, explicitly named existing course, or identified source already present in the workspace.
 2. If no supplied material exists, ask exactly one open prior-knowledge question and end the turn: `Before I build this course, tell me what you already know about <topic>—even if the answer is "nothing yet." Mention any terms, examples, or parts that confuse you.` Adapt only `<topic>` and grammar. Do not explain the topic, offer provisional tutoring, contrast a lesson with a tracked course, ask for a workspace, or ask another intake question in that turn.
@@ -40,10 +42,10 @@ Apply this gate before runtime detection, workspace questions, browsing, file cr
 ## Start every operational run
 
 1. Complete the first-turn learning gate when it applies.
-2. Detect available capabilities: the optional Mastery Ledger application, filesystem, web, PDF/media reading, scripts, persistent storage, subagents, parallelism, and source-citation support.
-3. Read [runtime detection and onboarding](workflows/runtime-onboarding.md) and classify the operation. Course creation, source work, research, compilation, and exam generation are skill-owned and must not be blocked by a missing application. Application exam playback, application-managed attempts, and application review scheduling require the application gate.
-4. Resolve a learner-approved course workspace, then look for an existing `study.yaml` and resume it when the request belongs to that study.
+2. Resolve a learner-approved course workspace. If the learner did not identify an existing course or workspace, ask once for the absolute parent directory before the first durable write. Never discover it through an application setting or database.
+3. Look for an existing `study.yaml` and resume it when the request belongs to that study.
    If an application-created course has `course.yaml` but no `study.yaml`, read [artifact lifecycle](references/artifact-lifecycle.md) and run the packaged `scripts/adopt_course.py`; never fill the layout manually.
+4. Detect only capabilities needed by the selected course operation: filesystem, web, PDF/media reading, scripts, persistent storage, workers, parallelism, and source-citation support. For workers, inspect direct tools and any available deferred tool catalog for names or descriptions such as `spawn`, `worker`, `subagent`, or equivalent. Declare workers unavailable only after that inspection finds no callable facility or an attempted call returns an unavailable error. Record the observable result, not a guessed Boolean in the run plan.
 5. Determine the mode: `provided-material-only`, `existing-library`, `local-media`, `topic-research`, or `hybrid`.
 6. Read [intake and scope](workflows/intake-and-scope.md). For `topic-research` or `hybrid`, also read [calibrate and authorize](workflows/calibrate-and-authorize.md). Do not launch research before calibration disposition, scope, and worker topology are approved.
 
@@ -59,9 +61,9 @@ Follow [workflow reconciliation](references/workflow-reconciliation.md) exactly.
 
 ## Deterministic worker dispatch
 
-For every dependency-ready task, run `scripts/compile_worker_context.py` with absolute paths, then run `scripts/validate_orchestration.py`. Dispatch only IDs in `ready_task_ids`; `context_required_task_ids` are not dispatchable. The compiler selects the versioned role profile, required contracts, bounded inputs, exact output template, prefilled completion template, and immutable dispatch message. If compilation or validation fails, stop with `blocked` rather than paraphrasing a role or inventing context.
+For every dependency-ready task, run `scripts/compile_worker_context.py` with absolute paths, then run `scripts/validate_orchestration.py`. Dispatch only IDs in `ready_task_ids`; `context_required_task_ids` are not dispatchable. The compiler selects the versioned role profile, required contracts, bounded inputs, exact output template, prefilled completion template, and immutable dispatch message. Never hand-author or hand-edit `.work/orchestration/run-plan.yaml`. If compilation or validation fails, stop with `blocked` rather than paraphrasing a role or inventing context.
 
-Require each worker to read its generated brief, context manifest, assigned contracts, output template, and `completion-template.json` before work. A worker writes only inside its assigned `.work/runs/<run-id>/tasks/<task-id>/` directory and returns the declared submission, `action-event-v1` shard, and completion envelope. Route every return through `scripts/route_worker_completion.py`; never edit task status by hand. On `changes_required`, dispatch only the generated same-task repair message. On `retry_exhausted`, the router preserves a labelled draft, records `DRAFT_UNVERIFIED`, and stops the run; do not create a replacement. When a researched course has no registered source, reconciliation requires `scripts/create_source_discovery_plan.py` and the compiled `TASK-SOURCE-SCOUT` before acquisition. After mapper acceptance, run `scripts/freeze_corpus_map.py` before compiling research-worker contexts.
+Require each worker to read its generated brief, context manifest, assigned contracts, output template, and `completion-template.json` before work. A worker writes only inside its assigned `.work/runs/<run-id>/tasks/<task-id>/` directory and returns the declared submission, `action-event-v1` shard, and completion envelope. Route every return through `scripts/route_worker_completion.py`; never edit task status by hand. On `changes_required`, dispatch only the generated same-task repair message. On `retry_exhausted`, the router preserves a labelled draft, sets publication status to `DRAFT_UNVERIFIED`, and stops the run; do not create a replacement without explicit learner approval. When a researched course has no registered source, reconciliation requires `scripts/create_source_discovery_plan.py` and the compiled `TASK-SOURCE-SCOUT` before acquisition. After mapper acceptance, run `scripts/freeze_corpus_map.py` before compiling research-worker contexts.
 
 ## Route by phase
 
@@ -72,7 +74,7 @@ Require each worker to read its generated brief, context manifest, assigned cont
 - Submitted worker evidence: read [verify evidence](workflows/verify-evidence.md) before synthesis.
 - Approved evidence ready: read [build study pack](workflows/build-study-pack.md).
 - Creating or consuming source manifests, evidence, questions, explanations, or exams: read [citation contract](references/citation-contract.md) and validate every source reference before publishing the artifact.
-- Learner asks to study, quiz, explain, or review: read [tutor and review](workflows/tutor-and-review.md), [pedagogy](references/pedagogy.md), and [mastery model](references/mastery-model.md).
+- Learner asks to study, quiz, explain, review, or interpret app-recorded wrong/right results: read [tutor and review](workflows/tutor-and-review.md), [pedagogy](references/pedagogy.md), and [mastery model](references/mastery-model.md).
 - Existing sources or goals changed: read [update study](workflows/update-study.md).
 
 ## Workflow states
@@ -99,7 +101,7 @@ The main agent must:
 - synthesize approved evidence rather than concatenate reports;
 - keep learner-facing tutoring single-agent for continuity.
 
-For a single user-provided source in a provided-material mode, research workers are optional; a ready exam still requires an independent assessment validator. For `topic-research` and `hybrid`, require the source scout when no source is supplied, one isolated extractor per retained source, bounded concept-research workers, contradiction review, final citation verification, and assessment validation. If the required workers are unavailable, preserve drafts under `.work/`, record `DRAFT_UNVERIFIED`, and do not activate learning or mark an exam ready.
+For a single user-provided source in a provided-material mode, research workers are optional; a ready exam still requires an independent assessment validator. For `topic-research` and `hybrid`, require the source scout when no source is supplied, one isolated extractor per retained source, bounded concept-research workers, contradiction review, final citation verification, and assessment validation. If the required workers are unavailable, preserve drafts under `.work/`, set publication status to `DRAFT_UNVERIFIED`, and do not activate learning or mark an exam ready.
 
 ## Completion gates
 
@@ -110,14 +112,13 @@ Before tutoring begins:
 - core objectives have concept and question coverage;
 - contradictions and gaps are visible;
 - validators pass;
-- at least one app-compatible ready exam exists for an exam-building run;
+- at least one portable-schema ready exam exists for an exam-building run;
 - the main agent records limitations and anything not independently checked.
 
 Use [quality rubric](references/quality-rubric.md), [topic splitting policy](references/topic-splitting-policy.md), and [runtime portability](references/runtime-portability.md) whenever those decisions arise.
 
 ## Direct workflow index
 
-- [Runtime detection and onboarding](workflows/runtime-onboarding.md)
 - [Intake and scope](workflows/intake-and-scope.md)
 - [Calibrate and authorize](workflows/calibrate-and-authorize.md)
 - [Ingest material](workflows/ingest-material.md)

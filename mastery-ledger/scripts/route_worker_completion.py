@@ -147,7 +147,7 @@ def route(root: Path, task_id: str) -> dict[str, Any]:
             "errors": errors,
             "repair_dispatch_path": None if exhausted else str(repair_path),
             "new_run_allowed": False,
-            "workflow_state": "DRAFT_UNVERIFIED" if exhausted else None,
+            "publication_status": "DRAFT_UNVERIFIED" if exhausted else None,
             "draft_path": str(draft_path) if draft_path is not None else None,
         }
 

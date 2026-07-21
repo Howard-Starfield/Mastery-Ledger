@@ -143,6 +143,11 @@ class PipelineRecoveryTests(unittest.TestCase):
             discovery_run = yaml.safe_load(discovery_plan_path.read_text(encoding="utf-8"))["run_id"]
             self.run_script("compile_worker_context.py", str(course), "TASK-SOURCE-SCOUT", "--json")
             plan = yaml.safe_load(discovery_plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                {"independent_workers": True, "parallelism_required": False},
+                plan["execution_requirements"],
+            )
+            self.assertNotIn("capabilities", plan)
             scout = plan["task_graph"][0]
             context = json.loads((course / scout["context_path"]).read_text(encoding="utf-8"))
             self.assertEqual("source-candidate-ledger-v1", context["required_output_schema"])
@@ -175,6 +180,11 @@ class PipelineRecoveryTests(unittest.TestCase):
             self.run_script("create_research_plan.py", str(course), "--research-workers", "2", "--authorized")
             plan_path = course / ".work" / "orchestration" / "run-plan.yaml"
             plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                {"independent_workers": True, "parallelism_required": False, "parallelism_preferred": True},
+                plan["execution_requirements"],
+            )
+            self.assertNotIn("capabilities", plan)
             run_id = plan["run_id"]
             mapper = next(item for item in plan["task_graph"] if item["task_id"] == "TASK-MAP")
             self.assertEqual(["approved-branch"], mapper["scope_included"])
@@ -282,9 +292,10 @@ class PipelineRecoveryTests(unittest.TestCase):
             self.assertEqual(3, exhausted.returncode)
             exhausted_payload = json.loads(exhausted.stdout)
             self.assertEqual("retry_exhausted", exhausted_payload["status"])
-            self.assertEqual("DRAFT_UNVERIFIED", exhausted_payload["workflow_state"])
+            self.assertEqual("DRAFT_UNVERIFIED", exhausted_payload["publication_status"])
             study = yaml.safe_load((course / "study.yaml").read_text(encoding="utf-8"))
-            self.assertEqual("DRAFT_UNVERIFIED", study["workflow_state"])
+            self.assertEqual("SOURCES_READY", study["workflow_state"])
+            self.assertEqual("DRAFT_UNVERIFIED", study["publication_status"])
             self.assertEqual(run_id, yaml.safe_load(plan_path.read_text(encoding="utf-8"))["run_id"])
 
 

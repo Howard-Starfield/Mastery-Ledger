@@ -59,7 +59,7 @@ Mastery Ledger has two parts.
 | Codex skill | Reads sources, runs research, checks evidence, writes lessons, and builds exams | Course files inside the learner's workspace |
 | Local app | Reads published lessons, finds ready exams, runs practice sessions, scores answers, and schedules review | Attempts, progress, review dates, and local settings |
 
-The app does not browse the web, download video, transcribe audio, write lessons, or generate questions. The skill does not own the exam screen or learner history.
+The app does not browse the web, download video, transcribe audio, write lessons, or generate questions. The skill does not own the exam screen or learner history, but it can read a completed attempt or progress file when the learner explicitly points to it.
 
 ```mermaid
 flowchart LR
@@ -72,8 +72,8 @@ flowchart LR
     Lessons --> App["Local study and exam app"]
     Bank --> App
     Learner --> App
-    App --> History["Attempts, progress, and review dates"]
-    History --> Course
+    App --> History["Attempts, progress, and review dates inside the course"]
+    History -. "Learner points Codex to results" .-> Codex
 ```
 
 The course folder is the boundary between the two parts. It remains useful even when the app or skill is not running.
@@ -88,7 +88,7 @@ If the learner supplies a file, folder, link, excerpt, video, or existing course
 
 ### 2. Choose the workspace and scope
 
-The learner chooses the folder before the first course file is written. Codex records the goal, level, source policy, limits, and accepted related topics in `study.yaml`.
+The learner chooses the folder before the first course file is written. The skill does not discover that folder through the local app, its settings, or a doctor command. Codex records the goal, level, source policy, limits, and accepted related topics in `study.yaml`.
 
 For a researched course, Codex also states how many questions it will ask during calibration and how many workers it plans to use. The learner can change or skip the diagnostic.
 
@@ -277,7 +277,7 @@ Codex will first ask what you already know. To skip that question, include a sou
 Use Mastery Ledger to build a course from https://example.com/my-source
 ```
 
-Codex asks for a workspace when it cannot reuse one that you already approved. Course building can continue without the local app. The app is required only when you want to take the generated exam or use its review schedule.
+Codex asks for a workspace when the request does not identify an existing course or previously approved path in the conversation. The skill never invokes the app, doctor, onboarding, or a handoff command. Install and open the app separately only when you want its exam interface and review schedule. To continue tutoring from app results, point Codex to the course's completed attempt or `progress/learner-progress.json` file.
 
 ## Run the tests
 
