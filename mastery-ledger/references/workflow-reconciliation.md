@@ -60,7 +60,8 @@ After the learner explicitly approves the displayed scope card, record the obser
 
 ```text
 python "<SKILL_ROOT>/scripts/record_scope_approval.py" "<COURSE_ROOT>" \
-  --summary "<APPROVED_SCOPE>" --source-limit 3 --research-workers 0
+  --summary "<APPROVED_SCOPE>" --source-limit 3 --research-workers 0 \
+  --chapter-count <APPROVED_CHAPTER_COUNT>
 ```
 
 Use `--accepted-branch` and `--excluded` once per item when applicable. New Fast and Verified paths both record `--research-workers 0`; scout and extractor roles are planned separately, and an independent assessment validator remains required.

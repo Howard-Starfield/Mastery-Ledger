@@ -15,6 +15,8 @@ from typing import Any
 import yaml
 
 from create_research_plan import _canonical_hash, load_role_profiles
+from course_paths import SOURCE_MANIFEST
+from validate_evidence import load_source_ids, validate_packet
 
 SUBMITTED_STATES = {"submitted", "verified", "approved", "merged"}
 STARTED_STATES = {"in_progress", *SUBMITTED_STATES}
@@ -571,6 +573,14 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
                         used = output_payload.get("sources_used")
                         if not isinstance(used, list) or not set(str(item) for item in used).issubset(set(str(item) for item in task.get("input_source_ids", []))):
                             errors.append(f"{task_id} evidence packet uses an unassigned source ID")
+                        source_manifest = course_root / SOURCE_MANIFEST
+                        if source_manifest.is_file():
+                            errors.extend(
+                                f"{task_id} evidence packet: {message}"
+                                for message in validate_packet(output_payload, load_source_ids(source_manifest))
+                            )
+                        else:
+                            errors.append(f"{task_id} cannot validate evidence without the source manifest")
             completion_relative = task.get("completion_path")
             completion = _safe_course_path(course_root, completion_relative)
             if completion is None:

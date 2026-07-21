@@ -48,11 +48,23 @@ Use the Python environment executing the installed skill helpers. The skill incl
 
 ### Normalize SRT or VTT
 
+First promote the selected raw subtitle from staging into the durable source bundle:
+
 ```text
-python "<SKILL_ROOT>/scripts/normalize_subtitles.py" input.srt \
+python "<SKILL_ROOT>/scripts/promote_media_artifact.py" studies/my-study \
+  --source-id SRC-001 \
+  --input studies/my-study/.work/ingestion/JOB-001/media/source.en.vtt \
+  --filename source.en.vtt --kind raw_caption
+```
+
+Normalize the promoted durable copy, not the disposable staging path:
+
+```text
+python "<SKILL_ROOT>/scripts/normalize_subtitles.py" \
+  studies/my-study/records/source/media/SRC-001/source.en.vtt \
   --output-dir studies/my-study/records/source/media/SRC-001 \
   --source-id SRC-001 --item-id LESSON-003 \
-  --origin human_caption
+  --origin human_caption --language en
 ```
 
 Outputs:
@@ -101,7 +113,31 @@ The main agent creates one bounded staging folder under `.work/ingestion/<job-id
 
 `QUEUED`, `RUNNING`, `NEEDS_USER_ACTION`, `PARTIAL`, `COMPLETE`, `FAILED`, `CANCELLED`.
 
-Keep probe output, completion manifests, observable events, and recovery guidance in that staging folder. Retry only after inspecting the recorded failure and correcting an observable cause; do not recursively rerun a failed downloader. Promote verified media and transcripts to `records/source/media/<source-id>/`, write locator-preserving extracted knowledge to `records/source/<source-id>.md`, register it with `register_source.py`, and merge the short action event only after completion. Never call the local application for ingestion, transcription, retry, or promotion.
+Keep probe output, completion manifests, observable events, and recovery guidance in that staging folder. Retry only after inspecting the recorded failure and correcting an observable cause; do not recursively rerun a failed downloader.
+
+After acquisition succeeds:
+
+1. Promote the selected raw caption, audio, or video with `promote_media_artifact.py` so the original no longer depends on disposable `.work/` state.
+2. Normalize or transcribe from that durable copy into `records/source/media/<source-id>/transcript.json` and `transcript.md`.
+3. Write locator-preserving extracted knowledge—not metadata alone—to `records/source/<source-id>.md`.
+4. Register the source and every transcript artifact in one command. Use the learner-confirmed rights basis and real provider explicitly:
+
+```text
+python "<SKILL_ROOT>/scripts/register_source.py" studies/my-study \
+  --source-id SRC-001 --title "SOURCE TITLE" \
+  --location "ORIGINAL URL" --provider "YouTube" \
+  --source-type youtube_video_auto_caption \
+  --knowledge-path records/source/SRC-001.md \
+  --author "AUTHOR" --rights-basis user_attested_authorized_use \
+  --processing-mode local_only --language en \
+  --artifact raw_caption=records/source/media/SRC-001/source.en.vtt \
+  --artifact transcript_markdown=records/source/media/SRC-001/transcript.md \
+  --artifact transcript_json=records/source/media/SRC-001/transcript.json
+```
+
+If the source was registered before its transcript artifacts existed, rerun the same command with `--update-existing`; never hand-edit the manifest. Then compile a fresh evidence plan. A `local-media` evidence plan refuses to compile until each registered source exposes a durable transcript artifact.
+
+Merge the short action event only after completion. Never call the local application for ingestion, transcription, retry, or promotion.
 
 ## Transcript quality checks
 

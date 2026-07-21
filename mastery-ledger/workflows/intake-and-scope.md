@@ -79,7 +79,7 @@ Use this shape:
 **Proposed sources:**
 **Proposed workers:**
 **Expected modules:**
-**Output contract:** 1-3 `lesson-v1` book-like chapters by default, 1,200-1,800 words each, at least the standard 10-question tier per chapter, and one independently validated ready exam.
+**Output contract:** PROPOSED_CHAPTER_COUNT `lesson-v1` book-like chapters, 1,200-1,800 words each, exactly the standard 10-question tier per chapter unless an expanded tier is approved, and one independently validated ready exam.
 ```
 
 Show a blast-radius classification:
@@ -111,7 +111,7 @@ Obtain user approval before:
 Approval may be an explicit acceptance or an explicit edit to the scope card.
 For a researched course, include the exact worker topology in the same approval card; do not ask for a second approval unless the run later expands.
 
-After explicit approval, persist the scope with `record_scope_approval.py` using an absolute script path resolved from `SKILL_ROOT`, then return to the original `reconcile_workflow.py` target. Do not enter `SCOPED` from conversational inference alone.
+Choose and display an exact chapter count, normally 1-3, before approval. After explicit approval, persist it with `record_scope_approval.py` using `--chapter-count PROPOSED_CHAPTER_COUNT` and an absolute script path resolved from `SKILL_ROOT`, then return to the original `reconcile_workflow.py` target. Do not enter `SCOPED` from conversational inference alone.
 
 Initialize only after the source policy is known:
 

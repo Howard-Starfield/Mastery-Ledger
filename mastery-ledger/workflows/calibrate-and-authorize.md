@@ -60,7 +60,7 @@ Only learner-accepted branches enter this run. Do not silently expand the course
 For `topic-research` and `hybrid`, show the proposed source limit and topology before spawning workers. In `hybrid`, state that the supplied anchor is registered first and one bounded source scout then finds corroborating candidates within the remaining source budget. Use this shape:
 
 ```text
-Verified Course plan: use 1 bounded source scout, retain normally 3 authoritative sources, queue 1 isolated extractor per retained source with at most 3 active workers, then run 1 contradiction reviewer and 1 final citation verifier. I will author the lessons and at least 10 questions per chapter from approved evidence; a separate run uses 1 independent assessment validator. The fourth child-agent slot remains reserved for recovery. Approve this source and course scope, or tell me what to adjust.
+Verified Course plan: use 1 bounded source scout, retain normally 3 authoritative sources, queue 1 isolated extractor per retained source with at most 3 active workers, then run 1 contradiction reviewer and 1 final citation verifier. I will author PROPOSED_CHAPTER_COUNT book-like lessons and exactly 10 questions per chapter from approved evidence; a separate run uses 1 independent assessment validator. The fourth child-agent slot remains reserved for recovery. Approve this source and course scope, or tell me what to adjust.
 ```
 
 The learner's approval covers the displayed worker count, accepted branches, excluded topics, source limit, assumed level, and publication target. Record that approval as the canonical `learning_contract` in `study.yaml`. Ask again only when exceeding that boundary.
@@ -70,7 +70,7 @@ The learner's approval covers the displayed worker count, accepted branches, exc
 After approval, record the contract. Do not create the research/evidence run yet: source acquisition must first produce a valid `SOURCES_READY` course. When the course has no supplied source, reconciliation first requires the separate one-task source-discovery run described in `research-topic.md`.
 
 ```bash
-python scripts/record_scope_approval.py COURSE_ROOT --summary "APPROVED_SCOPE" --source-limit 3 --research-workers 0 --assumed-level "ASSUMED_LEVEL"
+python scripts/record_scope_approval.py COURSE_ROOT --summary "APPROVED_SCOPE" --source-limit 3 --research-workers 0 --chapter-count PROPOSED_CHAPTER_COUNT --assumed-level "ASSUMED_LEVEL"
 python scripts/reconcile_workflow.py COURSE_ROOT --json
 ```
 

@@ -33,6 +33,8 @@ Create:
 - durable accepted-worker receipts under `records/evidence/validation/`
 - at least one `exams/<exam-id>/exam.json` for an exam-building run
 
+Read `study.yaml.learning_contract.output_contract` before authoring. Create exactly its `chapter_count` and `chapter_ids`; do not silently collapse an approved multi-chapter course into one lesson. Reconciliation rejects a question bank whose chapter count or order differs from that frozen output contract.
+
 Use templates from `assets/`.
 
 Keep all drafts, worker reports, reviewer notes, temporary extraction, and scratch files under `.work/`. Only the main agent may promote approved lessons, evidence, questions, exams, and learner-state artifacts into their canonical course folders. `records/` is durable and auditable; `.work/` is disposable after accepted receipts are recorded.
@@ -56,6 +58,8 @@ python scripts/build_exam.py studies/my-study --exam-id EXAM-001 --title "Course
 ```
 
 `create_assessment_plan.py` requires `EVIDENCE_APPROVED` (or a later draft state), non-empty approved claims, a substantive index, contract-valid lessons, the main-agent-authored question bank, and a finished predecessor evidence run when one exists. It compiles only `TASK-ASSESSMENT-VALIDATE`; new runs have no assessment-generator worker.
+
+If the validator returns `changes_required` or `rejected`, close that completed validator, repair the canonical bank from its exact item-level issues, and compile a new validation run with `--supersede-reason "OBSERVABLE REASON"`. Never use worker completion repair for a semantic assessment decision, and never build a ready exam from the rejected bank.
 
 If validation identifies an invalid legacy or hand-authored active plan, do not edit that YAML. After showing the exact validation errors and obtaining learner approval to replace that run, invoke `create_assessment_plan.py --authorized --supersede-reason "<observable reason>"`. The compiler snapshots the rejected plan, creates a clean assessment run, and excludes the superseded plan from the publication chain.
 

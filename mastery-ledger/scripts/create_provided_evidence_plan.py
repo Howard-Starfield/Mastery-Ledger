@@ -14,7 +14,7 @@ import yaml
 from create_research_plan import scheduler_requirements, task
 from plan_store import is_placeholder, load_active_plan, save_active_plan
 from record_action import append_event
-from source_registry import load_manifest, source_errors
+from source_registry import load_manifest, readable_source_artifacts, source_errors
 
 
 PROVIDED_MODES = {"provided-material-only", "existing-library", "local-media"}
@@ -35,8 +35,13 @@ def main() -> int:
     if mode not in PROVIDED_MODES:
         parser.error("This compiler is only for provided-material, existing-library, or local-media studies.")
     state = str(study.get("workflow_state", "")).strip().replace("-", "_").upper()
-    if state not in {"SOURCES_READY", "CORPUS_MAPPED"}:
-        parser.error("Provided evidence planning requires workflow_state SOURCES_READY or CORPUS_MAPPED.")
+    initial_states = {"SOURCES_READY", "CORPUS_MAPPED"}
+    recovery_states = {"EVIDENCE_SUBMITTED", "EVIDENCE_VERIFIED"}
+    if state not in initial_states and not (state in recovery_states and args.supersede_reason):
+        parser.error(
+            "Provided evidence planning requires SOURCES_READY or CORPUS_MAPPED; "
+            "a finished semantic-review repair may restart from EVIDENCE_SUBMITTED or EVIDENCE_VERIFIED only with --supersede-reason."
+        )
     approval = study.get("learning_contract")
     if not isinstance(approval, dict) or approval.get("status") != "approved":
         parser.error("Provided evidence planning requires an approved canonical learning contract.")
@@ -48,6 +53,20 @@ def main() -> int:
     if problems:
         parser.error("Source gate failed: " + "; ".join(problems))
     sources = [item for item in manifest["sources"] if isinstance(item, dict)]
+    if mode == "local-media":
+        missing_transcripts = [
+            str(item.get("source_id") or "<missing>")
+            for item in sources
+            if not any(
+                path.endswith(("/transcript.md", "/transcript.json"))
+                for path in readable_source_artifacts(item)
+            )
+        ]
+        if missing_transcripts:
+            parser.error(
+                "Local-media sources must register durable transcript.md or transcript.json artifacts before evidence planning: "
+                + ", ".join(missing_transcripts)
+            )
     approved_limit = int(approval.get("source_limit") or 0)
     if len(sources) > approved_limit:
         parser.error(f"Ready source count {len(sources)} exceeds approved limit {approved_limit}")
@@ -61,6 +80,13 @@ def main() -> int:
         if not is_placeholder(active):
             if not args.supersede_reason:
                 parser.error("An active run already exists; repair it or provide --supersede-reason explicitly.")
+            unfinished = [
+                str(item.get("task_id"))
+                for item in active.get("task_graph", [])
+                if isinstance(item, dict) and item.get("status") not in {"submitted", "verified", "approved", "merged", "blocked", "rejected", "superseded"}
+            ]
+            if unfinished:
+                parser.error("Cannot supersede a run with unfinished tasks: " + ", ".join(unfinished))
             active_to_archive = active
             predecessor_run_id = active.get("run_id")
             predecessor_relation = "supersedes"

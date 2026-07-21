@@ -153,7 +153,7 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
             text=True,
         )
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Publish the bounded fixture", "--source-limit", "5", "--research-workers", "0", "--accepted-branch", "concept-id", "--excluded", "out-of-scope"],
+            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Publish the bounded fixture", "--source-limit", "5", "--research-workers", "0", "--chapter-count", "1", "--accepted-branch", "concept-id", "--excluded", "out-of-scope"],
             check=True,
             capture_output=True,
             text=True,
@@ -586,7 +586,7 @@ def test_reconciliation_returns_exact_next_work_and_stops_repeated_no_progress()
             text=True,
         )
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Research the approved topic", "--source-limit", "5", "--research-workers", "0"],
+            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Research the approved topic", "--source-limit", "5", "--research-workers", "0", "--chapter-count", "1"],
             check=True,
             capture_output=True,
             text=True,

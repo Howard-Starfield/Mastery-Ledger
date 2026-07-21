@@ -123,6 +123,8 @@ def test_one_source_plan_dispatches_extractor_without_contradiction_review() -> 
             "1",
             "--research-workers",
             "0",
+            "--chapter-count",
+            "1",
         )
         knowledge = course / "records" / "source" / "SRC-001.md"
         knowledge.write_text("# Anchor\n\nSubstantive locator-preserving source knowledge.\n", encoding="utf-8")

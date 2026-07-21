@@ -19,6 +19,7 @@ def main() -> int:
     parser.add_argument("--summary", required=True, help="Concise learner-approved scope")
     parser.add_argument("--source-limit", type=int, required=True)
     parser.add_argument("--research-workers", type=int, required=True)
+    parser.add_argument("--chapter-count", type=int, required=True)
     parser.add_argument("--accepted-branch", action="append", default=[])
     parser.add_argument("--excluded", action="append", default=[])
     parser.add_argument("--assumed-level", default="beginner")
@@ -27,6 +28,8 @@ def main() -> int:
         parser.error("Source limit must be 1-20.")
     if args.research_workers != 0:
         parser.error("research_workers must be 0; new runs use source-specific extractors instead of concept-research workers.")
+    if not 1 <= args.chapter_count <= 10:
+        parser.error("Chapter count must be 1-10.")
 
     root = args.course_root.resolve()
     path = root / "study.yaml"
@@ -46,6 +49,7 @@ def main() -> int:
         "summary": args.summary.strip(),
         "source_limit": args.source_limit,
         "research_workers": args.research_workers,
+        "chapter_count": args.chapter_count,
         "accepted_branches": args.accepted_branch,
         "excluded": args.excluded,
     }
@@ -60,9 +64,11 @@ def main() -> int:
         "excluded": args.excluded,
         "source_limit": args.source_limit,
         "research_workers": args.research_workers,
+        "chapter_count": args.chapter_count,
         "output_contract": {
             "lesson_schema": "lesson-v1",
-            "default_chapter_range": "1-3",
+            "chapter_count": args.chapter_count,
+            "chapter_ids": [f"CH-{index:03d}" for index in range(1, args.chapter_count + 1)],
             "standard_lesson_words": "1200-1800",
             "question_tier": "standard",
             "questions_per_chapter": 10,

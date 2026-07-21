@@ -91,10 +91,22 @@ def main() -> int:
                 for item in active.get("task_graph", [])
                 if isinstance(item, dict) and item.get("status") not in {"submitted", "verified", "approved", "merged"}
             ]
-            if (unfinished or plan_errors) and not args.supersede_reason:
+            semantic_review_failed = False
+            for item in active.get("task_graph", []):
+                if not isinstance(item, dict) or item.get("role") != "assessment-validator" or item.get("status") not in {"submitted", "verified", "approved", "merged"}:
+                    continue
+                try:
+                    result = json.loads((root / str(item.get("output_path") or "")).read_text(encoding="utf-8"))
+                except (OSError, UnicodeError, json.JSONDecodeError):
+                    semantic_review_failed = True
+                else:
+                    semantic_review_failed = result.get("decision") != "approved"
+            if (unfinished or plan_errors or semantic_review_failed) and not args.supersede_reason:
                 details = ", ".join(unfinished) if unfinished else "; ".join(plan_errors)
+                if semantic_review_failed and not details:
+                    details = "the prior assessment validator did not approve the bank"
                 parser.error("Active run is unfinished or invalid; repair it or provide --supersede-reason explicitly: " + details)
-            predecessor_relation = "supersedes" if unfinished or plan_errors else "evidence"
+            predecessor_relation = "supersedes" if unfinished or plan_errors or semantic_review_failed else "evidence"
     run_id = f"RUN-{uuid.uuid4().hex[:8].upper()}"
     validator = task(
         run_id,

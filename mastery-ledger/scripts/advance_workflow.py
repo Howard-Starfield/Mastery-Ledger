@@ -320,7 +320,11 @@ def gate_requirements(root: Path, target: str) -> list[dict[str, Any]]:
                 "evidence.citation_decision_unverified",
                 "The final citation decision is not verified.",
                 workflow="verify-evidence.md",
-                action="Resolve the verifier's reported issues; do not approve unsupported claims.",
+                action=(
+                    "Read the verifier issues. If a registered input is missing, close the verifier, repair and register the durable input, "
+                    "then create_provided_evidence_plan.py --authorized --supersede-reason with the observable cause. "
+                    "Do not call worker-runtime repair for a semantic decision or substitute a chat-only lesson."
+                ),
                 artifacts=[str(verifiers[0].get("output_path", ""))],
             )]
         return []

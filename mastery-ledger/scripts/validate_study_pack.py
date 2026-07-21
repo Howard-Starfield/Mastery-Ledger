@@ -235,6 +235,24 @@ def validate_learning_materials(root: Path) -> list[str]:
     chapters = payload.get("chapters") if isinstance(payload, dict) else None
     if not isinstance(chapters, list) or not chapters:
         return [*errors, "question-bank.json must declare at least one chapter before assessment planning"]
+    try:
+        study = yaml.safe_load((root / "study.yaml").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        return [*errors, f"Cannot read study.yaml: {error}"]
+    contract = study.get("learning_contract", {}) if isinstance(study, dict) else {}
+    output_contract = contract.get("output_contract", {}) if isinstance(contract, dict) else {}
+    expected_count = output_contract.get("chapter_count") if isinstance(output_contract, dict) else None
+    expected_ids = output_contract.get("chapter_ids") if isinstance(output_contract, dict) else None
+    if not isinstance(expected_count, int) or expected_count < 1:
+        errors.append("study.yaml learning_contract.output_contract.chapter_count must record the approved deliverable")
+    elif len(chapters) != expected_count:
+        errors.append(f"Approved scope requires exactly {expected_count} chapters; question-bank.json declares {len(chapters)}")
+    if not isinstance(expected_ids, list) or len(expected_ids) != expected_count:
+        errors.append("study.yaml learning_contract.output_contract.chapter_ids must match the approved chapter count")
+    else:
+        declared_ids = [str(item.get("chapter_id") or "") for item in chapters if isinstance(item, dict)]
+        if declared_ids != [str(item) for item in expected_ids]:
+            errors.append("question-bank.json chapter order and IDs must match the approved output contract")
 
     source_ids = load_source_ids(root / SOURCE_MANIFEST)
     seen_chapter_ids: set[str] = set()

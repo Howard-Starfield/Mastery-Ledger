@@ -21,6 +21,13 @@ from record_action import append_event
 SCHEMA_VERSION = "workflow-reconciliation-v1"
 
 
+def _bounded_requirement_summary(next_state: str, requirements: list[dict[str, Any]]) -> str:
+    prefix = f"Workflow requires work before {next_state}: "
+    messages = "; ".join(str(item.get("message") or item.get("code") or "unspecified requirement") for item in requirements)
+    summary = prefix + messages
+    return summary if len(summary) <= 1_000 else summary[:997].rstrip() + "..."
+
+
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
@@ -141,7 +148,7 @@ def reconcile(root: Path, target: str, *, max_same_blocker: int) -> tuple[dict[s
                 "action": "workflow.reconcile",
                 "actor": "main-agent",
                 "status": status,
-                "summary": f"Workflow requires work before {next_state}: " + "; ".join(str(item["message"]) for item in requirements),
+                "summary": _bounded_requirement_summary(next_state, requirements),
                 "artifacts": [".work/orchestration/reconciliation.json"],
                 "decision": next_state,
                 "justification": "Deterministic gate inspection; no hidden reasoning recorded.",

@@ -17,6 +17,7 @@ import yaml
 from course_paths import SOURCE_MANIFEST, relative_text
 from create_research_plan import _canonical_hash, load_role_profiles
 from plan_store import load_active_plan, save_active_plan
+from source_registry import readable_source_artifacts
 
 
 SUBMITTED_STATES = {"submitted", "verified", "approved", "merged"}
@@ -107,6 +108,7 @@ def _source_artifacts(root: Path, source_ids: list[str]) -> list[str]:
         if not isinstance(knowledge_path, str):
             raise ValueError(f"Assigned source has no extracted knowledge path: {source_id}")
         result.append(knowledge_path)
+        result.extend(readable_source_artifacts(record))
     return result
 
 

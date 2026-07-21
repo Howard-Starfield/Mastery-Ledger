@@ -58,6 +58,12 @@ def aggregate(
             errors.append("Review missing report_id")
             continue
         if review.get("decision") == "approved" and review.get("approved_by") == "main-agent":
+            approved_claim_ids = review.get("approved_claim_ids")
+            if not isinstance(approved_claim_ids, list) or not approved_claim_ids or any(
+                not str(item).strip() for item in approved_claim_ids
+            ):
+                errors.append(f"Main-agent approval for {report_id} requires non-empty approved_claim_ids")
+                continue
             approval_by_report[report_id] = review
 
     merged: list[dict[str, Any]] = []
@@ -71,6 +77,16 @@ def aggregate(
         if not isinstance(claims, list):
             errors.append(f"Report {report_id} has non-list claims")
             continue
+        approved_claim_ids = {str(item) for item in approval_by_report[report_id]["approved_claim_ids"]}
+        report_claim_ids = {
+            str(item.get("claim_id"))
+            for item in claims
+            if isinstance(item, dict) and item.get("claim_id")
+        }
+        unknown = approved_claim_ids - report_claim_ids
+        if unknown:
+            errors.append(f"Approval for {report_id} references unknown claim IDs: {', '.join(sorted(unknown))}")
+            continue
         for claim in claims:
             if not isinstance(claim, dict):
                 errors.append(f"Report {report_id} contains non-object claim")
@@ -78,6 +94,8 @@ def aggregate(
             claim_id = str(claim.get("claim_id", "")).strip()
             if not claim_id:
                 errors.append(f"Report {report_id} contains claim without claim_id")
+                continue
+            if claim_id not in approved_claim_ids:
                 continue
             if claim_id in seen_claim_ids:
                 errors.append(f"Duplicate approved claim_id: {claim_id}")

@@ -54,6 +54,7 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "assets" / "source-record.example.yaml",
             ROOT / "scripts" / "compile_worker_context.py",
             ROOT / "scripts" / "register_source.py",
+            ROOT / "scripts" / "promote_media_artifact.py",
             ROOT / "scripts" / "route_worker_completion.py",
             ROOT / "scripts" / "freeze_corpus_map.py",
             ROOT / "scripts" / "create_source_discovery_plan.py",

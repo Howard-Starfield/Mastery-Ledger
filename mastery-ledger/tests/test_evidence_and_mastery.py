@@ -142,8 +142,28 @@ class EvidenceAndMasteryTests(unittest.TestCase):
             "REPORT-2": {"report_id": "REPORT-2", "claims": [{"claim_id": "CLM-2"}]},
         }
         reviews = [
-            {"report_id": "REPORT-1", "decision": "approved", "approved_by": "main-agent"},
+            {"report_id": "REPORT-1", "decision": "approved", "approved_by": "main-agent", "approved_claim_ids": ["CLM-1"]},
             {"report_id": "REPORT-2", "decision": "verified", "approved_by": "citation-verifier"},
+        ]
+        merged, errors = tool.aggregate(reports, reviews)
+        self.assertEqual([], errors)
+        self.assertEqual(["CLM-1"], [item["claim_id"] for item in merged])
+
+    def test_aggregator_excludes_claims_rejected_by_citation_review(self) -> None:
+        tool = load_module("aggregate_approved_evidence_filtered", "scripts/aggregate_approved_evidence.py")
+        reports = {
+            "REPORT-1": {
+                "report_id": "REPORT-1",
+                "claims": [{"claim_id": "CLM-1"}, {"claim_id": "CLM-2"}],
+            }
+        }
+        reviews = [
+            {
+                "report_id": "REPORT-1",
+                "decision": "approved",
+                "approved_by": "main-agent",
+                "approved_claim_ids": ["CLM-1"],
+            }
         ]
         merged, errors = tool.aggregate(reports, reviews)
         self.assertEqual([], errors)

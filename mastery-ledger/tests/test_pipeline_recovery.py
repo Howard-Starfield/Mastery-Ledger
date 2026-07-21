@@ -47,6 +47,8 @@ class PipelineRecoveryTests(unittest.TestCase):
             "4",
             "--research-workers",
             "0",
+            "--chapter-count",
+            "1",
             "--accepted-branch",
             "approved-branch",
             "--excluded",
@@ -132,7 +134,7 @@ class PipelineRecoveryTests(unittest.TestCase):
             self.run_script("init_study.py", "Scout Course", "--mode", "topic-research", "--studies-dir", str(parent))
             course = parent / "scout-course"
             self.run_script("record_calibration.py", "start", str(course), "--count", "0", "--concept-questions", "0", "--scenario-questions", "0", "--disposition", "skip")
-            self.run_script("record_scope_approval.py", str(course), "--summary", "Research with delegated discovery", "--source-limit", "3", "--research-workers", "0")
+            self.run_script("record_scope_approval.py", str(course), "--summary", "Research with delegated discovery", "--source-limit", "3", "--research-workers", "0", "--chapter-count", "1")
             missing = self.run_script("reconcile_workflow.py", str(course), "--json", check=False)
             missing_payload = json.loads(missing.stdout)
             self.assertEqual("SCOPED", missing_payload["current_state"])
@@ -179,7 +181,7 @@ class PipelineRecoveryTests(unittest.TestCase):
             self.run_script("init_study.py", "Hybrid Course", "--mode", "hybrid", "--studies-dir", str(parent))
             course = parent / "hybrid-course"
             self.run_script("record_calibration.py", "start", str(course), "--count", "0", "--concept-questions", "0", "--scenario-questions", "0", "--disposition", "skip")
-            self.run_script("record_scope_approval.py", str(course), "--summary", "Learn from an anchor with bounded corroboration", "--source-limit", "3", "--research-workers", "0")
+            self.run_script("record_scope_approval.py", str(course), "--summary", "Learn from an anchor with bounded corroboration", "--source-limit", "3", "--research-workers", "0", "--chapter-count", "1")
 
             anchor = course / "records" / "source" / "SRC-ANCHOR.md"
             anchor.write_text("# Anchor\n\nThe learner-supplied source with stable locators for comparison.\n", encoding="utf-8")
@@ -253,6 +255,109 @@ class PipelineRecoveryTests(unittest.TestCase):
             extractors = [item for item in research_plan["task_graph"] if item["role"] == "source-extractor"]
             self.assertEqual({"SRC-ANCHOR", "SRC-CORROBORATING"}, {item["input_source_ids"][0] for item in extractors})
             self.assertTrue(any(item["role"] == "contradiction-reviewer" for item in research_plan["task_graph"]))
+
+    def test_semantic_review_repair_supersedes_finished_evidence_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            self.run_script("init_study.py", "Semantic Repair", "--mode", "provided-material-only", "--studies-dir", str(parent))
+            course = parent / "semantic-repair"
+            self.run_script(
+                "record_scope_approval.py",
+                str(course),
+                "--summary",
+                "Learn from the supplied source",
+                "--source-limit",
+                "1",
+                "--research-workers",
+                "0",
+                "--chapter-count",
+                "1",
+            )
+            knowledge = course / "records" / "source" / "SRC-001.md"
+            knowledge.write_text("# Source\n\nA substantive locator-preserving source for recovery.\n", encoding="utf-8")
+            self.run_script(
+                "register_source.py",
+                str(course),
+                "--source-id",
+                "SRC-001",
+                "--title",
+                "Source",
+                "--location",
+                "https://example.invalid/source",
+                "--knowledge-path",
+                "records/source/SRC-001.md",
+            )
+            self.run_script("reconcile_workflow.py", str(course), "--json", check=False)
+            self.run_script("create_provided_evidence_plan.py", str(course), "--authorized")
+            plan_path = course / ".work" / "orchestration" / "run-plan.yaml"
+            original = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
+            for task in original["task_graph"]:
+                task["status"] = "submitted"
+            plan_path.write_text(yaml.safe_dump(original, sort_keys=False), encoding="utf-8")
+            study_path = course / "study.yaml"
+            study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
+            study["workflow_state"] = "EVIDENCE_SUBMITTED"
+            study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
+
+            restarted = self.run_script(
+                "create_provided_evidence_plan.py",
+                str(course),
+                "--authorized",
+                "--supersede-reason",
+                "Citation review found that the transcript was not registered as worker input.",
+            )
+            payload = yaml.safe_load(restarted.stdout)
+            replacement = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
+            self.assertNotEqual(original["run_id"], replacement["run_id"])
+            self.assertEqual(original["run_id"], replacement["predecessor_run_id"])
+            self.assertEqual("supersedes", replacement["predecessor_relation"])
+            self.assertEqual(replacement["run_id"], payload["run_id"])
+            self.assertTrue((course / ".work" / "runs" / original["run_id"] / "run-plan.yaml").is_file())
+
+    def test_completion_router_rejects_structurally_invalid_evidence_packet(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            course = self.initialize(Path(directory))
+            self.run_script("create_research_plan.py", str(course), "--research-workers", "0", "--authorized")
+            self.run_script("compile_worker_context.py", str(course), "TASK-EXTRACT-SRC-001", "--json")
+            packet = {
+                "schema_version": "evidence-packet-v1",
+                "source_ref_schema": "source-ref-v1",
+                "report_id": "REPORT-TASK-EXTRACT-SRC-001",
+                "task_id": "TASK-EXTRACT-SRC-001",
+                "worker_role": "source-extractor",
+                "scope": {"included": ["approved-branch"], "excluded": ["excluded-branch"]},
+                "sources_used": ["SRC-001"],
+                "claims": [
+                    {
+                        "claim_id": "CLM-001",
+                        "concept_ids": [],
+                        "claim": "A claim with no concept assignment.",
+                        "claim_type": "source_fact",
+                        "source_refs": [
+                            {
+                                "source_id": "SRC-001",
+                                "locator": {"kind": "section", "value": "Registered source", "label": "Registered source"},
+                                "supports": ["claim"],
+                                "support_strength": "direct",
+                            }
+                        ],
+                        "confidence": 0.9,
+                        "assumptions": [],
+                        "limitations": [],
+                        "counterevidence": [],
+                    }
+                ],
+                "contradictions": [],
+                "unresolved_questions": [],
+                "suggested_concepts": [],
+                "scope_drift": [],
+                "quality_notes": [],
+            }
+            self.write_worker_return(course, "TASK-EXTRACT-SRC-001", packet, valid_completion=True)
+            routed = self.run_script("route_worker_completion.py", str(course), "TASK-EXTRACT-SRC-001", check=False)
+            payload = json.loads(routed.stdout)
+            self.assertEqual("changes_required", payload["status"])
+            self.assertTrue(any("concept_ids must be a non-empty list" in item for item in payload["errors"]))
 
     def test_scope_propagates_and_active_plan_cannot_be_silently_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

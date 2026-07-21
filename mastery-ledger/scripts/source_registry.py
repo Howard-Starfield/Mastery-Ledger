@@ -15,6 +15,15 @@ import yaml
 from course_paths import SOURCE, SOURCE_MANIFEST, relative_text
 
 
+READABLE_SOURCE_ARTIFACT_KINDS = {
+    "caption",
+    "subtitle",
+    "text",
+    "transcript_json",
+    "transcript_markdown",
+}
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -53,6 +62,35 @@ def safe_knowledge_path(root: Path, relative: object) -> Path | None:
     return candidate
 
 
+def safe_source_artifact_path(root: Path, source_id: str, relative: object) -> Path | None:
+    """Resolve one durable per-source media artifact without leaving its bundle."""
+    prefix = f"{relative_text(SOURCE)}/media/{source_id}/"
+    if not isinstance(relative, str) or not relative.startswith(prefix):
+        return None
+    bundle = (root / SOURCE / "media" / source_id).resolve(strict=False)
+    candidate = (root / relative).resolve(strict=False)
+    try:
+        candidate.relative_to(bundle)
+    except (OSError, ValueError):
+        return None
+    if not candidate.is_file() or candidate.is_symlink() or candidate.stat().st_size <= 0:
+        return None
+    return candidate
+
+
+def readable_source_artifacts(source: dict[str, Any]) -> list[str]:
+    """Return textual evidence artifacts that workers may read in addition to knowledge Markdown."""
+    result: list[str] = []
+    for artifact in source.get("artifacts", []):
+        if not isinstance(artifact, dict):
+            continue
+        kind = str(artifact.get("kind") or "")
+        path = artifact.get("path")
+        if kind in READABLE_SOURCE_ARTIFACT_KINDS and isinstance(path, str):
+            result.append(path)
+    return result
+
+
 def source_errors(root: Path, manifest: dict[str, Any], *, require_nonempty: bool = True) -> list[str]:
     sources = manifest.get("sources")
     if not isinstance(sources, list):
@@ -83,6 +121,39 @@ def source_errors(root: Path, manifest: dict[str, Any], *, require_nonempty: boo
             errors.append(f"{source_id or f'sources[{index}]'} has no real sha256 content hash")
         elif knowledge is not None and digest.casefold() != sha256_file(knowledge).casefold():
             errors.append(f"{source_id or f'sources[{index}]'} content hash does not match its knowledge Markdown")
+        artifacts = source.get("artifacts", [])
+        if not isinstance(artifacts, list):
+            errors.append(f"{source_id or f'sources[{index}]'} artifacts must be a list")
+            continue
+        seen_artifacts: set[str] = set()
+        for artifact_index, artifact in enumerate(artifacts):
+            artifact_prefix = f"{source_id or f'sources[{index}]'} artifacts[{artifact_index}]"
+            if not isinstance(artifact, dict):
+                errors.append(f"{artifact_prefix} is not an object")
+                continue
+            kind = str(artifact.get("kind") or "").strip()
+            path = artifact.get("path")
+            if not kind or not isinstance(path, str) or not path:
+                errors.append(f"{artifact_prefix} requires kind and path")
+                continue
+            if path in seen_artifacts:
+                errors.append(f"{source_id or f'sources[{index}]'} has duplicate artifact path: {path}")
+                continue
+            seen_artifacts.add(path)
+            if kind == "extracted_knowledge":
+                if path != source.get("knowledge_path"):
+                    errors.append(f"{artifact_prefix} must match knowledge_path")
+                candidate = knowledge
+            else:
+                candidate = safe_source_artifact_path(root, source_id, path)
+                if candidate is None:
+                    errors.append(f"{artifact_prefix} is missing or outside the durable source bundle")
+            artifact_digest = artifact.get("content_hash")
+            if artifact_digest is not None:
+                if re.fullmatch(r"sha256:[0-9a-fA-F]{64}", str(artifact_digest)) is None:
+                    errors.append(f"{artifact_prefix} has an invalid content_hash")
+                elif candidate is not None and str(artifact_digest).casefold() != sha256_file(candidate).casefold():
+                    errors.append(f"{artifact_prefix} content_hash does not match its file")
     return errors
 
 

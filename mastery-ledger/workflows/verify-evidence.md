@@ -41,6 +41,17 @@ Write `assets/review-decision.yaml` shape with one of:
 
 A citation verifier may mark a report `verified`. The main agent then records an explicit `approved`, `changes_required`, or `rejected` decision. Only `approved` reports are aggregatable.
 
+Every main-agent approval must list `approved_claim_ids` explicitly. Copy only IDs the final citation review verified; never approve a whole report by implication when the verifier rejected individual claims. The aggregator refuses approvals without that allowlist and excludes every claim not named in it.
+
+`route_worker_completion.py` accepts a structurally valid completion envelope; it does not turn a semantic `changes_required` decision into approval. If the verifier reports a missing transcript, locator, or other source input:
+
+1. close the completed verifier normally;
+2. repair and register the missing durable source artifact;
+3. rerun `create_provided_evidence_plan.py --authorized --supersede-reason "OBSERVABLE REASON"` from `EVIDENCE_SUBMITTED` or `EVIDENCE_VERIFIED`;
+4. rerun extraction and citation verification against the new frozen context.
+
+Do not call `manage_worker_runtime.py repair` for a semantic review decision; that command is only for a malformed completion from the same live worker. Do not claim `DRAFT_UNVERIFIED`, publish a chat-only lesson, or begin mastery tracking while reconciliation still returns `needs_work`.
+
 ## Contradictions
 
 Do not resolve disagreement by averaging. Record:

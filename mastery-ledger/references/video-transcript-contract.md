@@ -27,8 +27,16 @@ artifacts:
     kind: video
     local_path: videos/lesson-001.mp4
     content_hash: sha256:...
+  - kind: transcript_markdown
+    path: records/source/media/SRC-001/transcript.md
+    content_hash: sha256:...
+  - kind: transcript_json
+    path: records/source/media/SRC-001/transcript.json
+    content_hash: sha256:...
 processing_status: complete
 ```
+
+The source manifest is the worker input authority. Merely mentioning a transcript path inside `records/source/<source-id>.md` does not grant workers access to it. Register durable transcript artifacts explicitly; context compilation includes registered readable artifacts and excludes unregistered or disposable `.work/` files.
 
 ## Transcript artifact
 
