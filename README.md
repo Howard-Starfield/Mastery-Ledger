@@ -1,220 +1,290 @@
 # Mastery Ledger
 
-Mastery Ledger is a local study tool for people who want to keep the trail from a source to a lesson, question, answer, and later review.
+Mastery Ledger turns sources into a course, a test bank, and a review schedule you can keep on your own computer.
 
-Give it a document, link, video, audio file, subtitle file, or a topic. It creates a course in a folder you own. The local application runs the workspace, source inbox, exam screen, review queue, knowledge pages, and activity view. The optional Codex skill builds and checks course material from the same folder.
+Codex reads the material, checks the claims, and writes the course. A local app runs the exams, records each attempt, and brings questions back for later review.
+
+Built for OpenAI Dev Week.
 
 ![Mastery Ledger dashboard](design-mockups/mastery-ledger-dashboard.png)
 
-## Why it exists
+## Why I made it
 
-Most study tools remember the answer but lose the reason for it. Most chat sessions explain a topic but leave no durable course behind.
+I used to finish LinkedIn Learning courses and feel that I understood them. A few days later, much of the detail was gone. Watching helped me follow an idea. It did not make me retrieve that idea without the video.
 
-Mastery Ledger keeps both.
+Memory research gives this problem several useful names:
 
-* Sources remain in the course folder, with extracted notes and locators.
-* A claim must survive evidence checks before it reaches a lesson or question.
-* An exam is a file, not custom code generated for one session.
-* Attempts and review dates stay with the course.
-* A changed source can be traced to the material and questions it affects.
-
-## How the parts fit together
-
-```mermaid
-flowchart LR
-    Learner["Learner"] --> App["Local application"]
-    Learner --> Skill["Codex skill"]
-
-    App --> Workspace["Learner chosen workspace"]
-    Skill --> Workspace
-
-    Workspace --> Sources["Sources and extracted notes"]
-    Sources --> Evidence["Evidence and approved claims"]
-    Evidence --> Course["Lessons, wiki pages, and question bank"]
-    Course --> Exam["Ready exam"]
-    Exam --> Records["Attempts, progress, and review queue"]
-```
-
-The application owns local setup and learner activity. The skill owns the course building workflow. Both read and write portable course files. SQLite stores the local application registry and job queue. It does not own the course itself.
-
-## The workflows
-
-### 1. Set up a workspace
-
-The application asks the learner for a writable folder. It stores that choice locally, checks it on every start, and opens a repair screen if the folder is moved or unavailable. The skill checks the application before it starts work. It does not choose a workspace or install software on its own.
-
-```mermaid
-flowchart TD
-    Start["Run Mastery Ledger"] --> Doctor["doctor checks the local runtime"]
-    Doctor -->|"Workspace is ready"| Dashboard["Open the dashboard"]
-    Doctor -->|"First use"| Onboard["Open onboarding"]
-    Doctor -->|"Workspace missing"| Repair["Open workspace repair"]
-    Onboard --> Choose["Learner chooses a folder"]
-    Repair --> Choose
-    Choose --> Save["Validate and save the workspace"]
-    Save --> Dashboard
-```
-
-The server listens only on `127.0.0.1`. A session token protects the local API. The course workspace is separate from the application and from the installed skill.
-
-### 2. Bring in sources
-
-The Source Inbox creates a course when needed, records the source before processing, and runs ingestion as a recoverable job. Original files and downloaded media are kept beside the extracted notes. The system does not replace a source with a summary.
-
-```mermaid
-flowchart TD
-    Add["Add a file or public link"] --> Receipt["Create a source record"]
-    Receipt --> Job["Queue an ingestion job"]
-    Job --> Stage["Work in .work/ingestion"]
-    Stage --> Check["Check type, rights, hash, and extraction result"]
-    Check -->|"Success"| Promote["Write source note and preserved media"]
-    Check -->|"Failure or cancellation"| Record["Keep the job receipt and recovery step"]
-    Promote --> Manifest["Update source manifest and event log"]
-```
-
-Documents, web pages, subtitles, local media, and public video links have separate handlers. Video processing prefers captions. Local transcription is optional and requires an approved local model. The skill never downloads a model, `yt-dlp`, or FFmpeg by surprise.
-
-Each course keeps these files close together:
-
-```text
-course/
-  source/                 extracted source notes
-  source/media/           preserved originals and media
-  source-manifest.yaml    source IDs, hashes, rights, and status
-  logs/events.jsonl       short observable activity records
-  .work/                  temporary and worker material
-```
-
-### 3. Build a source checked course
-
-For supplied material, the skill extracts the approved corpus. For a research topic, it first asks for the goal, scope, source limit, and worker budget. It may also run a short diagnostic so the course begins at the learner's level.
-
-No worker writes directly into lessons, wiki pages, questions, or exams. Each worker receives a compiled brief with a role, allowed inputs, required contracts, and one private task folder. The main agent decides what moves into the course.
-
-```mermaid
-flowchart TD
-    Scope["Learner approves goal, scope, and source limit"] --> Plan["Create a task plan"]
-    Plan --> Map["Map the corpus and concepts"]
-    Map --> Research["Research bounded concept groups"]
-    Research --> Conflict["Review contradictions and gaps"]
-    Conflict --> Cite["Check retained claims against exact locators"]
-    Cite --> Approve["Main agent approves evidence"]
-    Approve --> Draft["Write lessons, wiki pages, and questions"]
-    Draft --> QuestionCheck["Independent question check"]
-    QuestionCheck --> Publish["Validate the course and create a ready exam"]
-
-    Gate["Before every worker: check dependencies, contracts, inputs, and output path"]
-    Gate -.-> Map
-    Gate -.-> Research
-    Gate -.-> Conflict
-    Gate -.-> Cite
-    Gate -.-> Draft
-    Gate -.-> QuestionCheck
-```
-
-The research branch is deliberately ordered. Contradiction review comes before final citation review. This avoids spending time verifying claims that will be rejected because they are out of scope, duplicated, stale, or disputed.
-
-Workers write an event shard and completion record inside `.work/runs/<run-id>/tasks/<task-id>/`. The orchestration validator checks the role, input hashes, contract acknowledgements, output path, completion record, and event before any event is merged into the course log.
-
-### 4. Take an exam and schedule the next review
-
-The application reads a ready `exam.json` file and presents one multiple choice question at a time. The answer key and explanation are not included in the first browser response. A wrong answer shows no hint. A correct answer unlocks the explanation. The source panel remains closed until the learner opens it.
-
-```mermaid
-flowchart TD
-    Ready["Ready exam or due review"] --> Start["Start or resume an attempt"]
-    Start --> Question["Show one question"]
-    Question --> Answer["Learner selects one answer"]
-    Answer --> Lock["Lock the answer and save the attempt"]
-    Lock --> More{"More questions?"}
-    More -->|"Yes"| Question
-    More -->|"No"| Score["Score the completed attempt"]
-    Score --> Queue["Update the review queue once"]
-    Queue --> Progress["Update concept evidence and dashboard"]
-```
-
-The default curve uses days `1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584`. Learners can edit the curve and choose how the change applies. A correct due answer moves a question forward. An incorrect due answer returns it to the first stage. Early practice does not silently advance the schedule.
-
-![Focused Question exam](design-mockups/exam-concept-2-focused-question-v2.png)
-
-### 5. Update a course without erasing its history
-
-When a source, goal, or course decision changes, the skill compares hashes, dates, source versions, claims, questions, and concept links. It marks only the affected material for review. Attempts stay in place. Older material is archived or labelled. It is not rewritten as though it never existed.
-
-```mermaid
-flowchart LR
-    Change["Source or goal changes"] --> Impact["Find affected claims, pages, and questions"]
-    Impact --> Review["Recheck evidence and contradictions"]
-    Review --> Repair["Regenerate only affected material"]
-    Repair --> Validate["Run course and question validation"]
-    Validate --> Summary["Show the learner what changed"]
-```
-
-## What is in the repository
-
-| Area | Purpose |
+| Term | Plain meaning |
 | --- | --- |
-| `src/mastery_ledger/` | FastAPI application, SQLite registry and job queue, course readers, exam service, review service |
-| `web/` | React and TypeScript interface |
-| `mastery-ledger/` | Installable Codex skill, workflow instructions, contracts, templates, and validators |
-| `tests/` | Application contract tests |
-| `mastery-ledger/tests/` | Skill, course, evidence, media, and orchestration tests |
-| `design-mockups/` | Interface concepts used in this README |
-| `RELEASE.md` | Artifact, checksum, attestation, and signing rules |
+| Forgetting curve | Recall tends to fall as the delay after learning grows. The exact curve depends on the person, material, and test. |
+| Retrieval practice | Trying to recall an answer can strengthen later memory. A test can teach as well as measure. |
+| Testing effect | The measured gain in later retention after retrieval practice. |
+| Spacing effect | Practice spread across time usually lasts longer than the same practice packed into one sitting. |
+| Distributed practice | The research term for study or review sessions separated by time. |
+| Metacognitive error | Feeling familiar with material is not the same as being able to recall it later. |
 
-## Run the preview
+A 2006 review found 839 comparisons across 317 experiments in 184 articles. It found a broad benefit from spaced practice, while also showing that the best gap depends on how long the learner needs to retain the material. There is no single interval that fits every subject or learner. See [Cepeda and colleagues](https://doi.org/10.1037/0033-2909.132.3.354).
 
-This is an unsigned development preview from the repository's `main` branch. It is for testing. Signed installers are not ready yet.
+In one experiment with 180 university students, the group that studied a passage once and took three recall tests remembered 61 percent after one week. The group that studied the passage four times remembered 40 percent. During the first session, the groups recorded an average of 3.4 readings and 14.2 readings respectively. See [Roediger and Karpicke](https://doi.org/10.1111/j.1467-9280.2006.01693.x).
 
-Install the local application:
+Ebbinghaus called the early loss of access to learned material the forgetting curve. A later replication found a similar shape after one participant spent 70 hours learning and relearning word lists across delays from 20 minutes to 31 days. The narrow sample also shows why claims such as “everyone forgets a fixed percentage in one day” are false. See [Murre and Dros](https://doi.org/10.1371/journal.pone.0120644).
+
+These studies do not prove one perfect review calendar. They support two practical choices: ask the learner to retrieve the answer, and repeat that work over time.
+
+Mastery Ledger starts with this editable schedule:
+
+| Review | Delay | Approximate span |
+| ---: | ---: | ---: |
+| 1 | 1 day | 1 day |
+| 2 | 3 days | 3 days |
+| 3 | 7 days | 1 week |
+| 4 | 14 days | 2 weeks |
+| 5 | 28 days | 4 weeks |
+| 6 | 56 days | 8 weeks |
+| 7 | 112 days | 4 months |
+| 8 | 224 days | 7 months |
+| 9 | 448 days | 1.2 years |
+| 10 | 896 days | 2.5 years |
+| 11 | 1792 days | 4.9 years |
+| 12 | 3584 days | 9.8 years |
+
+This curve is a clear product rule. It is not FSRS, SM 2, or proof of permanent memory. The learner can change it in the app.
+
+## What the repository contains
+
+Mastery Ledger has two parts.
+
+| Part | Job | Writes |
+| --- | --- | --- |
+| Codex skill | Reads sources, runs research, checks evidence, writes lessons, and builds exams | Course files inside the learner's workspace |
+| Local app | Finds ready exams, runs practice sessions, scores answers, and schedules review | Attempts, progress, review dates, and local settings |
+
+The app does not browse the web, download video, transcribe audio, write lessons, or generate questions. The skill does not own the exam screen or learner history.
+
+```mermaid
+flowchart LR
+    Learner["Learner"] --> Codex["Codex with the skill"]
+    Sources["Files, links, video, or a topic"] --> Codex
+    Codex --> Course["Course folder"]
+    Course --> Notes["Source notes and evidence"]
+    Course --> Lessons["Lessons and wiki"]
+    Course --> Bank["Question bank and ready exam"]
+    Bank --> App["Local exam app"]
+    Learner --> App
+    App --> History["Attempts, progress, and review dates"]
+    History --> Course
+```
+
+The course folder is the boundary between the two parts. It remains useful even when the app or skill is not running.
+
+## How a course is built
+
+### 1. Learn where the learner starts
+
+If the first request contains only a topic, Codex asks one open question: what does the learner already know? That answer sets the starting level. It is not treated as a factual source.
+
+If the learner supplies a file, folder, link, excerpt, video, or existing course, Codex skips that question and starts with the supplied material.
+
+### 2. Choose the workspace and scope
+
+The learner chooses the folder before the first course file is written. Codex records the goal, level, source policy, limits, and accepted related topics in `study.yaml`.
+
+For a researched course, Codex also states how many questions it will ask during calibration and how many workers it plans to use. The learner can change or skip the diagnostic.
+
+### 3. Read and preserve sources
+
+Each source receives an ID, rights basis, content hash, and exact location record in `source-manifest.yaml`.
+
+Extracted notes go in `source/`. Originals, captions, transcripts, audio, and video go in `source/media/`. Temporary files stay in `.work/`.
+
+Video work follows this order:
+
+1. Use supplied subtitles.
+2. Ask the platform for permitted captions.
+3. Download permitted media only when needed.
+4. Use local transcription only when the learner approves the model and download.
+
+The skill uses the Python `yt-dlp` package when it is available. FFmpeg remains an optional system tool. The skill does not fetch either tool without consent.
+
+### 4. Run research in a fixed order
+
+Research workers do not write the final course. They submit evidence to private task folders under `.work/`. Each worker gets one role, one scope, and one output path.
+
+```mermaid
+flowchart TD
+    Request["Learning request"] --> SourceCheck{"Source supplied?"}
+    SourceCheck -->|"No"| Prior["Ask one prior knowledge question"]
+    SourceCheck -->|"Yes"| Scope["Set scope and workspace"]
+    Prior --> Scope
+    Scope --> Intake["Register and extract sources"]
+    Intake --> Map["Map concepts and gaps"]
+    Map --> Research["Run bounded research workers"]
+    Research --> WaitResearch["Wait for the full research wave"]
+    WaitResearch --> Conflict["Review contradictions and reject weak claims"]
+    Conflict --> Cite["Check exact citations for retained claims"]
+    Cite --> Approve["Main agent approves evidence"]
+    Approve --> Write["Write lessons, wiki, glossary, and question bank"]
+    Write --> Generate["Generate chapter exams"]
+    Generate --> Check["A different worker checks every question"]
+    Check --> Validate["Run publication validation"]
+    Validate --> Ready["Write a ready exam"]
+```
+
+The order matters. The citation worker waits until contradiction review has removed claims that should not be used. The question checker waits until generation is complete. A worker cannot approve its own work.
+
+### 5. Publish only checked material
+
+The main agent promotes only approved evidence into the course. Published questions must have four options, one answer, a concise explanation, concept links, and exact source references.
+
+Each core chapter uses ten questions:
+
+* Eight concise multiple choice questions
+* Two short reading passages with multiple choice questions
+
+Short and optional chapters use five questions with the same four to one ratio.
+
+### 6. Keep the work visible
+
+The learner sees the finished course. Reviewers can inspect the work behind it.
+
+| Location | Contents |
+| --- | --- |
+| `source/` | Extracted notes with source locations |
+| `evidence/` | Approved claims, contradictions, and gaps |
+| `lessons/` | Reading material for each chapter |
+| `wiki/` | Concept pages and links |
+| `questions/` | The JSON test bank and its Markdown copy |
+| `exams/` | Ready exam files read by the app |
+| `logs/events.jsonl` | Actions, decisions, evidence paths, and short reasons |
+| `.work/` | Worker reports, drafts, temporary files, and rejected work |
+
+Logs record observable work. They do not record hidden reasoning.
+
+## How practice works
+
+The app reads a ready `exam.json` and shows one question at a time.
+
+```mermaid
+flowchart TD
+    Scan["Scan the workspace"] --> Ready["List ready exams and due reviews"]
+    Ready --> Start["Start or resume an unchanged exam"]
+    Start --> Question["Show one question without the answer"]
+    Question --> Submit["Submit one answer"]
+    Submit --> Lock["Lock and save the answer"]
+    Lock --> Correct{"Correct?"}
+    Correct -->|"No"| NoHint["Show no hint or source"]
+    Correct -->|"Yes"| Explain["Show the explanation"]
+    Explain --> Source["Allow the learner to open the source panel"]
+    NoHint --> More{"Questions left?"}
+    Source --> More
+    More -->|"Yes"| Question
+    More -->|"No"| Score["Score the attempt"]
+    Score --> Review["Update due dates once"]
+    Review --> Dashboard["Show the next review"]
+```
+
+A wrong answer gives no hint. A correct answer reveals the explanation. The source panel stays closed until the learner opens it. Final review shows the answer and its supporting source.
+
+When the skill rebuilds an exam with the same ID, the app uses the new file for the next attempt. It does not keep a second drift database. Completed attempts remain as history. A partial attempt resumes only when the exam has not changed.
+
+## Install from a cloned repository
+
+You need Python 3.11 or newer, [uv](https://docs.astral.sh/uv/getting-started/installation/), Git, and Node.js with `npx` for the Codex skill installer.
+
+Clone the repository:
 
 ```powershell
-uv tool install "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
+git clone https://github.com/Howard-Starfield/Mastery-Ledger.git
+Set-Location Mastery-Ledger
+```
+
+Install the local exam app:
+
+```powershell
+uv tool install . --force
 mastery-ledger doctor --json
 mastery-ledger onboard --open --json
 ```
 
-After onboarding, `mastery-ledger doctor --json` should report `ready`. If the registered course workspace moves, run:
+On first use, choose the workspace that will hold your course folders. The same command opens the running app on later uses:
 
 ```powershell
-mastery-ledger repair --open --json
+mastery-ledger onboard --open --json
 ```
 
-For a checkout that you are editing:
+Install the Codex skill from the clone:
 
 ```powershell
-Set-Location D:\AI_projects\Tutor_AI
+npx.cmd skills add ./mastery-ledger -g -a codex -y --copy
+npx.cmd skills list -g -a codex
+```
+
+Open a new Codex task after installation so Codex reads the new skill.
+
+## Update both parts after a pull
+
+The app and skill are separate installs. Update both:
+
+```powershell
+Set-Location Mastery-Ledger
+git pull --ff-only
+uv tool install . --force
+npx.cmd skills update mastery-ledger -g -y
+mastery-ledger doctor --json
+```
+
+If you edit the Python app in the clone, use an editable install:
+
+```powershell
 uv tool install --editable . --force
 ```
 
-## Install the Codex skill
+Changes under `src/mastery_ledger/` then apply without another install. Frontend changes still require a new web build.
 
-The skill is optional. It drives the source, research, evidence, and course building workflow. It does not install the application.
+## Install without cloning
+
+Install the current development preview of the app:
+
+```powershell
+uv tool install "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
+mastery-ledger onboard --open --json
+```
+
+Install the skill from GitHub:
 
 ```powershell
 npx.cmd skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y --copy
 ```
 
-After a repository update, refresh the installed copy and open a new Codex task:
+This is an unsigned preview. Signed operating system installers are not ready.
 
-```powershell
-npx.cmd skills update mastery-ledger -g -y
-npx.cmd skills list -g -a codex
+## Start a course
+
+Open a new Codex task and ask:
+
+```text
+Use Mastery Ledger to help me learn how large language models work.
 ```
 
-The skill checks `mastery-ledger doctor --json --skill-version 0.1.0` before it performs a durable course action. It opens onboarding only when the application says onboarding is required.
+Codex will first ask what you already know. To skip that question, include a source:
 
-## Test the project
+```text
+Use Mastery Ledger to build a course from https://example.com/my-source
+```
 
-Run the Python tests from the repository root:
+Codex asks for a workspace when it cannot reuse one that you already approved. Course building can continue without the local app. The app is required only when you want to take the generated exam or use its review schedule.
+
+## Run the tests
+
+Run all Python and skill tests from the repository root:
 
 ```powershell
 python -m venv .venv
 & .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-& .\.venv\Scripts\python.exe -m pytest -q
+& .\.venv\Scripts\python.exe -m pytest -q tests mastery-ledger/tests
 ```
 
-Run the web checks:
+Run the frontend tests and build:
 
 ```powershell
 Set-Location web
@@ -223,13 +293,13 @@ npm.cmd test
 npm.cmd run build
 ```
 
-The web build is bundled into `src/mastery_ledger/web/`. Commit it with the web source when the interface changes.
+The frontend build writes files to `src/mastery_ledger/web/`. Commit those files with any frontend change.
 
-## Limits of the current preview
+## Current limits
 
-* The review curve is a clear product rule, not FSRS or a validated learning model.
-* Local transcription needs the optional `faster-whisper` dependency and a learner approved model. It is not installed during onboarding.
-* A stable release still needs signed operating system installers.
-* The current wiki stays in the portable `wiki/wiki.json` format. The planned Markdown index migration has not started.
+* The review curve is a product rule, not a proven memory model.
+* Local transcription needs the optional `faster-whisper` package and a model approved by the learner.
+* The current wiki uses `wiki/wiki.json`. The planned Markdown catalog is not built yet.
+* Releases do not yet include signed operating system installers.
 
-Mastery Ledger is released under the [MIT License](LICENSE).
+Mastery Ledger uses the [MIT License](LICENSE).

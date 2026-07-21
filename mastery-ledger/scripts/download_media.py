@@ -151,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({
             "status": "failed",
             "code": "missing_ffmpeg_for_video_merge",
-            "message": "Video mode may require native FFmpeg to merge separate streams. Use an existing audited FFmpeg path or the application media-export profile; the skill will not download it.",
+            "message": "Video mode may require native FFmpeg to merge separate streams. Use an existing audited FFmpeg path; the skill will not download it.",
         }))
         return 2
 

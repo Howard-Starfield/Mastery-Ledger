@@ -80,6 +80,7 @@ class SkillStructureTests(unittest.TestCase):
         package = tomllib.loads((ROOT.parent / "pyproject.toml").read_text(encoding="utf-8"))
         version = package["project"]["version"]
         self.assertEqual(version, compatibility["skill_version"])
+        self.assertEqual("doctor-v2", compatibility["supported_application_contract"])
         self.assertEqual(
             f"mastery-ledger doctor --json --skill-version {version}",
             compatibility["application_command"],
@@ -110,6 +111,43 @@ class SkillStructureTests(unittest.TestCase):
         self.assertNotIn(".claude/skills", content)
         self.assertNotIn(".codex/skills", content)
         self.assertNotIn("confirmed_by", content)
+
+    def test_first_turn_and_runtime_routes_are_explicit(self) -> None:
+        controller = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+        runtime = (ROOT / "workflows" / "runtime-onboarding.md").read_text(encoding="utf-8")
+        intake = (ROOT / "workflows" / "intake-and-scope.md").read_text(encoding="utf-8")
+        media = (ROOT / "workflows" / "process-video.md").read_text(encoding="utf-8")
+
+        self.assertIn("## First-turn learning gate", controller)
+        self.assertIn("ask exactly one open prior-knowledge question and end the turn", controller)
+        self.assertIn("If supplied material exists, skip the open question", controller)
+        self.assertIn("must not be blocked by a missing application", controller)
+        self.assertIn("`skill_course_build` may continue without the application", runtime)
+        self.assertIn("`application_learning` must pass the application gate", runtime)
+        self.assertIn("Never describe the skill as merely an application adapter", runtime)
+        self.assertIn("Never treat the learner's statements as factual evidence", intake)
+        self.assertNotIn("Source Inbox", media)
+        self.assertNotIn("application-owned release runtime", media)
+        self.assertIn("local application has no source-ingestion API", media)
+
+    def test_retired_application_authoring_surfaces_are_absent(self) -> None:
+        application_root = ROOT.parent / "src" / "mastery_ledger"
+        for name in (
+            "ingestion_worker.py",
+            "knowledge_service.py",
+            "media_processing.py",
+            "source_service.py",
+        ):
+            self.assertFalse((application_root / name).exists(), name)
+
+        database = (application_root / "database.py").read_text(encoding="utf-8")
+        models = (application_root / "models.py").read_text(encoding="utf-8")
+        package = tomllib.loads((ROOT.parent / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertNotIn("CREATE TABLE IF NOT EXISTS jobs", database)
+        self.assertNotIn("class SourceInboxResult", models)
+        self.assertNotIn("class KnowledgeWikiResult", models)
+        self.assertNotIn("pypdf", "\n".join(package["project"]["dependencies"]))
+        self.assertNotIn("python-docx", "\n".join(package["project"]["dependencies"]))
 
     def test_course_initializer_uses_canonical_clean_layout(self) -> None:
         content = (ROOT / "scripts" / "init_study.py").read_text(encoding="utf-8")

@@ -143,12 +143,8 @@ def scheduled_question_count(workspace_root: Path) -> int:
 
 
 def application_settings(workspace: WorkspaceState) -> ApplicationSettings:
-    processing_mode = read_setting("processing_mode", "local_only")
-    if processing_mode not in {"local_only", "cloud_allowed", "metadata_only"}:
-        processing_mode = "local_only"
     return ApplicationSettings(
         language=str(read_setting("language", "en")),
-        processing_mode=processing_mode,
         reduced_motion=bool(read_setting("reduced_motion", False)),
         review_curve=active_review_curve(),
         default_review_intervals=DEFAULT_REVIEW_INTERVALS,

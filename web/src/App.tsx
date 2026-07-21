@@ -6,7 +6,6 @@ import {
   type ApplicationStatus,
   type OnboardingDefaults,
   type OnboardingResult,
-  type ProcessingMode,
   type WorkspaceValidation,
 } from './api'
 import Dashboard from './Dashboard'
@@ -20,42 +19,20 @@ const steps = [
   { eyebrow: '04', label: 'Review', title: 'Confirm the first entry' },
 ]
 
-const processingModes: Array<{ value: ProcessingMode; title: string; detail: string }> = [
-  {
-    value: 'local_only',
-    title: 'Local only',
-    detail: 'Source contents stay on this computer. Recommended for first setup.',
-  },
-  {
-    value: 'cloud_allowed',
-    title: 'Cloud allowed',
-    detail: 'Relevant excerpts may be sent to configured remote models.',
-  },
-  {
-    value: 'metadata_only',
-    title: 'Metadata only',
-    detail: 'Remote services may receive titles and metadata, never source contents.',
-  },
-]
-
 type FormState = {
   workspacePath: string
   workspaceName: string
   language: string
-  processingMode: ProcessingMode
   reducedMotion: boolean
   intervalText: string
-  initialSourceHint: string
 }
 
 const emptyForm: FormState = {
   workspacePath: '',
   workspaceName: 'Primary learning workspace',
   language: 'en',
-  processingMode: 'local_only',
   reducedMotion: false,
   intervalText: '1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584',
-  initialSourceHint: '',
 }
 
 function LedgerMark() {
@@ -94,10 +71,8 @@ function OnboardingApp() {
           workspacePath: nextDefaults.workspace_path,
           workspaceName: nextDefaults.workspace_name,
           language: nextDefaults.language,
-          processingMode: nextDefaults.processing_mode,
           reducedMotion: nextDefaults.reduced_motion,
           intervalText: formatReviewIntervals(nextDefaults.review_intervals),
-          initialSourceHint: '',
         })
       })
       .catch((cause: Error) => {
@@ -188,10 +163,8 @@ function OnboardingApp() {
         workspace_path: form.workspacePath,
         workspace_name: form.workspaceName,
         language: form.language,
-        processing_mode: form.processingMode,
         reduced_motion: form.reducedMotion,
         review_intervals: parseReviewIntervals(form.intervalText),
-        initial_source_hint: form.initialSourceHint.trim() || null,
       })
       setResult(completion)
     } catch (cause) {
@@ -230,7 +203,7 @@ function OnboardingApp() {
           <p className="kicker">First entry recorded</p>
           <h1>Your ledger has a home.</h1>
           <p className="completion-card__lede">
-            Mastery Ledger is ready to build source-grounded courses, exams, and a review history that compounds over time.
+            Mastery Ledger is ready to deliver validated exams offline and preserve a review history that compounds over time.
           </p>
           <dl className="receipt">
             <div><dt>Workspace</dt><dd>{result.workspace.name}</dd></div>
@@ -293,25 +266,14 @@ function OnboardingApp() {
           {step === 0 && (
             <section className="panel-enter" aria-labelledby="step-title">
               <p className="kicker">Begin with intent</p>
-              <h1 id="step-title">What should this ledger help you own?</h1>
+              <h1 id="step-title">Practice trusted exams without going online.</h1>
               <p className="lead">
-                Mastery Ledger turns material you trust into a knowledge map, focused exams, and a review trail. Your sources stay connected to every claim and question.
+                Codex and the Mastery Ledger skill create and validate your course files. This application reads ready exams and records only attempts, results, and review schedules.
               </p>
 
-              <label className="field field--large">
-                <span>Bring a first source <em>optional</em></span>
-                <textarea
-                  value={form.initialSourceHint}
-                  onChange={(event) => update('initialSourceHint', event.target.value)}
-                  placeholder="Paste a link, local file path, or a short note about what you want to study…"
-                  rows={4}
-                />
-                <small>You can also begin empty and add documents, websites, video, or audio later.</small>
-              </label>
-
               <div className="principle-strip" aria-label="Mastery Ledger principles">
-                <div><strong>01</strong><span>Sources remain traceable</span></div>
-                <div><strong>02</strong><span>Questions become durable records</span></div>
+                <div><strong>01</strong><span>Validated exams stay read-only</span></div>
+                <div><strong>02</strong><span>Attempts become durable records</span></div>
                 <div><strong>03</strong><span>Reviews stretch from days to years</span></div>
               </div>
             </section>
@@ -322,7 +284,7 @@ function OnboardingApp() {
               <p className="kicker">Choose its home</p>
               <h1 id="step-title">Your courses should outlive the app.</h1>
               <p className="lead">
-                Pick a folder for portable course files, sources, exams, attempts, and logs. The application itself remains separate.
+                Pick the workspace where the skill publishes portable course and exam files. The application reads those files and writes learner state only.
               </p>
 
               <div className="field-grid">
@@ -377,28 +339,8 @@ function OnboardingApp() {
           {step === 2 && (
             <section className="panel-enter" aria-labelledby="step-title">
               <p className="kicker">Define your method</p>
-              <h1 id="step-title">Privacy first. Rhythm second.</h1>
-              <p className="lead">These defaults apply to new courses. Each course can adopt stricter rules later.</p>
-
-              <fieldset className="mode-fieldset">
-                <legend>Source processing</legend>
-                <div className="mode-grid">
-                  {processingModes.map((mode) => (
-                    <label key={mode.value} className={form.processingMode === mode.value ? 'is-selected' : ''}>
-                      <input
-                        type="radio"
-                        name="processing-mode"
-                        value={mode.value}
-                        checked={form.processingMode === mode.value}
-                        onChange={() => update('processingMode', mode.value)}
-                      />
-                      <span className="radio-mark" />
-                      <strong>{mode.title}</strong>
-                      <small>{mode.detail}</small>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+              <h1 id="step-title">Interface first. Rhythm second.</h1>
+              <p className="lead">Choose how the offline exam player should look and when successful recall should return.</p>
 
               <div className="preference-grid">
                 <label className="field">
@@ -449,18 +391,17 @@ function OnboardingApp() {
             <section className="panel-enter" aria-labelledby="step-title">
               <p className="kicker">Review the entry</p>
               <h1 id="step-title">One local record, ready to grow.</h1>
-              <p className="lead">Saving creates the workspace and application registry. It does not download a model or begin processing sources.</p>
+              <p className="lead">Saving registers the workspace. It does not run Codex, download sources, compile lessons, or alter generated exams.</p>
 
               <dl className="review-ledger">
                 <div><dt>Workspace</dt><dd>{form.workspaceName}<small>{form.workspacePath}</small></dd></div>
-                <div><dt>Processing</dt><dd>{processingModes.find((mode) => mode.value === form.processingMode)?.title}</dd></div>
+                <div><dt>Runtime</dt><dd>Offline exam player</dd></div>
                 <div><dt>Review curve</dt><dd>{intervals.join(' → ')} days</dd></div>
-                <div><dt>First source</dt><dd>{form.initialSourceHint.trim() || 'None yet'}</dd></div>
               </dl>
 
               <div className="download-notice">
-                <strong>No surprise downloads.</strong>
-                <p><code>yt-dlp</code> belongs to the installed runtime. If you later choose local transcription, Mastery Ledger will show the ASR model and expected size before downloading it.</p>
+                <strong>Clean application boundary.</strong>
+                <p>Source acquisition and course compilation belong to Codex and the installed skill. This application only opens validated exams and updates portable learner-state files.</p>
               </div>
             </section>
           )}

@@ -4,9 +4,17 @@
 
 Turn the user’s request into an explicit learning contract and an approved boundary before expensive ingestion or research.
 
+## 0. Consume the first-turn signal
+
+The `SKILL.md` first-turn gate runs before this workflow for a new topic-only course request. Use the learner's open response to form provisional assumptions about starting level, vocabulary, prerequisites, misconceptions, and likely branches. Never treat the learner's statements as factual evidence for course material.
+
+Do not ask `What do you already know?` again. For a topic-research course, pass the response into `calibrate-and-authorize.md` as the opening calibration seed. If the learner answered `nothing` or equivalent, assume a beginner starting point and continue.
+
+When the first request contains an attachment, local path, URL, pasted source excerpt, or identified existing source, the first-turn gate is skipped. Acknowledge the supplied material, classify the source mode, and continue intake without asking whether the learner has a source. Additional sources may be added later under the same approved course scope.
+
 ## 1. Resume or create
 
-Check for a matching existing study before creating a new one. Match by stable study ID, source IDs, learning outcome, and concept overlap—not folder name alone.
+After resolving the learner-approved workspace, check for a matching existing study before creating a new one. Match by stable study ID, source IDs, learning outcome, and concept overlap—not folder name alone.
 
 Create a new study only when the request has a materially different outcome or satisfies the split criteria in `references/topic-splitting-policy.md`.
 

@@ -40,13 +40,13 @@ When absent:
 
 A single user-provided source may still use the file-only workflow without subagents when no external research or publishable independent verification is requested.
 
-## Application runtime and optional connectors
+## Application boundary and optional connectors
 
-The skill may call an installed Mastery Ledger runtime when exposed. Tool names and schemas must be discovered rather than invented. If no runtime exists, use workspace files and bundled scripts for the supported subset. Read the optional LinkVault connector contract only when the learner asks to use it.
+The skill owns source processing, research, evidence, course files, and exam generation. It may inspect the optional Mastery Ledger application's `doctor-v2` contract to reuse a registered workspace or launch ready-exam playback. A missing application never reduces course building to a provisional fallback.
 
-The durable application service should own operational state. The skill should not open or mutate an application database directly unless that database contract explicitly allows it.
+The application owns only exam delivery, attempts, learner progress, review schedules, and its local workspace registration. The skill must not open or mutate the application database. The application must not ingest sources or edit generated course and exam artifacts.
 
-Application onboarding is also runtime-owned. The skill may detect onboarding state, launch the documented onboarding entry point, and pass proposed context. The application must validate and confirm workspace paths, privacy choices, model downloads, and registry changes. A script-only fallback may ask for a provisional output folder for the current run, but it must not claim to have configured the application.
+When no registered workspace is available, ask the learner for an absolute workspace path and validate it before the first write. Do not claim that the path is registered with the application. Read the optional LinkVault connector contract only when the learner explicitly asks to use it.
 
 ## Optional dependencies
 

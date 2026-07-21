@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report media capabilities from the active application or fallback Python runtime."""
+"""Report media capabilities from the Python environment running the skill."""
 
 from __future__ import annotations
 
@@ -88,9 +88,9 @@ def inspect_runtime(ffmpeg_location: Path | None = None) -> dict[str, Any]:
             "local_asr": faster_whisper["status"] == "ready",
         },
         "ownership": {
-            "yt_dlp": "Mastery Ledger release-locked Python environment when invoked by the app; otherwise the reported active Python fallback",
+            "yt_dlp": "Python environment executing the installed skill helper",
             "ffmpeg": "optional audited native media-export profile or explicit existing path",
-            "updates": "application installer or explicit application update; never an individual skill run",
+            "updates": "explicit environment maintenance; never an individual course run",
         },
     }
 

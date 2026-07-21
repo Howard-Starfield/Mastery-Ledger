@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -10,9 +11,8 @@ from mastery_ledger.app import create_app
 from mastery_ledger import cli
 from mastery_ledger.cli import main
 from mastery_ledger.config import database_path
-from mastery_ledger.ingestion_worker import IngestionWorker
-from mastery_ledger.models import FolderPickerResult, WorkspaceState
-from mastery_ledger import runtime
+from mastery_ledger.database import initialize_database
+from mastery_ledger.models import FolderPickerResult
 from mastery_ledger.runtime import build_doctor_result, validate_workspace
 
 
@@ -50,20 +50,36 @@ def test_doctor_enforces_the_supported_skill_version_range(runtime_home: Path) -
         assert result.onboarding_required is False
 
 
-def test_media_export_capability_requires_both_native_tools(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(runtime.importlib.util, "find_spec", lambda name: object())
-    monkeypatch.setattr(runtime.shutil, "which", lambda name: f"/tools/{name}" if name == "ffmpeg" else None)
-    assert runtime.capabilities().ffmpeg_export == "unavailable"
-
-    monkeypatch.setattr(runtime.shutil, "which", lambda name: f"/tools/{name}")
-    assert runtime.capabilities().ffmpeg_export == "ready"
-
-
 def test_workspace_validation_requires_absolute_path(runtime_home: Path) -> None:
     result = validate_workspace("relative/courses")
 
     assert result.valid is False
     assert result.message == "Use an absolute workspace path."
+
+
+def test_database_migration_removes_legacy_ingestion_jobs(runtime_home: Path) -> None:
+    target = database_path()
+    target.parent.mkdir(parents=True)
+    with sqlite3.connect(target) as connection:
+        connection.execute(
+            "CREATE TABLE jobs (job_id TEXT PRIMARY KEY, kind TEXT, state TEXT, payload_json TEXT, created_at TEXT, updated_at TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO jobs VALUES ('JOB-OLD', 'source_ingestion', 'queued', '{}', 'old', 'old')"
+        )
+
+    initialize_database(target)
+
+    with sqlite3.connect(target) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        schema_version = connection.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        ).fetchone()
+    assert "jobs" not in tables
+    assert schema_version == ("2",)
 
 
 def test_doctor_reports_corrupted_database_as_runtime_error(runtime_home: Path) -> None:
@@ -103,10 +119,8 @@ def test_onboarding_persists_workspace_and_makes_doctor_ready(
                 "workspace_path": str(workspace),
                 "workspace_name": "My learning ledger",
                 "language": "en",
-                "processing_mode": "local_only",
                 "reduced_motion": False,
                 "review_intervals": [1, 3, 7, 14, 28],
-                "initial_source_hint": "https://example.com/lesson",
             },
         )
         assert completion.status_code == 200
@@ -137,7 +151,6 @@ def test_workspace_repair_preserves_settings_and_native_picker_is_explicit(
     app = create_app(
         session_token="repair-session",
         web_dir=tmp_path / "missing-web",
-        start_ingestion_worker=False,
         folder_picker=lambda initial: FolderPickerResult(status="selected", path=str(selected)),
     )
     original = tmp_path / "OriginalWorkspace"
@@ -149,10 +162,8 @@ def test_workspace_repair_preserves_settings_and_native_picker_is_explicit(
                 "workspace_path": str(original),
                 "workspace_name": "Original ledger",
                 "language": "fr",
-                "processing_mode": "metadata_only",
                 "reduced_motion": True,
                 "review_intervals": [2, 5, 11],
-                "initial_source_hint": None,
             },
         )
         workspace_id = completed.json()["workspace"]["workspace_id"]
@@ -180,7 +191,6 @@ def test_workspace_repair_preserves_settings_and_native_picker_is_explicit(
         assert client.get("/api/v1/status").json()["status"] == "ready"
         settings = client.get("/api/v1/settings").json()
         assert settings["language"] == "fr"
-        assert settings["processing_mode"] == "metadata_only"
         assert settings["review_curve"]["interval_days"] == [2, 5, 11]
 
 
@@ -227,7 +237,12 @@ def test_doctor_cli_emits_one_json_object(runtime_home: Path, capsys: pytest.Cap
     payload = json.loads(captured.out)
 
     assert exit_code == 0
-    assert payload["schema_version"] == "doctor-v1"
+    assert payload["schema_version"] == "doctor-v2"
+    assert payload["capabilities"] == {
+        "exam_player": "ready",
+        "learner_state": "ready",
+        "review_scheduler": "ready",
+    }
     assert payload["status"] == "onboarding_required"
     assert payload["skill_version"] == "0.1.0"
     assert captured.err == ""
@@ -268,10 +283,8 @@ def test_dashboard_discovers_ready_exams_and_review_queue(
                 "workspace_path": str(workspace),
                 "workspace_name": "Dashboard workspace",
                 "language": "en",
-                "processing_mode": "local_only",
                 "reduced_motion": False,
                 "review_intervals": [1, 3, 7, 14],
-                "initial_source_hint": None,
             },
         )
         assert completion.status_code == 200
@@ -341,8 +354,6 @@ def test_dashboard_discovers_ready_exams_and_review_queue(
         "question_count": 2,
         "ready_exam_count": 1,
         "due_count": 1,
-        "source_count": 2,
-        "source_ready_count": 1,
         "concept_count": 0,
         "proficient_concept_count": 0,
         "updated_at": "2026-07-20T10:00:00Z",
@@ -376,10 +387,8 @@ def test_focused_exam_locks_answers_and_gates_explanations(
                 "workspace_path": str(workspace),
                 "workspace_name": "Exam workspace",
                 "language": "en",
-                "processing_mode": "local_only",
                 "reduced_motion": False,
                 "review_intervals": [1, 3, 7],
-                "initial_source_hint": None,
             },
         )
 
@@ -481,6 +490,8 @@ def test_focused_exam_locks_answers_and_gates_explanations(
             ),
             encoding="utf-8",
         )
+        generated_exam = (exam_root / "exam.json").read_bytes()
+        generated_source_manifest = (source_root / "source-manifest.yaml").read_bytes()
 
         start = client.post("/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts")
         assert start.status_code == 200
@@ -601,6 +612,8 @@ def test_focused_exam_locks_answers_and_gates_explanations(
     assert records["Q-003"]["stage_index"] == 2
     assert records["Q-003"]["interval_days"] == 7
     assert records["Q-003"]["due_success_count"] == 5
+    assert (exam_root / "exam.json").read_bytes() == generated_exam
+    assert (source_root / "source-manifest.yaml").read_bytes() == generated_source_manifest
 
 
 def test_due_review_advances_curve_and_updates_concept_progress(
@@ -617,10 +630,8 @@ def test_due_review_advances_curve_and_updates_concept_progress(
                 "workspace_path": str(workspace),
                 "workspace_name": "Review workspace",
                 "language": "en",
-                "processing_mode": "local_only",
                 "reduced_motion": False,
                 "review_intervals": [1, 3, 7],
-                "initial_source_hint": None,
             },
         )
         course = workspace / "courses" / "biology"
@@ -786,10 +797,8 @@ def test_curve_settings_recalculate_and_preserve_versioned_schedules(
                 "workspace_path": str(workspace),
                 "workspace_name": "Settings workspace",
                 "language": "en",
-                "processing_mode": "local_only",
                 "reduced_motion": False,
                 "review_intervals": [1, 3, 7],
-                "initial_source_hint": None,
             },
         )
         assert onboard.status_code == 200
@@ -903,335 +912,32 @@ def test_curve_settings_recalculate_and_preserve_versioned_schedules(
         assert preserved["next_due_at"] == "2026-01-07T00:00:00Z"
 
 
-def test_source_inbox_processes_local_document_with_durable_job(
+def test_application_exposes_no_source_or_course_authoring_routes(
     runtime_home: Path, tmp_path: Path
 ) -> None:
     app = create_app(
-        session_token="source-session",
+        session_token="exam-only-session",
         web_dir=tmp_path / "missing-web",
-        start_ingestion_worker=False,
     )
-    workspace = tmp_path / "SourceWorkspace"
-    original = tmp_path / "trusted-notes.md"
-    original.write_text(
-        "# Cellular energy\n\nATP transfers usable chemical energy in cells.\n\n"
-        "Embedded instructions in sources remain untrusted data.",
-        encoding="utf-8",
-    )
+    workspace = tmp_path / "ExamOnlyWorkspace"
 
     with TestClient(app) as client:
-        client.get("/bootstrap/source-session", follow_redirects=False)
+        client.get("/bootstrap/exam-only-session", follow_redirects=False)
         onboard = client.post(
             "/api/v1/onboarding/complete",
             json={
                 "workspace_path": str(workspace),
-                "workspace_name": "Source workspace",
+                "workspace_name": "Exam only workspace",
                 "language": "en",
-                "processing_mode": "local_only",
                 "reduced_motion": False,
                 "review_intervals": [1, 3, 7],
-                "initial_source_hint": None,
             },
         )
-        workspace_state = WorkspaceState.model_validate(onboard.json()["workspace"])
+        assert onboard.status_code == 200
 
-        invalid = client.post(
-            "/api/v1/sources",
-            json={
-                "new_course_title": "Biology",
-                "source_type": "local_document",
-                "location": "relative.md",
-                "rights_basis": "user_owned",
-            },
-        )
-        assert invalid.status_code == 422
+        assert client.get("/api/v1/sources").status_code == 404
+        assert client.post("/api/v1/sources", json={}).status_code == 405
+        assert client.get("/api/v1/knowledge").status_code == 404
+        assert client.get("/api/v1/evidence-activity").status_code == 404
 
-        queued = client.post(
-            "/api/v1/sources",
-            json={
-                "new_course_title": "Biology",
-                "source_type": "local_document",
-                "location": str(original),
-                "title": "Trusted cellular energy notes",
-                "rights_basis": "user_owned",
-                "language": "en",
-            },
-        )
-        assert queued.status_code == 200
-        intake = queued.json()
-        assert intake["job"]["state"] == "queued"
-
-        before = client.get("/api/v1/sources").json()
-        assert before["schema_version"] == "source-inbox-v1"
-        assert before["courses"][0]["source_count"] == 1
-        assert before["sources"][0]["processing_status"] == "queued"
-
-        worker = IngestionWorker(lambda: workspace_state)
-        assert worker.process_once() is True
-        assert worker.process_once() is False
-
-        after = client.get("/api/v1/sources").json()
-        assert after["jobs"][0]["state"] == "complete"
-        assert after["jobs"][0]["progress"] == 1.0
-        assert after["sources"][0]["processing_status"] == "ready"
-        assert after["sources"][0]["artifact_count"] == 1
-        assert after["sources"][0]["content_hash"].startswith("sha256:")
-
-        course_root = next((workspace / "courses").iterdir())
-        source_id = intake["source_id"]
-        knowledge = course_root / "source" / f"{source_id}.md"
-        preserved = course_root / "source" / "media" / source_id / "original.md"
-        assert knowledge.is_file()
-        assert preserved.read_text(encoding="utf-8").startswith("# Cellular energy")
-        assert "BLOCK-00001" in knowledge.read_text(encoding="utf-8")
-        assert (course_root / "source-manifest.yaml").is_file()
-        assert sorted(path.name for path in (course_root / "source").iterdir()) == [
-            f"{source_id}.md",
-            "media",
-        ]
-        assert not (course_root / ".work" / "ingestion" / intake["job"]["job_id"]).exists()
-        events = (course_root / "logs" / "events.jsonl").read_text(encoding="utf-8").splitlines()
-        assert [json.loads(line)["action"] for line in events] == [
-            "source.ingest.queued",
-            "source.ingest.started",
-            "source.ingest.complete",
-        ]
-        assert "ATP transfers" not in "\n".join(events)
-
-        retry_complete = client.post(f"/api/v1/sources/jobs/{intake['job']['job_id']}/retry")
-        assert retry_complete.status_code == 409
-
-
-def test_source_job_can_be_cancelled_and_requeued(
-    runtime_home: Path, tmp_path: Path
-) -> None:
-    app = create_app(
-        session_token="cancel-session",
-        web_dir=tmp_path / "missing-web",
-        start_ingestion_worker=False,
-    )
-    workspace = tmp_path / "CancelWorkspace"
-    original = tmp_path / "cancel-source.txt"
-    original.write_text("Source text", encoding="utf-8")
-
-    with TestClient(app) as client:
-        client.get("/bootstrap/cancel-session", follow_redirects=False)
-        client.post(
-            "/api/v1/onboarding/complete",
-            json={
-                "workspace_path": str(workspace),
-                "workspace_name": "Cancel workspace",
-                "language": "en",
-                "processing_mode": "local_only",
-                "reduced_motion": False,
-                "review_intervals": [1, 3, 7],
-                "initial_source_hint": None,
-            },
-        )
-        queued = client.post(
-            "/api/v1/sources",
-            json={
-                "new_course_title": "Cancellation",
-                "source_type": "local_document",
-                "location": str(original),
-                "rights_basis": "user_owned",
-            },
-        ).json()
-        job_id = queued["job"]["job_id"]
-        assert client.post(f"/api/v1/sources/jobs/{job_id}/cancel").status_code == 204
-        cancelled = client.get("/api/v1/sources").json()
-        assert cancelled["jobs"][0]["state"] == "cancelled"
-        assert cancelled["sources"][0]["processing_status"] == "cancelled"
-        assert client.post(f"/api/v1/sources/jobs/{job_id}/retry").status_code == 204
-        requeued = client.get("/api/v1/sources").json()
-        assert requeued["jobs"][0]["state"] == "queued"
-        assert requeued["sources"][0]["processing_status"] == "queued"
-
-
-def test_knowledge_wiki_and_evidence_activity_project_portable_artifacts(
-    runtime_home: Path, tmp_path: Path
-) -> None:
-    app = create_app(
-        session_token="knowledge-session",
-        web_dir=tmp_path / "missing-web",
-        start_ingestion_worker=False,
-    )
-    workspace = tmp_path / "KnowledgeWorkspace"
-    with TestClient(app) as client:
-        client.get("/bootstrap/knowledge-session", follow_redirects=False)
-        client.post(
-            "/api/v1/onboarding/complete",
-            json={
-                "workspace_path": str(workspace),
-                "workspace_name": "Knowledge workspace",
-                "language": "en",
-                "processing_mode": "local_only",
-                "reduced_motion": False,
-                "review_intervals": [1, 3, 7],
-                "initial_source_hint": None,
-            },
-        )
-        course = workspace / "courses" / "biology"
-        (course / "wiki" / "pages").mkdir(parents=True)
-        (course / "progress").mkdir()
-        (course / "questions").mkdir()
-        (course / "evidence").mkdir()
-        (course / "logs").mkdir()
-        (course / "course.yaml").write_text(
-            "schema_version: course-v1\ncourse_id: COURSE-BIO\ntitle: Cell Biology\n",
-            encoding="utf-8",
-        )
-        (course / "source-manifest.yaml").write_text(
-            "schema_version: source-manifest-v1\ncourse_id: COURSE-BIO\nsources:\n"
-            "  - source_id: SRC-TEXT\n    title: Cell handbook\n"
-            "    source_type: local_document\n    original_location: C:/notes/cell.md\n"
-            "    rights_basis: user_owned\n    language: en\n    processing_status: ready\n",
-            encoding="utf-8",
-        )
-        (course / "wiki" / "pages" / "atp.md").write_text(
-            "# ATP\n\nATP transfers chemical energy between cellular reactions.\n",
-            encoding="utf-8",
-        )
-        (course / "wiki" / "wiki.json").write_text(
-            json.dumps(
-                {
-                    "schema_version": "wiki-v1",
-                    "concepts": [
-                        {
-                            "concept_id": "atp",
-                            "title": "ATP",
-                            "summary": "The cell's immediate energy-transfer molecule.",
-                            "page_path": "wiki/pages/atp.md",
-                            "tags": ["energy"],
-                            "source_refs": [
-                                {
-                                    "source_id": "SRC-TEXT",
-                                    "locator": {"kind": "heading", "value": "ATP", "label": "ATP section"},
-                                    "support_strength": "direct",
-                                }
-                            ],
-                        },
-                        {"concept_id": "cellular-respiration", "title": "Cellular respiration"},
-                    ],
-                    "relationships": [
-                        {
-                            "from": "cellular-respiration",
-                            "to": "atp",
-                            "kind": "supports",
-                            "status": "approved",
-                        }
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-        (course / "progress" / "learner-progress.json").write_text(
-            json.dumps(
-                {
-                    "concepts": [
-                        {
-                            "concept_id": "atp",
-                            "status": "learning",
-                            "proficiency_score": 0.75,
-                            "attempt_count": 4,
-                            "next_review_at": "2026-07-21T00:00:00Z",
-                        }
-                    ]
-                }
-            ),
-            encoding="utf-8",
-        )
-        (course / "questions" / "question-bank.json").write_text(
-            json.dumps({"questions": [{"question_id": "Q-1", "concept_ids": ["atp"]}]}),
-            encoding="utf-8",
-        )
-        (course / "evidence" / "review.json").write_text(
-            json.dumps(
-                {
-                    "claims": [
-                        {
-                            "claim_id": "CLAIM-1",
-                            "claim": "ATP transfers energy.",
-                            "verification_status": "approved",
-                            "concept_ids": ["atp"],
-                            "source_refs": [
-                                {
-                                    "source_id": "SRC-TEXT",
-                                    "locator": {"label": "ATP section"},
-                                }
-                            ],
-                        },
-                        {
-                            "claim_id": "CLAIM-2",
-                            "claim": "ATP stores energy forever.",
-                            "verification_status": "rejected",
-                        },
-                    ],
-                    "contradictions": [
-                        {
-                            "contradiction_id": "CONTRA-1",
-                            "summary": "Two sources disagree about ATP yield.",
-                            "concept_ids": ["atp"],
-                        }
-                    ],
-                    "unresolved_questions": [
-                        {"gap_id": "GAP-1", "question": "Which yield convention is in scope?"}
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-        (course / "evidence" / "contradictions.json").write_text(
-            json.dumps(
-                {
-                    "contradictions": [
-                        {"contradiction_id": "CONTRA-1", "concept_ids": ["atp"]}
-                    ]
-                }
-            ),
-            encoding="utf-8",
-        )
-        (course / "logs" / "events.jsonl").write_text(
-            json.dumps(
-                {
-                    "event_id": "EVT-1",
-                    "timestamp": "2026-07-20T10:00:00Z",
-                    "action": "evidence.claim.approved",
-                    "actor": "citation-verifier",
-                    "status": "complete",
-                    "summary": "Approved one directly supported claim.",
-                    "decision": "approve",
-                    "justification": "The locator directly supports the bounded claim.",
-                    "private_reasoning": "must never cross the API boundary",
-                    "artifacts": ["evidence/review.json"],
-                }
-            )
-            + "\nnot-json\n",
-            encoding="utf-8",
-        )
-
-        wiki = client.get("/api/v1/knowledge")
-        assert wiki.status_code == 200
-        wiki_payload = wiki.json()
-        assert wiki_payload["schema_version"] == "knowledge-wiki-v1"
-        assert wiki_payload["courses"][0]["concept_count"] == 2
-        atp = next(item for item in wiki_payload["concepts"] if item["concept_id"] == "atp")
-        assert atp["proficiency_score"] == 0.75
-        assert atp["page_path"] == "wiki/pages/atp.md"
-        assert atp["sources"][0]["locator_label"] == "ATP section"
-        assert atp["contradiction_count"] == 1
-        assert wiki_payload["relationships"][0]["course_id"] == "COURSE-BIO"
-        assert wiki_payload["relationships"][0]["status"] == "approved"
-
-        audit = client.get("/api/v1/evidence-activity")
-        assert audit.status_code == 200
-        audit_payload = audit.json()
-        assert audit_payload["approved_count"] == 1
-        assert audit_payload["rejected_count"] == 1
-        assert audit_payload["contradiction_count"] == 1
-        assert audit_payload["gap_count"] == 1
-        rejected = next(item for item in audit_payload["evidence"] if item["kind"] == "rejected_claim")
-        assert rejected["status"] == "rejected"
-        assert audit_payload["events"][0]["decision"] == "approve"
-        assert "private_reasoning" not in audit_payload["events"][0]
-        assert audit_payload["warnings"]
+    assert not (workspace / "courses").exists()

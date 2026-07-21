@@ -35,7 +35,7 @@ Resolve `SKILL_ROOT` from the installed `SKILL.md` path. Before remote media wor
 python "<SKILL_ROOT>/scripts/check_media_runtime.py"
 ```
 
-Use the application-owned release runtime when available. The skill includes safe Python wrappers, not vendored copies of `yt-dlp` or FFmpeg. `yt-dlp` is installed from the application release lock. FFmpeg is an optional native executable used for separate-stream merging or export; caption acquisition, metadata probing, and single-stream audio acquisition do not trigger its installation. Never run `pip install -U`, `yt-dlp -U`, or an FFmpeg download during a course workflow.
+Use the Python environment executing the installed skill helpers. The skill includes safe Python wrappers, not vendored copies of `yt-dlp` or FFmpeg. If `yt-dlp` is unavailable, return `needs_user_action` with the exact missing dependency; do not require the Mastery Ledger application. FFmpeg is an optional native executable used for separate-stream merging or export; caption acquisition, metadata probing, and single-stream audio acquisition do not trigger its installation. Never run `pip install -U`, `yt-dlp -U`, or an FFmpeg download during a course workflow.
 
 ### Normalize SRT or VTT
 
@@ -61,7 +61,7 @@ python "<SKILL_ROOT>/scripts/download_media.py" "https://example.invalid/video" 
   --mode human_subtitles --languages "en.*,zh.*"
 ```
 
-If the probe reports no matching human captions, run a separate `--mode automatic_subtitles` acquisition so provenance remains explicit. The wrapper imports the locked `yt-dlp` Python package, ignores ambient configuration, does not accept cookies, and writes `probe.json` plus a structured job manifest. Prefer the application Source Inbox, which provides durable job recovery and promotion.
+If the probe reports no matching human captions, run a separate `--mode automatic_subtitles` acquisition so provenance remains explicit. The wrapper imports the detected `yt-dlp` Python package, ignores ambient configuration, does not accept cookies, and writes `probe.json` plus a structured job manifest. Run it directly from the skill workflow; the local application has no source-ingestion API.
 
 ### Local ASR
 
@@ -76,13 +76,13 @@ This optionally uses `faster-whisper`. Record model, version, source hash, langu
 
 For explicitly approved video download/merge, pass an existing executable or containing directory with `--ffmpeg-location`. If the capability probe reports it unavailable, return `needs_user_action`; do not search for or fetch an arbitrary build. Prefer captions or single-stream audio plus local ASR when those meet the learning goal.
 
-## Durable product integration
+## Durable skill-side processing
 
-The Mastery Ledger application runs downloading and transcription as durable backend jobs, not conversation-only processes. It uses states:
+The main agent creates one bounded staging folder under `.work/ingestion/<job-id>/` for each acquisition and invokes only the packaged wrappers. Use the manifest states:
 
 `QUEUED`, `RUNNING`, `NEEDS_USER_ACTION`, `PARTIAL`, `COMPLETE`, `FAILED`, `CANCELLED`.
 
-The service owns retries, cancellation, staging directories, completion manifests, and crash recovery. The skill should call that service when available.
+Keep probe output, completion manifests, observable events, and recovery guidance in that staging folder. Retry only after inspecting the recorded failure and correcting an observable cause; do not recursively rerun a failed downloader. Promote verified media and transcripts to `source/media/<source-id>/`, update the source manifest, and merge the short action event only after completion. Never call the local application for ingestion, transcription, retry, or promotion.
 
 ## Transcript quality checks
 

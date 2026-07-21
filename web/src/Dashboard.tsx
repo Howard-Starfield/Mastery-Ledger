@@ -2,22 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { applicationApi, type DashboardExam, type DashboardResult } from './api'
 import CurveSettings from './CurveSettings'
-import EvidenceActivity from './EvidenceActivity'
 import ExamRunner from './ExamRunner'
-import KnowledgeWiki, { type WorkspaceScreen } from './KnowledgeWiki'
-import SourceInbox from './SourceInbox'
 
 type DashboardProps = {
   workspaceName: string
 }
 
 const navItems = [
-  { label: 'Home', icon: 'grid' },
-  { label: 'Due now', icon: 'clock' },
-  { label: 'Exams', icon: 'paper', active: true },
-  { label: 'Knowledge', icon: 'book' },
-  { label: 'Sources', icon: 'folder' },
-  { label: 'Activity', icon: 'activity' },
+  { label: 'Exams', icon: 'paper', action: 'exams' },
+  { label: 'Due review', icon: 'clock', action: 'review' },
+  { label: 'Review curve', icon: 'grid', action: 'curve' },
 ]
 
 function Icon({ name }: { name: string }) {
@@ -25,9 +19,6 @@ function Icon({ name }: { name: string }) {
     grid: <><rect x="3" y="3" width="6" height="6" /><rect x="15" y="3" width="6" height="6" /><rect x="3" y="15" width="6" height="6" /><rect x="15" y="15" width="6" height="6" /></>,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
     paper: <><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v5h4M9 12h7M9 16h7" /></>,
-    book: <><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H12v18H7.5A3.5 3.5 0 0 0 4 23z" /><path d="M20 5.5A3.5 3.5 0 0 0 16.5 2H12v18h4.5A3.5 3.5 0 0 1 20 23z" /></>,
-    folder: <path d="M3 6h7l2 2h9v11H3z" />,
-    activity: <><path d="M5 6h14M5 12h14M5 18h14" /><circle cx="8" cy="6" r="1" /><circle cx="16" cy="12" r="1" /><circle cx="10" cy="18" r="1" /></>,
   }
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>
 }
@@ -69,7 +60,6 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [activeExam, setActiveExam] = useState<DashboardExam | null>(null)
   const [activeReview, setActiveReview] = useState(false)
   const [curveSettingsOpen, setCurveSettingsOpen] = useState(false)
-  const [workspaceScreen, setWorkspaceScreen] = useState<WorkspaceScreen>('exams')
 
   const refresh = () => {
     setLoading(true)
@@ -101,10 +91,6 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   if (activeReview) {
     return <ExamRunner reviewMode onExit={() => { setActiveReview(false); refresh() }} />
   }
-  if (workspaceScreen === 'sources') return <SourceInbox workspaceName={data?.workspace.name ?? workspaceName} onNavigate={setWorkspaceScreen} />
-  if (workspaceScreen === 'knowledge') return <KnowledgeWiki workspaceName={data?.workspace.name ?? workspaceName} onNavigate={setWorkspaceScreen} />
-  if (workspaceScreen === 'activity') return <EvidenceActivity workspaceName={data?.workspace.name ?? workspaceName} onNavigate={setWorkspaceScreen} />
-
   return (
     <main className="ledger-app">
       <header className="ledger-topbar">
@@ -122,10 +108,19 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
       <aside className="ledger-nav">
         <nav aria-label="Primary navigation">
           {navItems.map((item) => (
-            <button key={item.label} type="button" className={item.active ? 'is-active' : ''} disabled={!item.active && !['Sources', 'Knowledge', 'Activity'].includes(item.label)} onClick={() => { if (item.label === 'Sources') setWorkspaceScreen('sources'); if (item.label === 'Knowledge') setWorkspaceScreen('knowledge'); if (item.label === 'Activity') setWorkspaceScreen('activity') }}>
+            <button
+              key={item.label}
+              type="button"
+              className={item.action === 'exams' ? 'is-active' : ''}
+              disabled={item.action === 'review' && !data?.due_now}
+              onClick={() => {
+                if (item.action === 'review') setActiveReview(true)
+                if (item.action === 'curve') setCurveSettingsOpen(true)
+              }}
+            >
               <Icon name={item.icon} />
               <span>{item.label}</span>
-              {item.label === 'Due now' && Boolean(data?.due_now) && <em>{data?.due_now}</em>}
+              {item.action === 'review' && Boolean(data?.due_now) && <em>{data?.due_now}</em>}
             </button>
           ))}
         </nav>
@@ -186,9 +181,9 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
             {data?.recent_courses.length ? data.recent_courses.slice(0, 6).map((item) => (
               <article key={item.course_id}>
                 <span className="course-index">{item.course_id}</span><h3>{item.title}</h3>
-                <dl><div><dt>Questions</dt><dd>{item.question_count}</dd></div><div><dt>Ready exams</dt><dd>{item.ready_exam_count}</dd></div><div><dt>Sources</dt><dd>{item.source_ready_count}/{item.source_count}</dd></div></dl>
+                <dl><div><dt>Questions</dt><dd>{item.question_count}</dd></div><div><dt>Ready exams</dt><dd>{item.ready_exam_count}</dd></div><div><dt>Due</dt><dd>{item.due_count}</dd></div></dl>
                 <p className="course-concepts"><span>Concept evidence</span><strong>{item.proficient_concept_count}/{item.concept_count} proficient</strong></p>
-                <div className="course-rule"><span style={{ width: `${item.source_count ? (item.source_ready_count / item.source_count) * 100 : 0}%` }} /></div>
+                <div className="course-rule"><span style={{ width: `${item.concept_count ? (item.proficient_concept_count / item.concept_count) * 100 : 0}%` }} /></div>
               </article>
             )) : <div className="course-empty"><strong>No course folders discovered.</strong><span>Create a course through the Mastery Ledger skill, then rescan this workspace.</span></div>}
           </div>

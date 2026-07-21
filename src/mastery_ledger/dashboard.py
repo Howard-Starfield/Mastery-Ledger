@@ -103,22 +103,6 @@ def _question_count(course_root: Path) -> int:
     return len(_list_records(payload, "questions"))
 
 
-def _source_counts(course_root: Path) -> tuple[int, int]:
-    candidates = (
-        course_root / "source-manifest.yaml",
-        course_root / "source" / "source-manifest.yaml",
-    )
-    payload = next((_read_yaml(path, course_root) for path in candidates if path.is_file()), None)
-    sources = _list_records(payload, "sources")
-    ready = sum(
-        1
-        for source in sources
-        if str(source.get("processing_status", source.get("status", ""))).casefold()
-        in {"ready", "accepted", "complete", "completed", "verified"}
-    )
-    return len(sources), ready
-
-
 def _concept_counts(course_root: Path) -> tuple[int, int]:
     payload = _read_json(
         course_root / "progress" / "learner-progress.json",
@@ -253,7 +237,6 @@ def build_dashboard(workspace: WorkspaceState, *, now: datetime | None = None) -
                 stage_counts[stage] += 1
         exams = _exam_summaries(course_root, course_id, title)
         ready_exams.extend(exams)
-        source_count, source_ready_count = _source_counts(course_root)
         concept_count, proficient_concept_count = _concept_counts(course_root)
         courses.append(
             DashboardCourse(
@@ -262,8 +245,6 @@ def build_dashboard(workspace: WorkspaceState, *, now: datetime | None = None) -
                 question_count=_question_count(course_root),
                 ready_exam_count=len(exams),
                 due_count=due_count,
-                source_count=source_count,
-                source_ready_count=source_ready_count,
                 concept_count=concept_count,
                 proficient_concept_count=proficient_concept_count,
                 updated_at=str(manifest["updated_at"]) if manifest.get("updated_at") else None,

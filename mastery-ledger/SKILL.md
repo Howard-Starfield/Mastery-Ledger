@@ -27,14 +27,25 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 - Never dispatch a worker from a conversationally composed prompt. Compile and validate its role-specific context first; pass the generated dispatch message without substantive edits.
 - Read only the workflow and reference files required for the current phase.
 
+## First-turn learning gate
+
+Apply this gate before runtime detection, workspace questions, browsing, file creation, or tutoring for a new learning request.
+
+1. Inspect the learner's first request for supplied material: an attachment, local file or folder path, URL, pasted source excerpt, explicitly named existing course, or identified source already present in the workspace.
+2. If no supplied material exists, ask exactly one open prior-knowledge question and end the turn: `Before I build this course, tell me what you already know about <topic>—even if the answer is "nothing yet." Mention any terms, examples, or parts that confuse you.` Adapt only `<topic>` and grammar. Do not explain the topic, offer provisional tutoring, contrast a lesson with a tracked course, ask for a workspace, or ask another intake question in that turn.
+3. On the learner's answer, treat it as a provisional learner-model signal, never as source evidence. Briefly reflect the assumed starting level and continue the operational workflow without asking the same question again. A response of "nothing" means start from prerequisites, not that the request is blocked.
+4. If supplied material exists, skip the open question and begin the operational workflow immediately. Acknowledge the material already supplied; do not ask whether the learner has a source. Allow additional material to be attached later to the same course.
+5. Skip this gate when resuming an explicitly identified existing study or when the learner requests only a short explanation rather than a course.
+
 ## Start every operational run
 
-1. Detect available capabilities: the Mastery Ledger runtime, filesystem, web, PDF/media reading, scripts, persistent storage, subagents, parallelism, and source-citation support.
-2. For a course, ingestion, exam, or review operation, read [runtime detection and onboarding](workflows/runtime-onboarding.md) and pass its gate before touching durable application state. Do not launch or install software for a design-only or explanatory request.
-3. Look for an existing `study.yaml` and resume it when the request belongs to that study.
+1. Complete the first-turn learning gate when it applies.
+2. Detect available capabilities: the optional Mastery Ledger application, filesystem, web, PDF/media reading, scripts, persistent storage, subagents, parallelism, and source-citation support.
+3. Read [runtime detection and onboarding](workflows/runtime-onboarding.md) and classify the operation. Course creation, source work, research, compilation, and exam generation are skill-owned and must not be blocked by a missing application. Application exam playback, application-managed attempts, and application review scheduling require the application gate.
+4. Resolve a learner-approved course workspace, then look for an existing `study.yaml` and resume it when the request belongs to that study.
    If an application-created course has `course.yaml` but no `study.yaml`, read [artifact lifecycle](references/artifact-lifecycle.md) and run the packaged `scripts/adopt_course.py`; never fill the layout manually.
-4. Determine the mode: `provided-material-only`, `existing-library`, `local-media`, `topic-research`, or `hybrid`.
-5. Read [intake and scope](workflows/intake-and-scope.md). For `topic-research` or `hybrid`, also read [calibrate and authorize](workflows/calibrate-and-authorize.md). Do not launch research before calibration disposition, scope, and worker topology are approved.
+5. Determine the mode: `provided-material-only`, `existing-library`, `local-media`, `topic-research`, or `hybrid`.
+6. Read [intake and scope](workflows/intake-and-scope.md). For `topic-research` or `hybrid`, also read [calibrate and authorize](workflows/calibrate-and-authorize.md). Do not launch research before calibration disposition, scope, and worker topology are approved.
 
 ## Deterministic convergence loop
 

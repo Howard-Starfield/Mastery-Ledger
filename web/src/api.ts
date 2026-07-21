@@ -1,11 +1,8 @@
-export type ProcessingMode = 'local_only' | 'cloud_allowed' | 'metadata_only'
-
 export interface OnboardingDefaults {
   schema_version: 'onboarding-defaults-v1'
   workspace_path: string
   workspace_name: string
   language: string
-  processing_mode: ProcessingMode
   reduced_motion: boolean
   review_intervals: number[]
 }
@@ -31,10 +28,8 @@ export interface OnboardingPayload {
   workspace_path: string
   workspace_name: string
   language: string
-  processing_mode: ProcessingMode
   reduced_motion: boolean
   review_intervals: number[]
-  initial_source_hint: string | null
 }
 
 export interface OnboardingResult {
@@ -50,7 +45,7 @@ export interface OnboardingResult {
 }
 
 export interface ApplicationStatus {
-  schema_version: 'doctor-v1'
+  schema_version: 'doctor-v2'
   status: 'ready' | 'onboarding_required' | 'workspace_unavailable' | 'incompatible' | 'runtime_error'
   app_version: string
   onboarding_required: boolean
@@ -77,8 +72,6 @@ export interface DashboardCourse {
   question_count: number
   ready_exam_count: number
   due_count: number
-  source_count: number
-  source_ready_count: number
   concept_count: number
   proficient_concept_count: number
   updated_at: string | null
@@ -112,7 +105,6 @@ export interface ReviewCurveProfile {
 export interface ApplicationSettings {
   schema_version: 'settings-v1'
   language: string
-  processing_mode: ProcessingMode
   reduced_motion: boolean
   review_curve: ReviewCurveProfile
   default_review_intervals: number[]
@@ -135,159 +127,6 @@ export interface ReviewCurveUpdateResult {
   application_policy: CurveApplicationPolicy
   affected_question_count: number
   preserved_without_anchor_count: number
-}
-
-export type SourceType = 'web_article' | 'remote_video' | 'local_document' | 'local_media' | 'local_subtitle'
-export type RightsBasis = 'web_reference' | 'user_owned' | 'platform_permitted_download' | 'public_license' | 'explicit_permission'
-export type IngestionJobState = 'queued' | 'running' | 'needs_user_action' | 'partial' | 'complete' | 'failed' | 'cancelled'
-
-export interface SourceInboxCourse {
-  course_id: string
-  title: string
-  source_count: number
-  ready_count: number
-}
-
-export interface SourceSummary {
-  source_id: string
-  course_id: string
-  title: string
-  source_type: SourceType
-  original_location: string
-  processing_status: string
-  rights_basis: RightsBasis
-  language: string
-  retrieved_at: string | null
-  content_hash: string | null
-  knowledge_path: string | null
-  artifact_count: number
-  error_code: string | null
-  recovery_suggestion: string | null
-}
-
-export interface IngestionJob {
-  job_id: string
-  kind: string
-  state: IngestionJobState
-  course_id: string
-  source_id: string
-  progress: number
-  stage: string
-  error_code: string | null
-  recovery_suggestion: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface SourceInboxResult {
-  schema_version: 'source-inbox-v1'
-  courses: SourceInboxCourse[]
-  sources: SourceSummary[]
-  jobs: IngestionJob[]
-  capabilities: {
-    web_app: 'ready' | 'unavailable'
-    yt_dlp: 'ready' | 'not_installed'
-    local_asr: 'ready' | 'not_configured'
-    ffmpeg_export: 'ready' | 'unavailable'
-  }
-}
-
-export interface SourceIntakePayload {
-  course_id: string | null
-  new_course_title: string | null
-  source_type: SourceType
-  location: string
-  title: string | null
-  rights_basis: RightsBasis
-  language: string
-  allow_transcription: boolean
-}
-
-export interface WikiSourceReference {
-  source_id: string
-  title: string
-  locator_label: string
-  support_strength: 'direct' | 'partial' | 'contextual'
-  href: string | null
-}
-
-export interface WikiConcept {
-  course_id: string
-  course_title: string
-  concept_id: string
-  title: string
-  summary: string
-  status: string
-  proficiency_score: number
-  attempt_count: number
-  next_review_at: string | null
-  tags: string[]
-  prerequisites: string[]
-  related: string[]
-  sources: WikiSourceReference[]
-  contradiction_count: number
-  page_markdown: string | null
-  page_path: string | null
-}
-
-export interface WikiRelationship {
-  course_id: string
-  course_title: string
-  from_concept_id: string
-  to_concept_id: string
-  kind: string
-  status: 'approved' | 'provisional'
-}
-
-export interface KnowledgeWikiResult {
-  schema_version: 'knowledge-wiki-v1'
-  courses: Array<{ course_id: string; title: string; concept_count: number; relationship_count: number; contradiction_count: number }>
-  concepts: WikiConcept[]
-  relationships: WikiRelationship[]
-  warnings: string[]
-}
-
-export type EvidenceKind = 'approved_claim' | 'contradiction' | 'gap' | 'rejected_claim'
-
-export interface EvidenceItem {
-  item_id: string
-  course_id: string
-  course_title: string
-  kind: EvidenceKind
-  status: string
-  title: string
-  summary: string
-  source_ids: string[]
-  concept_ids: string[]
-  locator_labels: string[]
-  artifact_path: string
-}
-
-export interface ActivityEvent {
-  event_id: string
-  course_id: string
-  course_title: string
-  timestamp: string
-  action: string
-  actor: string
-  status: string
-  summary: string
-  artifacts: string[]
-  source_id: string | null
-  job_id: string | null
-  decision: string | null
-  justification: string | null
-}
-
-export interface EvidenceActivityResult {
-  schema_version: 'evidence-activity-v1'
-  evidence: EvidenceItem[]
-  events: ActivityEvent[]
-  approved_count: number
-  contradiction_count: number
-  gap_count: number
-  rejected_count: number
-  warnings: string[]
 }
 
 export interface ExamOption {
@@ -409,23 +248,11 @@ export const applicationApi = {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
-  sources: () => request<SourceInboxResult>('/api/v1/sources'),
-  knowledge: () => request<KnowledgeWikiResult>('/api/v1/knowledge'),
-  evidenceActivity: () => request<EvidenceActivityResult>('/api/v1/evidence-activity'),
   repairWorkspace: (workspacePath: string, workspaceName: string) =>
     request<{ schema_version: 'workspace-repair-v1'; status: 'complete'; workspace: OnboardingResult['workspace'] }>('/api/v1/workspaces/repair', {
       method: 'POST',
       body: JSON.stringify({ workspace_path: workspacePath, workspace_name: workspaceName }),
     }),
-  addSource: (payload: SourceIntakePayload) =>
-    request<{ schema_version: 'source-intake-v1'; course_id: string; source_id: string; job: IngestionJob }>(
-      '/api/v1/sources',
-      { method: 'POST', body: JSON.stringify(payload) },
-    ),
-  cancelSourceJob: (jobId: string) =>
-    request<void>(`/api/v1/sources/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
-  retrySourceJob: (jobId: string) =>
-    request<void>(`/api/v1/sources/jobs/${encodeURIComponent(jobId)}/retry`, { method: 'POST' }),
   startReview: (courseId?: string) =>
     request<ExamAttempt>(`/api/v1/reviews/attempts${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ''}`, {
       method: 'POST',

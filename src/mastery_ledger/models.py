@@ -13,15 +13,14 @@ class WorkspaceState(BaseModel):
     writable: bool
 
 
-class CapabilityState(BaseModel):
-    web_app: Literal["ready", "unavailable"] = "ready"
-    yt_dlp: Literal["ready", "not_installed"] = "not_installed"
-    local_asr: Literal["ready", "not_configured"] = "not_configured"
-    ffmpeg_export: Literal["ready", "unavailable"] = "unavailable"
+class ApplicationCapabilities(BaseModel):
+    exam_player: Literal["ready"] = "ready"
+    learner_state: Literal["ready"] = "ready"
+    review_scheduler: Literal["ready"] = "ready"
 
 
 class DoctorResult(BaseModel):
-    schema_version: Literal["doctor-v1"] = "doctor-v1"
+    schema_version: Literal["doctor-v2"] = "doctor-v2"
     status: Literal[
         "ready",
         "onboarding_required",
@@ -35,7 +34,7 @@ class DoctorResult(BaseModel):
     skill_compatible: bool = True
     onboarding_required: bool
     active_workspace: WorkspaceState | None = None
-    capabilities: CapabilityState = Field(default_factory=CapabilityState)
+    capabilities: ApplicationCapabilities = Field(default_factory=ApplicationCapabilities)
     action: str | None = None
 
 
@@ -79,13 +78,10 @@ class OnboardingRequest(BaseModel):
     workspace_path: str = Field(min_length=1, max_length=4096)
     workspace_name: str = Field(default="Primary learning workspace", min_length=1, max_length=120)
     language: str = Field(default="en", min_length=2, max_length=24)
-    processing_mode: Literal["local_only", "cloud_allowed", "metadata_only"] = "local_only"
     reduced_motion: bool = False
     review_intervals: list[int] = Field(
         default_factory=lambda: [1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584]
     )
-    initial_source_hint: str | None = Field(default=None, max_length=4096)
-
     @field_validator("review_intervals")
     @classmethod
     def validate_intervals(cls, value: list[int]) -> list[int]:
@@ -121,7 +117,6 @@ class ReviewCurveProfile(BaseModel):
 class ApplicationSettings(BaseModel):
     schema_version: Literal["settings-v1"] = "settings-v1"
     language: str
-    processing_mode: Literal["local_only", "cloud_allowed", "metadata_only"]
     reduced_motion: bool
     review_curve: ReviewCurveProfile
     default_review_intervals: list[int]
@@ -172,8 +167,6 @@ class DashboardCourse(BaseModel):
     question_count: int = Field(ge=0)
     ready_exam_count: int = Field(ge=0)
     due_count: int = Field(ge=0)
-    source_count: int = Field(ge=0)
-    source_ready_count: int = Field(ge=0)
     concept_count: int = Field(ge=0)
     proficient_concept_count: int = Field(ge=0)
     updated_at: str | None = None
@@ -267,185 +260,3 @@ class ExamCompletion(BaseModel):
     unanswered_count: int = Field(ge=0)
     score_percent: float = Field(ge=0, le=100)
     questions: list[QuestionReview] = Field(default_factory=list)
-
-
-SourceType = Literal[
-    "web_article",
-    "remote_video",
-    "local_document",
-    "local_media",
-    "local_subtitle",
-]
-RightsBasis = Literal[
-    "web_reference",
-    "user_owned",
-    "platform_permitted_download",
-    "public_license",
-    "explicit_permission",
-]
-JobState = Literal[
-    "queued",
-    "running",
-    "needs_user_action",
-    "partial",
-    "complete",
-    "failed",
-    "cancelled",
-]
-
-
-class SourceIntakeRequest(BaseModel):
-    course_id: str | None = Field(default=None, min_length=1, max_length=120)
-    new_course_title: str | None = Field(default=None, min_length=1, max_length=160)
-    source_type: SourceType
-    location: str = Field(min_length=1, max_length=8192)
-    title: str | None = Field(default=None, max_length=300)
-    rights_basis: RightsBasis = "web_reference"
-    language: str = Field(default="en", min_length=2, max_length=24)
-    allow_transcription: bool = False
-
-
-class SourceSummary(BaseModel):
-    source_id: str
-    course_id: str
-    title: str
-    source_type: SourceType
-    original_location: str
-    processing_status: str
-    rights_basis: RightsBasis
-    language: str
-    retrieved_at: str | None = None
-    content_hash: str | None = None
-    knowledge_path: str | None = None
-    artifact_count: int = Field(default=0, ge=0)
-    error_code: str | None = None
-    recovery_suggestion: str | None = None
-
-
-class IngestionJobView(BaseModel):
-    job_id: str
-    kind: str
-    state: JobState
-    course_id: str
-    source_id: str
-    progress: float = Field(ge=0, le=1)
-    stage: str
-    error_code: str | None = None
-    recovery_suggestion: str | None = None
-    created_at: str
-    updated_at: str
-
-
-class SourceInboxCourse(BaseModel):
-    course_id: str
-    title: str
-    source_count: int = Field(ge=0)
-    ready_count: int = Field(ge=0)
-
-
-class SourceInboxResult(BaseModel):
-    schema_version: Literal["source-inbox-v1"] = "source-inbox-v1"
-    courses: list[SourceInboxCourse] = Field(default_factory=list)
-    sources: list[SourceSummary] = Field(default_factory=list)
-    jobs: list[IngestionJobView] = Field(default_factory=list)
-    capabilities: CapabilityState = Field(default_factory=CapabilityState)
-
-
-class SourceIntakeResult(BaseModel):
-    schema_version: Literal["source-intake-v1"] = "source-intake-v1"
-    course_id: str
-    source_id: str
-    job: IngestionJobView
-
-
-class WikiSourceReference(BaseModel):
-    source_id: str
-    title: str
-    locator_label: str
-    support_strength: Literal["direct", "partial", "contextual"] = "contextual"
-    href: str | None = None
-
-
-class WikiRelationship(BaseModel):
-    course_id: str
-    course_title: str
-    from_concept_id: str
-    to_concept_id: str
-    kind: str
-    status: Literal["approved", "provisional"] = "provisional"
-
-
-class WikiConcept(BaseModel):
-    course_id: str
-    course_title: str
-    concept_id: str
-    title: str
-    summary: str
-    status: str = "unseen"
-    proficiency_score: float = Field(default=0, ge=0, le=1)
-    attempt_count: int = Field(default=0, ge=0)
-    next_review_at: str | None = None
-    tags: list[str] = Field(default_factory=list)
-    prerequisites: list[str] = Field(default_factory=list)
-    related: list[str] = Field(default_factory=list)
-    sources: list[WikiSourceReference] = Field(default_factory=list)
-    contradiction_count: int = Field(default=0, ge=0)
-    page_markdown: str | None = None
-    page_path: str | None = None
-
-
-class WikiCourse(BaseModel):
-    course_id: str
-    title: str
-    concept_count: int = Field(ge=0)
-    relationship_count: int = Field(ge=0)
-    contradiction_count: int = Field(ge=0)
-
-
-class KnowledgeWikiResult(BaseModel):
-    schema_version: Literal["knowledge-wiki-v1"] = "knowledge-wiki-v1"
-    courses: list[WikiCourse] = Field(default_factory=list)
-    concepts: list[WikiConcept] = Field(default_factory=list)
-    relationships: list[WikiRelationship] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-
-
-class EvidenceItem(BaseModel):
-    item_id: str
-    course_id: str
-    course_title: str
-    kind: Literal["approved_claim", "contradiction", "gap", "rejected_claim"]
-    status: str
-    title: str
-    summary: str
-    source_ids: list[str] = Field(default_factory=list)
-    concept_ids: list[str] = Field(default_factory=list)
-    locator_labels: list[str] = Field(default_factory=list)
-    artifact_path: str
-
-
-class ActivityEvent(BaseModel):
-    event_id: str
-    course_id: str
-    course_title: str
-    timestamp: str
-    action: str
-    actor: str
-    status: str
-    summary: str
-    artifacts: list[str] = Field(default_factory=list)
-    source_id: str | None = None
-    job_id: str | None = None
-    decision: str | None = None
-    justification: str | None = None
-
-
-class EvidenceActivityResult(BaseModel):
-    schema_version: Literal["evidence-activity-v1"] = "evidence-activity-v1"
-    evidence: list[EvidenceItem] = Field(default_factory=list)
-    events: list[ActivityEvent] = Field(default_factory=list)
-    approved_count: int = Field(default=0, ge=0)
-    contradiction_count: int = Field(default=0, ge=0)
-    gap_count: int = Field(default=0, ge=0)
-    rejected_count: int = Field(default=0, ge=0)
-    warnings: list[str] = Field(default_factory=list)

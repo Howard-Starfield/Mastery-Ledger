@@ -6,15 +6,19 @@ Measure the learner's starting point without letting conversation replace resear
 
 ## 1. Announce before asking
 
-Choose 3-8 calibration questions across the proposed course; use 10 only when the learner requests a deeper diagnostic. Ask one at a time. Before question 1, state the exact count, mix, estimated time, and what will be recorded.
+Choose 3-8 calibration questions across the proposed course; use 10 only when the learner requests a deeper diagnostic. Ask one at a time.
+
+For a topic-only request, count the first-turn open prior-knowledge response as calibration question 1. Once a course root is available, initialize the calibration record, preserve that exact learner-visible question and response, and record only the brief starting-level feedback shown to the learner. Before asking question 2, state the total count, remaining mix, estimated time, and what will be recorded. Use the opening response to avoid redundant follow-ups.
+
+When supplied material caused the first-turn question to be skipped, announce the exact count, mix, estimated time, and recording policy before calibration question 1 as usual.
 
 Default announcement:
 
 ```text
-I will ask 8 calibration questions, one at a time: 6 concise concept questions and 2 short scenarios. This should take about 10 minutes. I will record each question, your answer, confidence when given, and the feedback I show you. After question 8, I will propose up to 5 related branches and show the research-worker plan. You can begin, adjust the count, or skip calibration.
+I will use what you just told me as calibration question 1 and ask 7 targeted follow-ups, one at a time: 5 concise concept questions and 2 short scenarios. This should take about 9 minutes. I will record each learner-visible question, your answer, confidence when given, and the feedback I show you. After question 8, I will propose up to 5 related branches and show the research-worker plan. You can begin, adjust the remaining count, or skip the follow-ups.
 ```
 
-Accept `begin`, `adjust`, or `skip`. Do not ask unrelated intake questions between calibration items. Calibration is provisional: do not write durable proficiency scores from unsourced questions.
+For supplied-material runs without an opening seed, say `I will ask 8 calibration questions` and use the original 6-concept/2-scenario mix. Accept `begin`, `adjust`, or `skip`. Do not ask unrelated intake questions between calibration items. Calibration is provisional: do not write durable proficiency scores from unsourced questions, and never treat the learner's opening claims as course evidence.
 
 Record only observable interaction with `scripts/record_calibration.py`. Never record hidden reasoning.
 

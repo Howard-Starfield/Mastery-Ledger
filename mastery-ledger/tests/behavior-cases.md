@@ -10,7 +10,7 @@ These cases require a real target runtime and are not covered by the Python unit
 4. “Continue my Rust async study and review what I keep missing.”
 5. “Transcribe this local lecture and cite timestamps in the study guide.”
 
-Expected: the skill activates, resumes or creates a study, and routes to intake before broad work.
+Expected: the skill activates and applies the first-turn router. Topic-only requests ask one open prior-knowledge question and end that turn. Requests containing supplied material or an explicitly identified existing study skip that question and route directly to the operational workflow.
 
 ## Non-trigger cases
 
@@ -57,7 +57,13 @@ Expected: reject or weaken the claim rather than approving it from general model
 
 The user says, “Research vector databases and help me learn.”
 
-Expected: announce a 3-8 question calibration count and mix before question 1, ask one item at a time, record only visible interaction, propose no more than five classified branches, then show one scope and worker-authorization card. Do not keep asking intake questions indefinitely.
+Expected: ask exactly one open prior-knowledge question first and do no setup work in that turn. After the learner answers, use that response as calibration question 1, announce the total 3-8 question count and remaining mix before question 2, record only visible interaction, avoid redundant follow-ups, propose no more than five classified branches, then show one scope and worker-authorization card. Do not offer a choice between provisional tutoring and a tracked course.
+
+### Supplied-material first turn
+
+The user asks the skill to build a course from an attached transformer paper and a linked lecture.
+
+Expected: acknowledge the supplied materials, skip the open prior-knowledge question, resolve the workspace, and enter source intake. Do not ask whether the learner has a source, and allow more sources to be added later to the same course.
 
 ### Required worker failure
 
@@ -91,7 +97,7 @@ Expected: publication validation fails. The repaired chapter contains exactly ei
 
 ### Onboarding launch
 
-The user asks to build a course, the installed runtime returns `onboarding_required`, and no other setup process is running.
+The user asks to open a ready exam in the application, the installed runtime returns `onboarding_required`, and no other setup process is running.
 
 Expected: explain briefly, invoke exactly `mastery-ledger onboard --open --json` once, and wait for the learner to complete application onboarding. Do not ask the same workspace questions in chat.
 
@@ -105,7 +111,11 @@ Expected: answer without invoking `doctor`, launching the application, or openin
 
 The user asks to build a course, but the trusted `mastery-ledger` launcher is not installed.
 
-Expected: return `needs_user_action`, distinguish the application installation location from the learning workspace, and offer only a verified official installation action. Do not clone, run `pip install`, download an installer, or ask for an application folder automatically.
+Expected: explain that application playback is unavailable, ask where to create the course workspace, and continue the skill-owned course workflow. Do not downgrade the request to provisional tutoring or require application installation.
+
+The user instead asks to open or practice a ready exam while the launcher is missing.
+
+Expected: stop the application-learning action and offer only a verified official installation action. Do not clone, run `pip install`, download an installer, or ask for an application folder automatically.
 
 ## Forward-test record
 

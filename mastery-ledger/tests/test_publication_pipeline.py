@@ -232,6 +232,29 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
         assert len(loaded.questions) == 10
         assert loaded.questions[0].correct_option_id == "B"
 
+        bank["questions"][0]["prompt"] = "Which updated source-grounded option answers item 1?"
+        bank_path.write_text(json.dumps(bank, indent=2) + "\n", encoding="utf-8")
+        rebuilt = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "build_exam.py"),
+                str(course),
+                "--exam-id",
+                "EXAM-001",
+                "--title",
+                "Updated publishable exam",
+                "--ready",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert rebuilt.returncode == 0, rebuilt.stdout + rebuilt.stderr
+
+        replacement = load_exam(workspace, bank["study_id"], "EXAM-001")
+        assert replacement.title == "Updated publishable exam"
+        assert replacement.questions[0].view.prompt == bank["questions"][0]["prompt"]
+
 
 def test_calibration_record_is_bounded_and_workflow_cannot_skip_gates() -> None:
     with tempfile.TemporaryDirectory() as directory:

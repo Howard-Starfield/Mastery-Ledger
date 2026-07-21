@@ -1,6 +1,6 @@
 # Release process
 
-Mastery Ledger has two release surfaces: the Python application and the `mastery-ledger/` Codex skill. They share version `0.1.0` and communicate through the versioned `doctor-v1` contract.
+Mastery Ledger has two release surfaces: the Python application and the `mastery-ledger/` Codex skill. They share version `0.1.0` and communicate through the versioned `doctor-v2` contract. The contract exposes application readiness only; source and course tooling belongs to the skill.
 
 ## Automated gates
 

@@ -61,7 +61,7 @@ class MediaToolTests(unittest.TestCase):
         self.assertIn(payload["status"], {"ready", "degraded"})
         self.assertIn("yt_dlp", payload["packages"])
         self.assertIn("ffmpeg", payload["native_tools"])
-        self.assertIn("never an individual skill run", payload["ownership"]["updates"])
+        self.assertIn("never an individual course run", payload["ownership"]["updates"])
         self.assertIsInstance(payload["capabilities"]["caption_acquisition"], bool)
 
     def test_media_source_id_rejects_unsafe_paths(self) -> None:

@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import importlib.util
 import os
-import shutil
 import tempfile
 from pathlib import Path
 
 from mastery_ledger import __version__
 from mastery_ledger.config import database_path
 from mastery_ledger.database import DatabaseReadError, active_workspace
-from mastery_ledger.models import CapabilityState, DoctorResult, WorkspaceState, WorkspaceValidationResult
+from mastery_ledger.models import DoctorResult, WorkspaceState, WorkspaceValidationResult
 
 MIN_SKILL_VERSION = (0, 1, 0)
 MAX_SKILL_VERSION = (0, 2, 0)
@@ -98,16 +96,6 @@ def validate_workspace(raw_path: str, *, create: bool = False) -> WorkspaceValid
     )
 
 
-def capabilities() -> CapabilityState:
-    native_media_ready = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
-    return CapabilityState(
-        web_app="ready",
-        yt_dlp="ready" if importlib.util.find_spec("yt_dlp") else "not_installed",
-        local_asr="ready" if importlib.util.find_spec("faster_whisper") else "not_configured",
-        ffmpeg_export="ready" if native_media_ready else "unavailable",
-    )
-
-
 def build_doctor_result(skill_version: str | None = None) -> DoctorResult:
     parsed_skill = _version_tuple(skill_version) if skill_version else None
     if skill_version and (
@@ -122,7 +110,6 @@ def build_doctor_result(skill_version: str | None = None) -> DoctorResult:
             compatible_skill_range=COMPATIBLE_SKILL_RANGE,
             skill_compatible=False,
             onboarding_required=False,
-            capabilities=capabilities(),
             action="update_application_or_skill",
         )
     try:
@@ -134,7 +121,6 @@ def build_doctor_result(skill_version: str | None = None) -> DoctorResult:
             skill_version=skill_version,
             compatible_skill_range=COMPATIBLE_SKILL_RANGE,
             onboarding_required=False,
-            capabilities=capabilities(),
             action="inspect_runtime",
         )
     if row is None:
@@ -144,7 +130,6 @@ def build_doctor_result(skill_version: str | None = None) -> DoctorResult:
             skill_version=skill_version,
             compatible_skill_range=COMPATIBLE_SKILL_RANGE,
             onboarding_required=True,
-            capabilities=capabilities(),
             action="open_onboarding",
         )
 
@@ -167,7 +152,6 @@ def build_doctor_result(skill_version: str | None = None) -> DoctorResult:
             compatible_skill_range=COMPATIBLE_SKILL_RANGE,
             onboarding_required=False,
             active_workspace=workspace,
-            capabilities=capabilities(),
             action="repair_workspace",
         )
 
@@ -178,5 +162,4 @@ def build_doctor_result(skill_version: str | None = None) -> DoctorResult:
         compatible_skill_range=COMPATIBLE_SKILL_RANGE,
         onboarding_required=False,
         active_workspace=workspace,
-        capabilities=capabilities(),
     )
