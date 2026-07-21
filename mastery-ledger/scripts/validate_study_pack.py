@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,7 @@ QUESTION_TIERS = {
     "expanded": (15, 12, 3),
     "large": (20, 16, 4),
 }
+DELIVERY_OPTION_IDS = {"A", "B", "C", "D"}
 
 
 def normalized(value: str) -> str:
@@ -131,6 +133,8 @@ def validate_question_bank(
                 option_text[option_id] = text
             if len(option_ids) != len(set(option_ids)):
                 errors.append(f"{prefix}.options contains duplicate option IDs")
+            if publication and set(option_ids) != DELIVERY_OPTION_IDS:
+                errors.append(f"{prefix}.options must use the delivery IDs A, B, C, and D")
             if len({normalized(value) for value in option_text.values()}) != len(option_text):
                 errors.append(f"{prefix}.options contains duplicate option text")
             correct_option_id = str(question.get("correct_option_id", "")).strip()
@@ -206,6 +210,25 @@ def validate_question_bank(
                         f"{chapter_id} must contain {expected[0]} questions: "
                         f"{expected[1]} standalone_mcq and {expected[2]} passage_mcq"
                     )
+                answer_keys = [
+                    str(item.get("correct_option_id", "")).strip()
+                    for item in chapter_questions
+                ]
+                if answer_keys and all(key in DELIVERY_OPTION_IDS for key in answer_keys):
+                    counts = Counter(answer_keys)
+                    distribution = [counts[option_id] for option_id in sorted(DELIVERY_OPTION_IDS)]
+                    if max(distribution) - min(distribution) > 1:
+                        errors.append(
+                            f"{chapter_id} correct answers must be balanced across A-D; "
+                            f"found A={counts['A']}, B={counts['B']}, C={counts['C']}, D={counts['D']}"
+                        )
+                    if any(
+                        answer_keys[offset] == answer_keys[offset + 1] == answer_keys[offset + 2]
+                        for offset in range(len(answer_keys) - 2)
+                    ):
+                        errors.append(
+                            f"{chapter_id} correct answers cannot repeat the same option three times in a row"
+                        )
             unknown = set(questions_by_chapter) - seen_chapters - {""}
             for chapter_id in sorted(unknown):
                 errors.append(f"Questions reference undeclared chapter_id: {chapter_id}")

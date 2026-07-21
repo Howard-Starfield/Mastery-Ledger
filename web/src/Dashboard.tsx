@@ -65,6 +65,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [curveSettingsOpen, setCurveSettingsOpen] = useState(false)
   const [activeScreen, setActiveScreen] = useState<'study' | 'exams'>('exams')
   const [studyRefreshToken, setStudyRefreshToken] = useState(0)
+  const [studyCourseId, setStudyCourseId] = useState<string | null>(null)
 
   const refresh = () => {
     setLoading(true)
@@ -137,7 +138,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
         </div>
       </aside>
 
-      {activeScreen === 'study' ? <StudyReader refreshToken={studyRefreshToken} /> : <>
+      {activeScreen === 'study' ? <StudyReader refreshToken={studyRefreshToken} initialCourseId={studyCourseId} /> : <>
         <section className="ledger-main">
         <header className="dashboard-heading">
           <div>
@@ -192,6 +193,10 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
                 <dl><div><dt>Questions</dt><dd>{item.question_count}</dd></div><div><dt>Ready exams</dt><dd>{item.ready_exam_count}</dd></div><div><dt>Due</dt><dd>{item.due_count}</dd></div></dl>
                 <p className="course-concepts"><span>Concept evidence</span><strong>{item.proficient_concept_count}/{item.concept_count} proficient</strong></p>
                 <div className="course-rule"><span style={{ width: `${item.concept_count ? (item.proficient_concept_count / item.concept_count) * 100 : 0}%` }} /></div>
+                <div className="course-actions">
+                  <span>{item.ready_exam_count ? 'Lessons and exam available' : item.question_count ? `${item.question_count} authored questions · exam validation pending` : 'Course preparation in progress'}</span>
+                  <button type="button" onClick={() => { setStudyCourseId(item.course_id); setActiveScreen('study') }}>Open course <span aria-hidden="true">→</span></button>
+                </div>
               </article>
             )) : <div className="course-empty"><strong>No course folders discovered.</strong><span>Create a course through the Mastery Ledger skill, then rescan this workspace.</span></div>}
           </div>

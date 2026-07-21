@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "marked": "^18.0.7",
+    "marked-footnote": "^1.4.0",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },

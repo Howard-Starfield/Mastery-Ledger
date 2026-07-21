@@ -1,20 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
-import { marked } from 'marked'
+import { Marked } from 'marked'
+import markedFootnote from 'marked-footnote'
 
 import { applicationApi, type StudyLessonResult, type StudyLibraryResult } from './api'
 
 type StudyReaderProps = {
   refreshToken: number
+  initialCourseId?: string | null
 }
-
-type ReaderMode = 'read' | 'raw'
 
 function readingMinutes(wordCount: number) {
   return Math.max(1, Math.ceil(wordCount / 225))
 }
 
+const lessonMarkdown = new Marked().use(markedFootnote({
+  description: 'Sources used',
+  footnoteDivider: false,
+  refMarkers: true,
+}))
+
 export function lessonDocument(markdown: string) {
-  const content = marked.parse(markdown, { async: false, gfm: true }) as string
+  const content = lessonMarkdown.parse(markdown, { async: false, gfm: true }) as string
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -31,6 +37,14 @@ export function lessonDocument(markdown: string) {
       h3 { margin: 36px 0 14px; font-size: 1.3rem; }
       p, ul, ol, blockquote, table, pre { margin: 0 0 22px; }
       a { color: #145f9d; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+      sup { margin-left: .08em; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: .68em; }
+      [data-footnote-ref] { font-weight: 700; text-decoration: none; }
+      .footnotes { margin-top: 20px; padding-top: 4px; color: #40536a; font-size: .92rem; }
+      .footnotes ol { padding-left: 24px; }
+      .footnotes li { margin-bottom: 12px; padding-left: 5px; }
+      .footnotes p { margin-bottom: 8px; }
+      [data-footnote-backref] { margin-left: .35em; text-decoration: none; }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
       blockquote, aside { margin: 30px 0; padding: 18px 22px; border-left: 4px solid #d45c43; color: #31445a; background: #f4eee4; }
       code { padding: .12rem .3rem; color: #8a3424; background: #eee7dc; font-family: "Cascadia Mono", Consolas, monospace; font-size: .88em; }
       pre { overflow: auto; padding: 20px; color: #e8edf3; background: #10243c; }
@@ -46,12 +60,11 @@ export function lessonDocument(markdown: string) {
 </html>`
 }
 
-export default function StudyReader({ refreshToken }: StudyReaderProps) {
+export default function StudyReader({ refreshToken, initialCourseId = null }: StudyReaderProps) {
   const [library, setLibrary] = useState<StudyLibraryResult | null>(null)
   const [lesson, setLesson] = useState<StudyLessonResult | null>(null)
   const [courseId, setCourseId] = useState<string | null>(null)
   const [chapterId, setChapterId] = useState<string | null>(null)
-  const [mode, setMode] = useState<ReaderMode>('read')
   const [loading, setLoading] = useState(true)
   const [lessonLoading, setLessonLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -63,7 +76,9 @@ export default function StudyReader({ refreshToken }: StudyReaderProps) {
     applicationApi.studyLibrary().then((result) => {
       if (!active) return
       setLibrary(result)
-      const selectedCourse = result.courses.find((course) => course.course_id === courseId) ?? result.courses[0]
+      const selectedCourse = result.courses.find((course) => course.course_id === initialCourseId)
+        ?? result.courses.find((course) => course.course_id === courseId)
+        ?? result.courses[0]
       const selectedChapter = selectedCourse?.chapters.find((chapter) => chapter.chapter_id === chapterId) ?? selectedCourse?.chapters[0]
       setCourseId(selectedCourse?.course_id ?? null)
       setChapterId(selectedChapter?.chapter_id ?? null)
@@ -73,7 +88,7 @@ export default function StudyReader({ refreshToken }: StudyReaderProps) {
       if (active) setLoading(false)
     })
     return () => { active = false }
-  }, [refreshToken])
+  }, [initialCourseId, refreshToken])
 
   useEffect(() => {
     if (!courseId || !chapterId) {
@@ -104,7 +119,6 @@ export default function StudyReader({ refreshToken }: StudyReaderProps) {
     const nextCourse = library?.courses.find((course) => course.course_id === nextCourseId)
     setCourseId(nextCourseId)
     setChapterId(nextCourse?.chapters[0]?.chapter_id ?? null)
-    setMode('read')
   }
 
   return (
@@ -112,14 +126,11 @@ export default function StudyReader({ refreshToken }: StudyReaderProps) {
       <section className="study-main">
         <header className="study-heading">
           <div>
-            <p className="kicker">Published study material</p>
+            <p className="kicker">Validated study material</p>
             <h1>Read before you prove it.</h1>
-            <p>Lessons appear here only after the course reaches its validated learning state.</p>
+            <p>Each chapter appears as soon as its lesson contract is validated; exams remain separate until their own review is complete.</p>
           </div>
-          <div className="study-mode" role="group" aria-label="Lesson view">
-            <button type="button" className={mode === 'read' ? 'is-active' : ''} onClick={() => setMode('read')} aria-pressed={mode === 'read'}>Read</button>
-            <button type="button" className={mode === 'raw' ? 'is-active' : ''} onClick={() => setMode('raw')} aria-pressed={mode === 'raw'}>Raw</button>
-          </div>
+          <span className="study-reader-badge">Reader view</span>
         </header>
 
         {error && <div className="dashboard-error" role="alert"><strong>Study material could not be opened.</strong><span>{error}</span></div>}
@@ -142,7 +153,7 @@ export default function StudyReader({ refreshToken }: StudyReaderProps) {
                     type="button"
                     key={chapter.chapter_id}
                     className={chapter.chapter_id === chapterId ? 'is-selected' : ''}
-                    onClick={() => { setChapterId(chapter.chapter_id); setMode('read') }}
+                    onClick={() => setChapterId(chapter.chapter_id)}
                   >
                     <span>{String(index + 1).padStart(2, '0')}</span>
                     <span><strong>{chapter.title}</strong><small>{chapter.chapter_class} · {readingMinutes(chapter.word_count)} min read</small></span>
@@ -153,29 +164,25 @@ export default function StudyReader({ refreshToken }: StudyReaderProps) {
 
             <article className="study-document">
               {lessonLoading ? <div className="study-loading" aria-busy="true">Opening the lesson…</div> : lesson ? (
-                mode === 'read' ? (
-                  <iframe
-                    className="study-preview"
-                    title={`${lesson.title} read-only lesson`}
-                    sandbox=""
-                    srcDoc={renderedDocument}
-                  />
-                ) : (
-                  <pre className="study-raw" tabIndex={0} aria-label={`Raw source for ${lesson.title}`}><code>{lesson.content}</code></pre>
-                )
-              ) : <div className="study-loading">Choose a published chapter to begin.</div>}
+                <iframe
+                  className="study-preview"
+                  title={`${lesson.title} read-only lesson`}
+                  sandbox=""
+                  srcDoc={renderedDocument}
+                />
+              ) : <div className="study-loading">Choose a validated chapter to begin.</div>}
             </article>
           </div>
         ) : (
           <div className="study-empty">
             <span aria-hidden="true">Aa</span>
-            <div><strong>No published study material yet.</strong><p>Ask Codex to build and validate a course, then rescan this workspace. Draft lessons remain hidden.</p></div>
+            <div><strong>No validated study material yet.</strong><p>Ask Codex to build a lesson, then rescan this workspace. Unvalidated drafts remain hidden.</p></div>
           </div>
         )}
       </section>
 
       <aside className="study-detail-rail">
-        <header><p className="kicker">Reading folio</p><h2>{selectedChapter?.title ?? 'No lesson selected'}</h2><p>{selectedCourse?.title ?? 'Published courses will appear here.'}</p></header>
+        <header><p className="kicker">Reading folio</p><h2>{selectedChapter?.title ?? 'No lesson selected'}</h2><p>{selectedCourse?.title ?? 'Validated courses will appear here.'}</p></header>
         {selectedChapter && <dl>
           <div><dt>Chapter</dt><dd>{selectedChapter.chapter_id}</dd></div>
           <div><dt>Length</dt><dd>{selectedChapter.word_count} words</dd></div>
@@ -183,8 +190,8 @@ export default function StudyReader({ refreshToken }: StudyReaderProps) {
           <div><dt>File</dt><dd>{selectedChapter.lesson_path}</dd></div>
         </dl>}
         <div className="study-view-note">
-          <strong>{mode === 'read' ? 'Read-only preview' : 'Exact raw source'}</strong>
-          <p>{mode === 'read' ? 'Markdown and embedded HTML render inside an isolated document. Scripts, forms, objects, and nested frames cannot run.' : 'Nothing is rendered in Raw mode. Markdown and HTML appear exactly as stored in the course file.'}</p>
+          <strong>Focused reading view</strong>
+          <p>Authoring frontmatter and Markdown syntax stay hidden. The formatted lesson opens inside an isolated, read-only document.</p>
         </div>
         {Boolean(library?.warnings.length) && <details className="scan-warnings"><summary>{library?.warnings.length} catalog warning{library?.warnings.length === 1 ? '' : 's'}</summary>{library?.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>}
       </aside>

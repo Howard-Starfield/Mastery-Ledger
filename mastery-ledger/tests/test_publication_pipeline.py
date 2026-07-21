@@ -23,6 +23,14 @@ def source_ref() -> dict:
 
 
 def question(index: int) -> dict:
+    correct_option_id = "BCDA"[(index - 1) % 4]
+    option_text = {
+        "A": f"First alternative {index}",
+        "B": f"Second alternative {index}",
+        "C": f"Third alternative {index}",
+        "D": f"Fourth alternative {index}",
+    }
+    option_text[correct_option_id] = f"Supported answer {index}"
     return {
         "question_id": f"Q-CH1-{index:03d}",
         "chapter_id": "CH-001",
@@ -33,17 +41,15 @@ def question(index: int) -> dict:
         "difficulty": 2 if index <= 8 else 3,
         "prompt": f"Which source-grounded option answers item {index}?",
         "options": [
-            {"option_id": "A", "text": f"Misconception {index}"},
-            {"option_id": "B", "text": f"Supported answer {index}"},
-            {"option_id": "C", "text": f"Adjacent concept {index}"},
-            {"option_id": "D", "text": f"Overgeneralization {index}"},
+            {"option_id": option_id, "text": option_text[option_id]}
+            for option_id in "ABCD"
         ],
-        "correct_option_id": "B",
+        "correct_option_id": correct_option_id,
         "correct_explanation": f"Section 1 directly supports answer {index}.",
         "distractor_rationales": {
-            "A": "Targets a documented misconception.",
-            "C": "Confuses an adjacent concept.",
-            "D": "Extends the claim beyond its evidence.",
+            option_id: f"Option {option_id} represents a documented misconception."
+            for option_id in "ABCD"
+            if option_id != correct_option_id
         },
         "source_refs": [source_ref()],
         "quality_status": "validated",

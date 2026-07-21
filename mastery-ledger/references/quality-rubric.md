@@ -46,6 +46,7 @@ Pass only when:
 - wording is unambiguous;
 - multiple-choice distractors are plausible but wrong;
 - published items use four app-compatible options, exactly one answer key, and the chapter's required 80/20 standalone-to-passage mix;
+- each chapter balances A-D correct-position counts within one question of one another and never repeats a position three times consecutively;
 - the prompt does not leak the answer;
 - important concepts include application or transfer;
 - generated questions are not near duplicates.

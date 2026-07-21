@@ -29,7 +29,9 @@ Use one of three exact chapter tiers. Every published chapter has at least 10 qu
 
 This 80/20 split is a Mastery Ledger product policy, not a universal psychometric law. A passage item contains a short reading, case, data extract, or scenario inside the prompt and still has selectable answers. Never satisfy the ratio with open-response items.
 
-Every published item must have four options, exactly one correct option, a concise supported explanation, misconception-based distractors, objective and concept IDs, difficulty 1-5, and at least one canonical `source-ref-v1` reference. Do not use `all of the above`, `none of the above`, trick wording, grammatical cues, or an option that is only correct because it is longer or more qualified.
+Every published item must have four options identified exactly as `A`, `B`, `C`, and `D`; exactly one correct option; a concise supported explanation; misconception-based distractors; objective and concept IDs; difficulty 1-5; and at least one canonical `source-ref-v1` reference. Do not use `all of the above`, `none of the above`, trick wording, grammatical cues, or an option that is only correct because it is longer or more qualified.
+
+Balance answer positions independently within every chapter. For 10 questions, each of A-D must be correct 2 or 3 times; for 15 questions, 3 or 4 times; for 20 questions, exactly 5 times. Never place the correct answer in the same position three questions in a row. Choose the defensible answer first, then reorder complete option objects and rebuild `distractor_rationales`; never change the truth of an item merely to satisfy the distribution.
 
 ## 3. Canonical question schema
 
@@ -114,7 +116,10 @@ The main agent authors the assessment only after retained claims pass final cita
 - answer leakage or cueing;
 - duplicate prompts;
 - missing chapter coverage or an incorrect 80/20 mix;
+- unbalanced A-D answer positions or a three-item same-position streak;
 - legacy fields that the application cannot deliver.
+
+The canonical bank is an authoring and validation artifact, so it contains answer keys, explanations, and distractor rationales. The ready exam may embed those fields on disk, but the application server must parse them into a private grading model. The browser receives only question IDs, prompts, options, difficulty, concepts, and source counts before submission. A wrong answer receives no answer key, explanation, or source; a correct answer receives its explanation and a still-collapsed source disclosure.
 
 Only the main agent promotes validated questions and runs `scripts/build_exam.py`. A ready exam must load under the same contract as the local web application.
 

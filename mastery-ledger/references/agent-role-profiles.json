@@ -92,6 +92,7 @@
       "best_practices": [
         "Attempt each item without relying on the generator's expected rationale.",
         "Reject multiple-valid-answer cases and unsupported distractor logic.",
+        "Verify each chapter balances correct positions across A-D and has no three-item same-position streak.",
         "Return exact item-level defects and preserve rejected questions for repair."
       ],
       "stop_conditions": ["The main-agent-authored bank or approved evidence is unavailable.", "A declared lesson or question-bank input hash does not match the compiled context."],

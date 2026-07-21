@@ -461,7 +461,7 @@ def test_dashboard_discovers_ready_exams_and_review_queue(
     assert [stage["question_count"] for stage in payload["ownership_curve"]] == [1, 0, 1, 0]
 
 
-def test_study_library_exposes_only_published_lessons_and_preserves_raw_html(
+def test_study_library_exposes_validated_lessons_without_frontmatter_and_preserves_html(
     runtime_home: Path, tmp_path: Path
 ) -> None:
     app = create_app(session_token="study-session", web_dir=tmp_path / "missing-web")
@@ -488,13 +488,22 @@ def test_study_library_exposes_only_published_lessons_and_preserves_raw_html(
             "study_id: COURSE-STUDY\ntitle: Systems Thinking\nworkflow_state: LEARNING_ACTIVE\nupdated_at: '2026-07-20T12:00:00Z'\n",
             encoding="utf-8",
         )
-        lesson_content = (
+        lesson_body = (
             "# Feedback loops\n\n"
             "A feedback loop returns part of a system's output as a later input. "
             "Reinforcing loops amplify change, while balancing loops resist it.\n\n"
             "<aside class=\"worked-example\"><strong>Worked example</strong>: "
             "A thermostat compares measured temperature with its target.</aside>\n\n"
             "<script>window.parent.document.body.dataset.compromised = 'true'</script>\n"
+        )
+        lesson_content = (
+            "---\n"
+            "schema_version: lesson-v1\n"
+            "chapter_id: CH-001\n"
+            "title: Feedback loops\n"
+            "status: validated\n"
+            "---\n\n"
+            + lesson_body
         )
         (published / "lessons" / "CH-001.md").write_text(lesson_content, encoding="utf-8")
         (published / "questions" / "question-bank.json").write_text(
@@ -522,7 +531,17 @@ def test_study_library_exposes_only_published_lessons_and_preserves_raw_html(
             "study_id: COURSE-DRAFT\ntitle: Draft course\nworkflow_state: STUDY_PACK_DRAFTED\n",
             encoding="utf-8",
         )
-        (draft / "lessons" / "CH-DRAFT.md").write_text("# Draft\n\n" + "Draft material. " * 20, encoding="utf-8")
+        draft_body = "# Validated lesson\n\n" + "This lesson is readable while its exam awaits validation. " * 20
+        (draft / "lessons" / "CH-DRAFT.md").write_text(
+            "---\n"
+            "schema_version: lesson-v1\n"
+            "chapter_id: CH-DRAFT\n"
+            "title: Validated lesson\n"
+            "status: validated\n"
+            "---\n\n"
+            + draft_body,
+            encoding="utf-8",
+        )
         (draft / "questions" / "question-bank.json").write_text(
             json.dumps(
                 {
@@ -571,17 +590,20 @@ def test_study_library_exposes_only_published_lessons_and_preserves_raw_html(
         assert library.status_code == 200
         payload = library.json()
         assert payload["schema_version"] == "study-library-v1"
-        assert [course["course_id"] for course in payload["courses"]] == ["COURSE-STUDY"]
+        assert [course["course_id"] for course in payload["courses"]] == ["COURSE-STUDY", "COURSE-DRAFT"]
         assert payload["courses"][0]["chapters"][0]["lesson_path"] == "lessons/CH-001.md"
         assert any("CH-UNSAFE" in warning for warning in payload["warnings"])
 
         lesson = client.get("/api/v1/study/COURSE-STUDY/chapters/CH-001")
         assert lesson.status_code == 200
-        assert lesson.json()["content"] == lesson_content
+        assert lesson.json()["content"] == lesson_body
+        assert "schema_version: lesson-v1" not in lesson.json()["content"]
         assert "<aside" in lesson.json()["content"]
         assert "<script>" in lesson.json()["content"]
         assert lesson.json()["word_count"] > 20
-        assert client.get("/api/v1/study/COURSE-DRAFT/chapters/CH-DRAFT").status_code == 404
+        draft_lesson = client.get("/api/v1/study/COURSE-DRAFT/chapters/CH-DRAFT")
+        assert draft_lesson.status_code == 200
+        assert draft_lesson.json()["content"] == draft_body
 
 
 def test_dashboard_requires_completed_onboarding(runtime_home: Path, tmp_path: Path) -> None:

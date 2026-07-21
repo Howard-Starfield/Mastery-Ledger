@@ -15,4 +15,15 @@ describe('lessonDocument', () => {
     expect(document).toContain("object-src 'none'")
     expect(document).toContain("form-action 'none'")
   })
+
+  it('renders lesson source references as linked footnotes instead of Markdown syntax', () => {
+    const document = lessonDocument(
+      '# Grounded lesson\n\nA supported statement.[^REF-001]\n\n## Sources used\n\n[^REF-001]: [SRC-001] 00:01:10-00:01:20.',
+    )
+
+    expect(document).toContain('data-footnote-ref')
+    expect(document).toContain('href="#footnote-REF-001"')
+    expect(document).toContain('data-footnotes')
+    expect(document).not.toContain('[^REF-001]')
+  })
 })

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -52,6 +53,15 @@ def load_module(name: str, relative: str):
 class EvidenceAndMasteryTests(unittest.TestCase):
     @staticmethod
     def canonical_question(question_id: str, chapter_id: str, format_name: str) -> dict:
+        suffix = re.search(r"(\d+)$", question_id)
+        correct_option_id = "ABCD"[(int(suffix.group(1)) - 1) % 4] if suffix else "B"
+        option_text = {
+            "A": "First plausible choice",
+            "B": "Second plausible choice",
+            "C": "Third plausible choice",
+            "D": "Fourth plausible choice",
+        }
+        option_text[correct_option_id] = "Supported answer"
         return {
             "question_id": question_id,
             "chapter_id": chapter_id,
@@ -62,17 +72,15 @@ class EvidenceAndMasteryTests(unittest.TestCase):
             "difficulty": 2,
             "prompt": f"What is the supported choice for {question_id}?",
             "options": [
-                {"option_id": "A", "text": "First misconception"},
-                {"option_id": "B", "text": "Supported answer"},
-                {"option_id": "C", "text": "Adjacent concept"},
-                {"option_id": "D", "text": "Overgeneralized claim"},
+                {"option_id": option_id, "text": option_text[option_id]}
+                for option_id in "ABCD"
             ],
-            "correct_option_id": "B",
-            "correct_explanation": "The cited section directly supports option B.",
+            "correct_option_id": correct_option_id,
+            "correct_explanation": f"The cited section directly supports option {correct_option_id}.",
             "distractor_rationales": {
-                "A": "Targets misconception one.",
-                "C": "Confuses adjacent concepts.",
-                "D": "Overgeneralizes the claim.",
+                option_id: f"Option {option_id} represents a plausible misconception."
+                for option_id in "ABCD"
+                if option_id != correct_option_id
             },
             "source_refs": [{
                 "source_id": "SRC-1",
@@ -278,6 +286,58 @@ class EvidenceAndMasteryTests(unittest.TestCase):
                 publication=True,
             )
             self.assertEqual([], errors, tier)
+
+    def test_question_bank_rejects_unbalanced_or_streaked_answer_positions(self) -> None:
+        tool = load_module("validate_study_pack_answer_distribution", "scripts/validate_study_pack.py")
+        questions = [
+            self.canonical_question(
+                f"Q-{index:02d}",
+                "CH-1",
+                "standalone_mcq" if index <= 8 else "passage_mcq",
+            )
+            for index in range(1, 11)
+        ]
+        payload = {
+            "source_ref_schema": "source-ref-v1",
+            "chapters": [{
+                "chapter_id": "CH-1",
+                "title": "Core",
+                "class": "core",
+                "question_tier": "standard",
+                "lesson_path": "lessons/CH-1.md",
+            }],
+            "questions": questions,
+        }
+
+        for question in questions:
+            question["correct_option_id"] = "A"
+            question["distractor_rationales"] = {
+                option_id: f"Option {option_id} is a misconception."
+                for option_id in "BCD"
+            }
+        errors, _ = tool.validate_question_bank(
+            payload,
+            source_ids={"SRC-1"},
+            concept_ids={"concept-a"},
+            publication=True,
+        )
+        self.assertTrue(any("balanced across A-D" in error for error in errors))
+
+        for question, correct_option_id in zip(questions, "AAABBBCCDD", strict=True):
+            question["correct_option_id"] = correct_option_id
+            question["distractor_rationales"] = {
+                option_id: f"Option {option_id} is a misconception."
+                for option_id in "ABCD"
+                if option_id != correct_option_id
+            }
+        errors, _ = tool.validate_question_bank(
+            payload,
+            source_ids={"SRC-1"},
+            concept_ids={"concept-a"},
+            publication=True,
+        )
+        self.assertFalse(any("balanced across A-D" in error for error in errors))
+        self.assertTrue(any("three times in a row" in error for error in errors))
 
     def test_publication_gate_rejects_hollow_learning_active_course(self) -> None:
         tool = load_module("validate_study_pack_regression", "scripts/validate_study_pack.py")

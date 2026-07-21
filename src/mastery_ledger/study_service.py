@@ -90,7 +90,29 @@ def _published(manifest: dict[str, Any]) -> bool:
     return str(manifest.get("workflow_state", "")).strip().casefold() == "learning_active"
 
 
-def _lesson_text(course_root: Path, lesson_path: object) -> str | None:
+def _lesson_body(content: str) -> tuple[dict[str, Any] | None, str]:
+    """Return lesson metadata and the Markdown intended for learners."""
+    normalized = content.replace("\r\n", "\n")
+    if not normalized.startswith("---\n"):
+        return None, content
+    boundary = normalized.find("\n---\n", 4)
+    if boundary < 0:
+        return None, content
+    try:
+        metadata = yaml.safe_load(normalized[4:boundary])
+    except yaml.YAMLError:
+        return None, content
+    if not isinstance(metadata, dict):
+        return None, content
+    return metadata, normalized[boundary + 5 :].lstrip("\n")
+
+
+def _lesson_text(
+    course_root: Path,
+    lesson_path: object,
+    *,
+    require_validated: bool = False,
+) -> str | None:
     if not isinstance(lesson_path, str):
         return None
     normalized = lesson_path.replace("\\", "/")
@@ -108,7 +130,14 @@ def _lesson_text(course_root: Path, lesson_path: object) -> str | None:
         content = lesson.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return None
-    return content if len(content.strip()) >= 100 else None
+    metadata, body = _lesson_body(content)
+    if require_validated and (
+        metadata is None
+        or metadata.get("schema_version") != "lesson-v1"
+        or str(metadata.get("status", "")).strip().casefold() != "validated"
+    ):
+        return None
+    return body if len(body.strip()) >= 100 else None
 
 
 def _word_count(content: str) -> int:
@@ -118,8 +147,9 @@ def _word_count(content: str) -> int:
 def _course_record(course_root: Path) -> tuple[StudyCourse | None, list[str]]:
     warnings: list[str] = []
     manifest = _manifest(course_root)
-    if manifest is None or not _published(manifest):
+    if manifest is None:
         return None, warnings
+    published = _published(manifest)
     course_id = str(manifest.get("course_id") or manifest.get("study_id") or course_root.name)
     title = str(manifest.get("title") or course_root.name.replace("-", " ").title())
     question_bank = _read_json(course_root / "questions" / "question-bank.json", course_root)
@@ -138,7 +168,11 @@ def _course_record(course_root: Path) -> tuple[StudyCourse | None, list[str]]:
         chapter_id = str(raw.get("chapter_id") or "").strip()
         if not chapter_id or chapter_id in seen_ids:
             continue
-        content = _lesson_text(course_root, raw.get("lesson_path"))
+        content = _lesson_text(
+            course_root,
+            raw.get("lesson_path"),
+            require_validated=not published,
+        )
         if content is None:
             warnings.append(f"Skipped unreadable lesson {chapter_id} in {course_root.name}")
             continue
@@ -192,7 +226,12 @@ def study_lesson(workspace: WorkspaceState, course_id: str, chapter_id: str) -> 
         chapter = next((item for item in course.chapters if item.chapter_id == chapter_id), None)
         if chapter is None:
             break
-        content = _lesson_text(course_root, chapter.lesson_path)
+        manifest = _manifest(course_root)
+        content = _lesson_text(
+            course_root,
+            chapter.lesson_path,
+            require_validated=not _published(manifest or {}),
+        )
         if content is None:
             break
         return StudyLessonResult(
