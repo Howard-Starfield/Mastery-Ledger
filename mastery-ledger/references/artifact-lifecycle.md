@@ -25,11 +25,11 @@ If an existing application-created course has `course.yaml` but lacks `study.yam
 
 ## Run lifecycle
 
-1. Compile one authorized run plan.
+1. When topic research starts without a supplied source, compile one bounded source-discovery run at `SCOPED`. After its accepted ledger is reviewed, sources are atomically registered, and the course reaches `SOURCES_READY`, replace that finished discovery run with the linked evidence run. Refuse every other non-placeholder replacement unless an explicit supersession reason is recorded.
 2. Assign every task a unique directory under `.work/runs/<run-id>/tasks/`.
 3. Compile and validate the worker context before dispatch.
 4. Let the worker write only its brief, context acknowledgement, event shard, submission, completion, and temporary files inside that directory.
-5. Validate the completion, hashes, contracts, and write boundary.
+5. Route the worker's copy of the prefilled completion template through the deterministic completion router; on failure, repair the same task within its bounded attempt count.
 6. Let the main agent approve or reject the proposed result.
 7. Promote accepted artifacts with deterministic tooling; workers never write final targets.
 8. Merge accepted observable worker events through the packaged merger.
@@ -49,4 +49,4 @@ For a multi-file publication, validate staged artifacts first, promote dependenc
 
 ## Failure rules
 
-Return `blocked` rather than inventing a missing initializer, contract, schema, command, or fallback. Quarantine a worker completion when its identity, role profile, contract acknowledgement, hash, event shard, or write boundary fails validation. Never repair a quarantined worker result in place.
+Return `blocked` rather than inventing a missing initializer, contract, schema, command, or fallback. Quarantine a worker completion when its identity, role profile, contract acknowledgement, hash, event shard, or write boundary fails validation. The worker may submit a new completion for the same task using the generated repair packet; never mutate the quarantined result or create a replacement plan to hide the failure.

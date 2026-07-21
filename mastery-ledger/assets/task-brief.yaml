@@ -20,10 +20,13 @@ dispatch_path: .work/runs/RUN-001/tasks/TASK-001/dispatch-message.txt
 event_path: .work/runs/RUN-001/tasks/TASK-001/events.jsonl
 output_path: .work/runs/RUN-001/tasks/TASK-001/submission.json
 completion_path: .work/runs/RUN-001/tasks/TASK-001/completion.json
+completion_template_path: .work/runs/RUN-001/tasks/TASK-001/completion-template.json
 required_schema: evidence-packet-v1
 reviewer_role: citation-verifier
 acceptance_criteria:
   - Every factual claim has a valid source ID and precise locator
   - Contradictions and gaps are preserved
 context_status: pending
+attempt_count: 0
+max_attempts: 2
 status: planned

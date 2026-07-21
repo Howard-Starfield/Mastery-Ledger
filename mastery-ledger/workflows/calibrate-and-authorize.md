@@ -50,22 +50,21 @@ Only learner-accepted branches enter this run. Do not silently expand the course
 For `topic-research` and `hybrid`, show the proposed source limit and topology before spawning workers. Use this shape:
 
 ```text
-Research plan: 3 bounded research workers -> 1 contradiction reviewer -> 1 final citation verifier -> 1 assessment generator -> 1 independent assessment validator. Later phases wait for their dependencies. Drafts and logs stay under the course .work/ and logs/ folders. Approve this scope and worker plan, or tell me what to adjust.
+Research plan: 1 bounded source scout when no source is supplied -> 1 isolated extractor per retained source plus 3 bounded concept-research workers -> 1 contradiction reviewer -> 1 final citation verifier. After evidence approval, a separate run uses 1 assessment generator -> 1 independent assessment validator. Later phases wait for their dependencies. Extractor count cannot exceed the approved source limit. Drafts and logs stay under the course .work/ and logs/ folders. Approve this scope and worker plan, or tell me what to adjust.
 ```
 
-The learner's approval covers the displayed worker count, accepted branches, source limit, and publication target. Ask again only when exceeding that boundary.
+The learner's approval covers the displayed worker count, accepted branches, excluded topics, source limit, assumed level, and publication target. Record that approval as the canonical `learning_contract` in `study.yaml`. Ask again only when exceeding that boundary.
 
 ## 5. Compile, do not improvise
 
-After approval, generate the task graph with:
+After approval, record the contract. Do not create the research/evidence run yet: source acquisition must first produce a valid `SOURCES_READY` course. When the course has no supplied source, reconciliation first requires the separate one-task source-discovery run described in `research-topic.md`.
 
 ```bash
-python scripts/record_scope_approval.py COURSE_ROOT --summary "APPROVED_SCOPE" --source-limit 10 --research-workers 3
-python scripts/create_research_plan.py COURSE_ROOT --research-workers 3 --authorized
-python scripts/validate_orchestration.py COURSE_ROOT/.work/orchestration/run-plan.yaml --course-root COURSE_ROOT
+python scripts/record_scope_approval.py COURSE_ROOT --summary "APPROVED_SCOPE" --source-limit 10 --research-workers 3 --assumed-level "ASSUMED_LEVEL"
+python scripts/reconcile_workflow.py COURSE_ROOT --json
 ```
 
-Spawn only `ready_task_ids`. Wait for every task in a wave before advancing. Never spawn the contradiction reviewer early; never spawn citation verification before contradiction review; never mark assessment ready before independent assessment validation.
+The reconciliation response routes the next action to source ingestion or research. Only after registered sources make the course `SOURCES_READY` may the main agent compile the authorized research plan. Every task must receive the approved branches, exclusions, source limit, and learner goal from `learning_contract`; worker prompts must not reconstruct scope from conversation.
 
 Use absolute script paths resolved from `SKILL_ROOT` during an installed-skill run. If subagents are unavailable or the learner declines them, run:
 
@@ -77,4 +76,4 @@ You may still teach conversationally or preserve provisional notes, but do not p
 
 ## Exit gate
 
-Exit only when calibration is completed, adjusted, or explicitly skipped; accepted branches are recorded; the scope card includes the worker topology; approval is recorded; and the deterministic run plan validates.
+Exit only when calibration is completed, adjusted, or explicitly skipped; accepted branches and exclusions are recorded; the scope card includes the worker topology; and the canonical learning contract is approved. The source-discovery plan, when required, validates at `SCOPED`; the research/evidence plan validates only after `SOURCES_READY`.

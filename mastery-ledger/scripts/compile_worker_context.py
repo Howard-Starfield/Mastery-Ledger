@@ -15,9 +15,19 @@ from typing import Any
 import yaml
 
 from create_research_plan import _canonical_hash, load_role_profiles
+from plan_store import load_active_plan, save_active_plan
 
 
 SUBMITTED_STATES = {"submitted", "verified", "approved", "merged"}
+OUTPUT_TEMPLATES = {
+    "source-candidate-ledger-v1": "source-candidate-ledger.json",
+    "corpus-map-v1": "corpus-map.json",
+    "evidence-packet-v1": "evidence-packet.json",
+    "contradiction-review-v1": "contradiction-review.json",
+    "citation-review-v1": "citation-review.json",
+    "question-bank-v2": "question-bank.json",
+    "assessment-validation-v1": "assessment-validation.json",
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -73,10 +83,6 @@ def atomic_json(path: Path, payload: object) -> None:
     atomic_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
 
 
-def atomic_yaml(path: Path, payload: object) -> None:
-    atomic_text(path, yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
-
-
 def _source_artifacts(root: Path, source_ids: list[str]) -> list[str]:
     if not source_ids:
         return []
@@ -127,10 +133,9 @@ def _required_contracts(skill_root: Path, profile: dict[str, Any]) -> list[dict[
 
 def compile_context(root: Path, task_id: str) -> dict[str, Any]:
     root = root.resolve()
-    plan_path = root / ".work" / "orchestration" / "run-plan.yaml"
     try:
-        plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        plan = load_active_plan(root)
+    except ValueError as error:
         raise ValueError(f"Cannot read run plan: {error}") from error
     if not isinstance(plan, dict) or not isinstance(plan.get("task_graph"), list):
         raise ValueError("Run plan must contain a task_graph list.")
@@ -173,7 +178,7 @@ def compile_context(root: Path, task_id: str) -> dict[str, Any]:
     if task.get("task_work_dir") != expected_root:
         raise ValueError(f"Task work directory must be {expected_root}")
     expected_root_path = PurePosixPath(expected_root)
-    for field in ("brief_path", "context_path", "dispatch_path", "event_path", "output_path", "completion_path"):
+    for field in ("brief_path", "context_path", "dispatch_path", "event_path", "output_path", "completion_path", "completion_template_path"):
         normalized = clean_relative(task.get(field))
         candidate = PurePosixPath(normalized)
         if candidate == expected_root_path or expected_root_path not in candidate.parents:
@@ -193,6 +198,49 @@ def compile_context(root: Path, task_id: str) -> dict[str, Any]:
 
     skill_root = Path(__file__).resolve().parents[1]
     contracts = _required_contracts(skill_root, profile)
+    output_template_name = OUTPUT_TEMPLATES.get(str(task.get("required_schema")))
+    output_template: dict[str, Any] | None = None
+    if output_template_name:
+        output_template_path = skill_root / "assets" / output_template_name
+        try:
+            loaded_template = json.loads(output_template_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise ValueError(f"Cannot read output template {output_template_name}: {error}") from error
+        if not isinstance(loaded_template, dict):
+            raise ValueError(f"Output template must be a JSON object: {output_template_name}")
+        output_template = loaded_template
+        if task.get("required_schema") == "source-candidate-ledger-v1":
+            output_template["task_id"] = task_id
+            output_template["scope_summary"] = str(plan.get("goal") or "Approved learning scope")
+            output_template["candidates"] = []
+        elif task.get("required_schema") == "corpus-map-v1":
+            output_template["run_id"] = run_id
+            output_template["task_id"] = task_id
+            output_template["worker_role"] = role
+            output_template["sources_used"] = [str(item) for item in task.get("input_source_ids", [])]
+            output_template["proposed_tasks"] = [
+                {
+                    "task_id": str(item.get("task_id")),
+                    "objective": "REPLACE_WITH_BOUNDED_OBJECTIVE",
+                    "scope_included": [],
+                    "scope_excluded": list(task.get("scope_excluded", [])),
+                    "concept_ids": [],
+                    "source_ids": [],
+                }
+                for item in plan["task_graph"]
+                if isinstance(item, dict) and item.get("role") == "research-worker"
+            ]
+        elif task.get("required_schema") == "evidence-packet-v1":
+            output_template["report_id"] = f"REPORT-{task_id}"
+            output_template["task_id"] = task_id
+            output_template["worker_role"] = role
+            output_template["scope"] = {
+                "included": list(task.get("scope_included", [])),
+                "excluded": list(task.get("scope_excluded", [])),
+            }
+            output_template["sources_used"] = [str(item) for item in task.get("input_source_ids", [])]
+        elif task.get("required_schema") == "question-bank-v2":
+            output_template["study_id"] = plan.get("study_id")
     task_root = root / expected_root
     task_root.mkdir(parents=True, exist_ok=True)
     if task_root.is_symlink():
@@ -202,6 +250,33 @@ def compile_context(root: Path, task_id: str) -> dict[str, Any]:
         if current.is_symlink():
             raise ValueError("Assigned task directory crosses a symbolic-link directory.")
         current = current.parent
+
+    completion_template = {
+        "schema_version": "completion-envelope-v1",
+        "task_id": task_id,
+        "run_id": run_id,
+        "role": role,
+        "role_profile_acknowledged": {
+            "id": role,
+            "version": profile["version"],
+            "sha256": profile_hash,
+        },
+        "contracts_acknowledged": [
+            {"contract_id": item["contract_id"], "sha256": item["sha256"]}
+            for item in contracts
+        ],
+        "status": "submitted",
+        "summary": "REPLACE_WITH_SHORT_OBSERVABLE_SUMMARY",
+        "event_path": task.get("event_path"),
+        "output_path": task.get("output_path"),
+        "artifacts": [task.get("output_path")],
+        "blockers": [],
+        "next_actions": [],
+        "completed_at": "REPLACE_WITH_ISO_8601_TIMESTAMP",
+    }
+    completion_template_path = root / clean_relative(task.get("completion_template_path"))
+    atomic_json(completion_template_path, completion_template)
+    completion_template_hash = sha256_file(completion_template_path)
 
     brief = {
         "schema_version": "worker-task-brief-v1",
@@ -227,7 +302,12 @@ def compile_context(root: Path, task_id: str) -> dict[str, Any]:
         "event_path": task.get("event_path"),
         "output_path": task.get("output_path"),
         "completion_path": task.get("completion_path"),
+        "completion_template": {
+            "path": str(completion_template_path.resolve()),
+            "sha256": completion_template_hash,
+        },
         "required_schema": task.get("required_schema"),
+        "output_template": output_template,
         "acceptance_criteria": task.get("acceptance_criteria", []),
     }
     brief_path = root / clean_relative(task.get("brief_path"))
@@ -250,6 +330,12 @@ def compile_context(root: Path, task_id: str) -> dict[str, Any]:
         "allowed_inputs": inputs,
         "allowed_write_paths": [expected_root + "/"],
         "forbidden_actions": profile["prohibited_actions"],
+        "required_output_schema": task.get("required_schema"),
+        "output_template": output_template,
+        "completion_template": {
+            "path": str(completion_template_path.resolve()),
+            "sha256": completion_template_hash,
+        },
     }
     context_path = root / clean_relative(task.get("context_path"))
     atomic_json(context_path, context)
@@ -258,8 +344,11 @@ def compile_context(root: Path, task_id: str) -> dict[str, Any]:
     dispatch = (
         f"Execute the assigned Mastery Ledger task described by:\n{brief_path.resolve()}\n\n"
         f"Before beginning, read the context manifest in full:\n{context_path.resolve()}\n\n"
+        f"Copy the exact prefilled completion template from:\n{completion_template_path.resolve()}\n"
+        f"to the declared completion_path and replace only its result placeholders. Do not rename fields.\n\n"
         "Read every required contract listed there in full. Verify the assigned input and output paths. "
         "If a contract, input, hash, or assigned path is unavailable, write a blocked completion and stop.\n\n"
+        "Use the exact output_template embedded in the compiled brief when one is present. "
         "Use only the assigned inputs and scope. Write only inside the assigned task directory. "
         "Produce the declared submission, observable event shard, and completion envelope. "
         "Do not modify canonical course artifacts, approve your own output, expand scope, dispatch another worker, "
@@ -276,14 +365,16 @@ def compile_context(root: Path, task_id: str) -> dict[str, Any]:
     task["contracts_sha256"] = _canonical_hash([
         {"contract_id": item["contract_id"], "sha256": item["sha256"]} for item in contracts
     ])
+    task["completion_template_sha256"] = completion_template_hash
     plan["updated_at"] = datetime.now(timezone.utc).isoformat()
-    atomic_yaml(plan_path, plan)
+    save_active_plan(root, plan)
     return {
         "status": "complete",
         "run_id": run_id,
         "task_id": task_id,
         "context_path": str(context_path),
         "dispatch_path": str(dispatch_path),
+        "completion_template_path": str(completion_template_path),
         "dispatch_message": dispatch,
         "context_sha256": context_hash,
         "dispatch_sha256": dispatch_hash,

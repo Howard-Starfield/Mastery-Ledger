@@ -21,9 +21,13 @@ Broadly inspects an approved corpus and proposes:
 
 It does not approve claims or draft the final guide.
 
+## Source scout
+
+Runs once when a researched course has no supplied source. It searches within the approved scope and source limit, opens candidate pages, and returns `source-candidate-ledger-v1` with authority rationale, coverage, limitations, and gaps. It does not register sources, treat snippets as evidence, or write canonical knowledge. The main agent selects and extracts retained candidates before the evidence run exists.
+
 ## Source extractor
 
-Converts one assigned source or bounded source subset into faithful, locator-preserving evidence. It preserves hierarchy, separates the source author's claims from interpretation, and reports omissions or internal inconsistency. It does not synthesize across unassigned sources or approve evidence.
+Converts exactly one assigned registered source into faithful, locator-preserving evidence. It preserves hierarchy, separates the source author's claims from interpretation, and reports omissions or internal inconsistency. It does not inspect another source, synthesize across sources, or approve evidence.
 
 ## Research worker
 
@@ -48,7 +52,7 @@ Runs after all bounded extraction and research tasks for the current run have su
 
 ## Completion router
 
-Acts as the receptionist between workers and the main orchestrator. It reads task briefs and `completion-envelope-v1` records, confirms that declared output paths exist, sorts submissions into ready, blocked, failed, or malformed queues, and reports those queues to the main agent. It does not inspect hidden reasoning, change report content, approve evidence, or dispatch a downstream task that the orchestration validator has not marked ready.
+Acts as the receptionist between workers and the main orchestrator through `scripts/route_worker_completion.py`. It reads the prefilled task completion template and returned `completion-envelope-v1`, confirms declared output paths and contracts, runs the orchestration validator, and either accepts the return or writes a same-task repair packet. It does not inspect hidden reasoning, change report content, approve evidence, replace the active plan, or dispatch a downstream task that the orchestration validator has not marked ready.
 
 ## Module drafter
 

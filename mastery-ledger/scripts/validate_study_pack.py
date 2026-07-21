@@ -11,6 +11,7 @@ from typing import Any
 
 import yaml
 
+from source_registry import sha256_file
 from validate_evidence import load_source_ids, validate_source_ref
 from validate_orchestration import SUBMITTED_STATES, validate_plan
 
@@ -229,6 +230,8 @@ def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
         else:
             if not candidate.is_file() or candidate.is_symlink() or len(candidate.read_text(encoding="utf-8").strip()) < 20:
                 errors.append(f"{prefix}.knowledge_path must resolve to non-empty extracted knowledge")
+            elif re.fullmatch(r"sha256:[0-9a-fA-F]{64}", content_hash) and sha256_file(candidate).casefold() != content_hash.casefold():
+                errors.append(f"{prefix}.content_hash does not match its extracted knowledge")
 
     source_root = root / "source"
     if source_root.is_dir():
@@ -262,24 +265,61 @@ def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
         errors.append("Publication requires .work/orchestration/run-plan.yaml")
     else:
         plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
-        plan_errors, _, _ = validate_plan(plan, course_root=root)
-        errors.extend(plan_errors)
-        tasks = plan.get("task_graph", []) if isinstance(plan, dict) else []
+        plans: list[dict] = []
+        seen_runs: set[str] = set()
+        cursor = plan
+        while isinstance(cursor, dict):
+            run_id = str(cursor.get("run_id") or "").strip()
+            if not run_id:
+                errors.append("Publication orchestration plan has no run_id")
+                break
+            if run_id in seen_runs:
+                errors.append(f"Publication orchestration predecessor cycle includes {run_id}")
+                break
+            seen_runs.add(run_id)
+            plans.append(cursor)
+            predecessor = str(cursor.get("predecessor_run_id") or "").strip()
+            if not predecessor:
+                break
+            predecessor_relation = str(cursor.get("predecessor_relation") or "").strip()
+            predecessor_path = root / ".work" / "runs" / predecessor / "run-plan.yaml"
+            if not predecessor_path.is_file() or predecessor_path.is_symlink():
+                errors.append(f"Publication orchestration predecessor is missing: {predecessor}")
+                break
+            try:
+                cursor = yaml.safe_load(predecessor_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, yaml.YAMLError):
+                errors.append(f"Publication orchestration predecessor is unreadable: {predecessor}")
+                break
+            if not isinstance(cursor, dict) or cursor.get("run_id") != predecessor:
+                errors.append(f"Publication orchestration predecessor identity is invalid: {predecessor}")
+                break
+            if predecessor_relation == "supersedes":
+                break
+
+        tasks = []
+        for chained_plan in plans:
+            plan_errors, _, _ = validate_plan(chained_plan, course_root=root)
+            errors.extend(plan_errors)
+            tasks.extend(chained_plan.get("task_graph", []) if isinstance(chained_plan.get("task_graph"), list) else [])
         if not tasks:
             errors.append("Publication requires a non-empty orchestration task graph")
         roles = {str(task.get("role")) for task in tasks if isinstance(task, dict)}
         required_roles = {"assessment-generator", "assessment-validator"}
         if research_mode:
-            required_roles.update({"corpus-mapper", "research-worker", "contradiction-reviewer", "citation-verifier"})
+            required_roles.update({"corpus-mapper", "source-extractor", "research-worker", "contradiction-reviewer", "citation-verifier"})
         for role in sorted(required_roles - roles):
             errors.append(f"Publication orchestration is missing required role: {role}")
         unfinished = [str(task.get("task_id")) for task in tasks if isinstance(task, dict) and task.get("status") not in SUBMITTED_STATES]
         if unfinished:
             errors.append("Publication has unfinished orchestration tasks: " + ", ".join(unfinished))
-        if not isinstance(plan, dict) or plan.get("authorization", {}).get("status") != "approved":
+        if not plans or any(item.get("authorization", {}).get("status") != "approved" for item in plans):
             errors.append("Publication requires recorded scope and worker authorization")
-        capabilities = plan.get("capabilities", {}) if isinstance(plan, dict) else {}
-        if not capabilities.get("subagents"):
+        assessment_plans = [
+            item for item in plans
+            if any(isinstance(task, dict) and task.get("role") == "assessment-validator" for task in item.get("task_graph", []))
+        ]
+        if not assessment_plans or not assessment_plans[0].get("capabilities", {}).get("subagents"):
             errors.append("A ready exam requires an independent assessment-validation subagent")
         question_bank = json.loads((root / "questions" / "question-bank.json").read_text(encoding="utf-8"))
         bank_ids = {str(item.get("question_id")) for item in question_bank.get("questions", []) if isinstance(item, dict)}

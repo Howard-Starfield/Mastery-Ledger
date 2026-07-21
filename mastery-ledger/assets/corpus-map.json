@@ -1,0 +1,30 @@
+{
+  "schema_version": "corpus-map-v1",
+  "run_id": "RUN-001",
+  "task_id": "TASK-MAP",
+  "worker_role": "corpus-mapper",
+  "status": "proposed_unapproved",
+  "sources_used": ["SRC-001"],
+  "concepts": [
+    {
+      "concept_id": "concept-id",
+      "name": "Concept name",
+      "coverage_source_ids": ["SRC-001"],
+      "prerequisite_candidates": [],
+      "ambiguities": [],
+      "gaps": []
+    }
+  ],
+  "proposed_tasks": [
+    {
+      "task_id": "TASK-RESEARCH-01",
+      "objective": "Investigate one bounded concept group.",
+      "scope_included": ["concept-id"],
+      "scope_excluded": [],
+      "concept_ids": ["concept-id"],
+      "source_ids": ["SRC-001"]
+    }
+  ],
+  "ambiguities": [],
+  "gaps": []
+}

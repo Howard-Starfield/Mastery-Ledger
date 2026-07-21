@@ -1,0 +1,27 @@
+source_id: SRC-001
+title: Example retained source
+author: null
+publisher: Example publisher
+provider: web
+source_type: official_documentation
+original_location: https://example.invalid/source
+local_path: null
+knowledge_path: source/SRC-001.md
+retrieved_at: "2026-07-20T00:00:00Z"
+content_hash: sha256:replace-with-computed-hash
+language: en
+primary_or_secondary: primary
+authority_notes: Why this source is appropriate for the approved scope.
+license_or_usage_notes: Registered for source-grounded personal study.
+rights_basis: web_reference
+permitted_uses: [personal_study, derived_notes]
+processing_mode: cloud_allowed
+included_sections: [all]
+excluded_sections: []
+processing_status: ready
+supersedes: null
+superseded_by: null
+items: []
+artifacts:
+  - kind: extracted_knowledge
+    path: source/SRC-001.md

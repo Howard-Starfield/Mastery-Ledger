@@ -21,9 +21,10 @@ def main() -> int:
     parser.add_argument("--research-workers", type=int, required=True)
     parser.add_argument("--accepted-branch", action="append", default=[])
     parser.add_argument("--excluded", action="append", default=[])
+    parser.add_argument("--assumed-level", default="beginner")
     args = parser.parse_args()
-    if not 1 <= args.source_limit <= 100:
-        parser.error("Source limit must be 1-100.")
+    if not 1 <= args.source_limit <= 20:
+        parser.error("Source limit must be 1-20.")
     if not 0 <= args.research_workers <= 5:
         parser.error("Research worker count must be 0-5.")
 
@@ -48,6 +49,18 @@ def main() -> int:
         "accepted_branches": args.accepted_branch,
         "excluded": args.excluded,
     }
+    study["learner_goal"] = args.summary.strip()
+    study["learning_contract"] = {
+        "status": "approved",
+        "approved_at": now,
+        "goal": args.summary.strip(),
+        "assumed_level": args.assumed_level.strip() or "beginner",
+        "accepted_branches": args.accepted_branch,
+        "excluded": args.excluded,
+        "source_limit": args.source_limit,
+        "research_workers": args.research_workers,
+    }
+    study.setdefault("workflow_target", "LEARNING_ACTIVE")
     study["updated_at"] = now
     atomic_yaml(path, study)
     append_event(root, {

@@ -9,10 +9,10 @@ Converge a course toward one declared target without skipping gates, repeatedly 
 Resolve the installed skill root from the location of `SKILL.md`, then run:
 
 ```text
-python "<SKILL_ROOT>/scripts/reconcile_workflow.py" "<COURSE_ROOT>" "<TARGET_STATE>" --json
+python "<SKILL_ROOT>/scripts/reconcile_workflow.py" "<COURSE_ROOT>" --json
 ```
 
-Use absolute paths. Never copy a bundled script into a course, create dependencies inside a course, or assume the shell's current directory.
+Use absolute paths. The command reads the persistent `workflow_target` from `study.yaml`; a normal publishable course uses `LEARNING_ACTIVE`. An explicit target argument is reserved for diagnostics and tests. Never copy a bundled script into a course, create dependencies inside a course, or assume the shell's current directory.
 
 ## Response contract
 
@@ -27,12 +27,12 @@ Exit code `0` means complete, `2` means work or user input is required, and `3` 
 
 ## Main-agent algorithm
 
-1. Declare one target state.
+1. Confirm the course has one persistent target state.
 2. Run reconciliation once.
 3. If work is returned, read only the listed workflow files.
 4. Run the deterministic helper or the exact `ready_task_ids` reported by `validate_orchestration.py`.
 5. For each `context_required_task_id`, compile its worker context and rerun orchestration validation before dispatch. Never compose a replacement prompt.
-6. Wait for the entire dispatched wave, route completion envelopes, and merge accepted worker event shards before rerunning the gate.
+6. Wait for the entire dispatched wave, route every completion through `route_worker_completion.py`, and merge only accepted worker event shards before rerunning the gate. A malformed return receives a same-task repair packet; it does not create a new plan.
 7. Record observable actions, decisions, evidence, and short justifications. Never record hidden reasoning.
 8. Rerun reconciliation after an artifact, task status, source, learner decision, or validation result changed.
 9. Stop on completion, required user input, declined/unavailable independent workers, or retry exhaustion.
@@ -44,7 +44,7 @@ Do not call the script in a tight loop. A return is a work order for the main ag
 | Entering state | Observable requirement | Workflow that owns repair |
 | --- | --- | --- |
 | `SCOPED` | Learning contract, calibration disposition when applicable, and recorded scope approval | `intake-and-scope.md`, `calibrate-and-authorize.md` |
-| `SOURCES_READY` | At least one retained source with ready status, real hash, and non-empty `source/SRC-NNN.md` | `ingest-material.md`, `process-video.md`, or `research-topic.md` |
+| `SOURCES_READY` | At least one retained source with ready status, matching hash, and non-empty `source/SRC-NNN.md`; source-less research first requires an accepted source-scout ledger | `ingest-material.md`, `process-video.md`, or `research-topic.md` |
 | `CORPUS_MAPPED` | Submitted corpus mapper for researched modes; provided-source modes pass without one | `orchestrate-research.md` |
 | `TASKS_PLANNED` | Authorized, valid, non-empty dependency graph | `orchestrate-research.md` |
 | `EVIDENCE_SUBMITTED` | Required research/extraction and contradiction wave submitted, or direct provided-source claims recorded | `orchestrate-research.md`, `verify-evidence.md` |
@@ -68,5 +68,5 @@ Use `--accepted-branch` and `--excluded` once per item when applicable. Provided
 ## Failure boundaries
 
 - If independent workers are unavailable or declined for a researched publishable course, enter `DRAFT_UNVERIFIED`; do not keep reconciling toward `LEARNING_ACTIVE`.
-- If a task returns `blocked` or `failed`, record its completion envelope and decide whether the authorized plan permits a bounded retry. Do not rewrite history or start dependent tasks.
+- If a task returns `blocked`, `failed`, or malformed, use the completion router's bounded same-task retry. When retries exhaust, preserve provisional material under `.work/`, advance to `DRAFT_UNVERIFIED`, and report the exact blocker. Do not rewrite history or start dependent tasks.
 - If requirements change after work, the fingerprint resets because progress is observable. If the identical requirement recurs three times, the loop stops.

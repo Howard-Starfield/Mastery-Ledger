@@ -226,7 +226,7 @@ class EvidenceAndMasteryTests(unittest.TestCase):
             self.assertTrue(any("non-empty orchestration task graph" in error for error in errors))
             self.assertTrue(any("action log" in error for error in errors))
             self.assertTrue(any("ready exam" in error for error in errors))
-            self.assertTrue(any("extracted knowledge" in error for error in errors))
+            self.assertTrue(any("at least one source" in error for error in errors))
 
     def test_orchestration_gate_rejects_early_verifier_and_workspace_clutter(self) -> None:
         tool = load_module("validate_orchestration_invalid", "scripts/validate_orchestration.py")
@@ -268,7 +268,15 @@ class EvidenceAndMasteryTests(unittest.TestCase):
             study_path = course_root / "study.yaml"
             study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
             study["mode"] = "provided-material-only"
+            study["workflow_state"] = "EVIDENCE_APPROVED"
             study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
+            (course_root / "evidence" / "approved-claims.json").write_text(
+                json.dumps({"schema_version": "approved-claims-v1", "claims": [{"claim_id": "CLM-001", "claim": "Approved claim."}]}) + "\n",
+                encoding="utf-8",
+            )
+            substantive = "# Draft\n\n" + ("Substantive source-grounded draft material. " * 4) + "\n"
+            (course_root / "study-guide.md").write_text(substantive, encoding="utf-8")
+            (course_root / "concept-map.md").write_text(substantive, encoding="utf-8")
             subprocess.run(
                 [sys.executable, str(ROOT / "scripts" / "create_assessment_plan.py"), str(course_root), "--authorized"],
                 check=True,
@@ -316,6 +324,10 @@ class EvidenceAndMasteryTests(unittest.TestCase):
                         "summary": "Submitted the assigned assessment draft.",
                         "event_path": task["event_path"],
                         "output_path": task["output_path"],
+                        "artifacts": [task["output_path"]],
+                        "blockers": [],
+                        "next_actions": [],
+                        "completed_at": "2026-07-20T00:00:00Z",
                     }
                 ),
                 encoding="utf-8",

@@ -49,8 +49,16 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "assets" / "approved-claims.json",
             ROOT / "assets" / "assessment-validation.json",
             ROOT / "assets" / "contradiction-review.json",
+            ROOT / "assets" / "corpus-map.json",
+            ROOT / "assets" / "citation-review.json",
+            ROOT / "assets" / "source-candidate-ledger.json",
+            ROOT / "assets" / "source-record.example.yaml",
             ROOT / "assets" / "runtime-compatibility.json",
             ROOT / "scripts" / "compile_worker_context.py",
+            ROOT / "scripts" / "register_source.py",
+            ROOT / "scripts" / "route_worker_completion.py",
+            ROOT / "scripts" / "freeze_corpus_map.py",
+            ROOT / "scripts" / "create_source_discovery_plan.py",
             ROOT / "scripts" / "merge_worker_events.py",
             ROOT / "scripts" / "adopt_course.py",
         ]
@@ -168,6 +176,7 @@ class SkillStructureTests(unittest.TestCase):
         payload = json.loads((ROOT / "references" / "agent-role-profiles.json").read_text(encoding="utf-8"))
         self.assertEqual("agent-role-profiles-v1", payload["schema_version"])
         required_roles = {
+            "source-scout",
             "corpus-mapper",
             "source-extractor",
             "research-worker",

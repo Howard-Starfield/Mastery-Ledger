@@ -1,6 +1,18 @@
 {
   "schema_version": "agent-role-profiles-v1",
   "profiles": {
+    "source-scout": {
+      "version": "1.0",
+      "mission": "Search for authoritative source candidates within the approved topic, exclusions, and source limit before durable acquisition begins.",
+      "best_practices": [
+        "Prefer primary or official sources and record why each candidate is authoritative.",
+        "Keep discovery separate from evidence approval and preserve coverage gaps.",
+        "Return URLs and source metadata only after opening and inspecting the candidate."
+      ],
+      "stop_conditions": ["The approved scope or source limit is unavailable.", "Web access is unavailable for a topic-research run."],
+      "prohibited_actions": ["Register or approve a source.", "Write canonical course material.", "Expand into excluded topics."],
+      "required_contracts": ["references/artifact-lifecycle.md", "references/source-policy.md", "references/event-contract.md"]
+    },
     "corpus-mapper": {
       "version": "1.0",
       "mission": "Map the approved corpus into stable concepts, coverage, prerequisite candidates, ambiguities, gaps, and bounded downstream tasks without approving factual claims.",
@@ -15,14 +27,14 @@
     },
     "source-extractor": {
       "version": "1.0",
-      "mission": "Convert one assigned source or bounded source subset into faithful, locator-preserving structured evidence.",
+      "mission": "Convert exactly one assigned registered source into faithful, locator-preserving structured evidence.",
       "best_practices": [
         "Preserve source hierarchy and the narrowest resolvable locators.",
         "Separate the source author's claims from extractor interpretation.",
         "Record omissions, internal inconsistency, limitations, and unreadable sections."
       ],
       "stop_conditions": ["The assigned source cannot be opened.", "A required locator cannot be preserved."],
-      "prohibited_actions": ["Synthesize across unassigned sources.", "Write final course material.", "Approve the extracted claims."],
+      "prohibited_actions": ["Inspect or synthesize across any other source.", "Write final course material.", "Approve the extracted claims."],
       "required_contracts": ["references/artifact-lifecycle.md", "references/task-and-evidence-contract.md", "references/citation-contract.md", "references/event-contract.md"]
     },
     "research-worker": {

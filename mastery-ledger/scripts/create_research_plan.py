@@ -6,8 +6,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
-import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +13,8 @@ from pathlib import Path
 import yaml
 
 from record_action import append_event
+from plan_store import is_placeholder, load_active_plan, save_active_plan
+from source_registry import load_manifest, source_errors
 
 
 ROLE_PROFILES_PATH = Path(__file__).resolve().parents[1] / "references" / "agent-role-profiles.json"
@@ -42,6 +42,9 @@ def task(
     *,
     scope_included: list[str] | None = None,
     input_artifacts: list[str] | None = None,
+    input_source_ids: list[str] | None = None,
+    scope_excluded: list[str] | None = None,
+    source_limit: int | None = None,
 ) -> dict:
     del folder  # Retained for caller compatibility; every task now owns one isolated directory.
     profile = load_role_profiles().get(role)
@@ -57,11 +60,11 @@ def task(
         "role_profile_sha256": _canonical_hash(profile),
         "objective": profile["mission"],
         "scope_included": scope_included or [],
-        "scope_excluded": [],
+        "scope_excluded": scope_excluded or [],
         "concept_ids": [],
-        "input_source_ids": [],
+        "input_source_ids": input_source_ids or [],
         "input_artifacts": input_artifacts or [],
-        "source_limit": 5,
+        "source_limit": source_limit if source_limit is not None else 5,
         "dependencies": dependencies,
         "task_work_dir": task_root,
         "brief_path": f"{task_root}/task-brief.json",
@@ -70,26 +73,15 @@ def task(
         "event_path": f"{task_root}/events.jsonl",
         "output_path": f"{task_root}/submission.json",
         "completion_path": f"{task_root}/completion.json",
+        "completion_template_path": f"{task_root}/completion-template.json",
         "required_schema": schema,
         "reviewer_role": "main-agent",
         "acceptance_criteria": [*profile["best_practices"], "Use assigned scope only."],
         "context_status": "pending",
+        "attempt_count": 0,
+        "max_attempts": 2,
         "status": "planned",
     }
-
-
-def atomic_yaml(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
-    temporary = Path(name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
-            yaml.safe_dump(payload, handle, sort_keys=False, allow_unicode=True)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def main() -> int:
@@ -97,6 +89,7 @@ def main() -> int:
     parser.add_argument("course_root", type=Path)
     parser.add_argument("--research-workers", type=int, default=3)
     parser.add_argument("--authorized", action="store_true")
+    parser.add_argument("--supersede-reason")
     args = parser.parse_args()
     if not args.authorized:
         parser.error("Explicit scope and worker authorization is required.")
@@ -107,6 +100,44 @@ def main() -> int:
     mode = str(study.get("mode", ""))
     if mode not in {"topic-research", "hybrid"}:
         parser.error("This compiler is only for topic-research or hybrid studies.")
+    if str(study.get("workflow_state", "")).strip().replace("-", "_").upper() != "SOURCES_READY":
+        parser.error("Research planning requires workflow_state SOURCES_READY.")
+    approval = study.get("learning_contract")
+    if not isinstance(approval, dict) or approval.get("status") != "approved":
+        parser.error("Research planning requires an approved canonical learning contract.")
+    approved_workers = int(approval.get("research_workers") or 0)
+    if args.research_workers != approved_workers:
+        parser.error(f"--research-workers must match the approved count: {approved_workers}")
+    approved_source_limit = int(approval.get("source_limit") or 0)
+    manifest = load_manifest(root)
+    problems = source_errors(root, manifest, require_nonempty=True)
+    if problems:
+        parser.error("Source gate failed: " + "; ".join(problems))
+    sources = [item for item in manifest["sources"] if isinstance(item, dict)]
+    if len(sources) > approved_source_limit:
+        parser.error(f"Ready source count {len(sources)} exceeds approved limit {approved_source_limit}")
+    active_path = root / ".work" / "orchestration" / "run-plan.yaml"
+    predecessor_run_id = None
+    predecessor_relation = None
+    if active_path.is_file():
+        active = load_active_plan(root)
+        if not is_placeholder(active):
+            source_discovery_finished = (
+                active.get("schema_version") == "source-discovery-plan-v1"
+                and bool(active.get("task_graph"))
+                and all(
+                    isinstance(item, dict) and item.get("status") in {"submitted", "verified", "approved", "merged"}
+                    for item in active.get("task_graph", [])
+                )
+            )
+            if not source_discovery_finished and not args.supersede_reason:
+                parser.error("An active run already exists; repair it or provide --supersede-reason explicitly.")
+            predecessor_run_id = active.get("run_id")
+            predecessor_relation = "source_discovery" if source_discovery_finished else "supersedes"
+    source_ids = [str(item["source_id"]) for item in sources]
+    scope_summary = str(approval.get("goal") or approval.get("summary") or study.get("learner_goal") or "Approved course scope")
+    accepted_branches = [str(item) for item in approval.get("accepted_branches", [])]
+    excluded = [str(item) for item in approval.get("excluded", [])]
     run_id = f"RUN-{uuid.uuid4().hex[:8].upper()}"
     mapper = task(
         run_id,
@@ -114,49 +145,87 @@ def main() -> int:
         "corpus-mapper",
         [],
         schema="corpus-map-v1",
-        scope_included=[str(study.get("learner_goal") or "Approved course scope")],
+        scope_included=accepted_branches or [scope_summary],
+        scope_excluded=excluded,
+        input_source_ids=source_ids,
         input_artifacts=["source-manifest.yaml"],
+        source_limit=len(source_ids),
     )
-    research = [task(run_id, f"TASK-RESEARCH-{index:02d}", "research-worker", ["TASK-MAP"]) for index in range(1, args.research_workers + 1)]
+    extractors = [task(
+        run_id,
+        f"TASK-EXTRACT-{source_id}",
+        "source-extractor",
+        [],
+        scope_included=accepted_branches or [scope_summary],
+        scope_excluded=excluded,
+        input_source_ids=[source_id],
+        source_limit=1,
+    ) for source_id in source_ids]
+    extractor_ids = [item["task_id"] for item in extractors]
+    research = [task(
+        run_id,
+        f"TASK-RESEARCH-{index:02d}",
+        "research-worker",
+        ["TASK-MAP"],
+        scope_excluded=excluded,
+        source_limit=approved_source_limit,
+    ) for index in range(1, args.research_workers + 1)]
     research_ids = [item["task_id"] for item in research]
-    contradiction = task(run_id, "TASK-CONTRADICTIONS", "contradiction-reviewer", research_ids, schema="contradiction-review-v1")
-    citation = task(run_id, "TASK-CITATIONS", "citation-verifier", ["TASK-CONTRADICTIONS"], "reviews", "citation-review-v1")
-    generator = task(
+    contradiction = task(
         run_id,
-        "TASK-ASSESSMENT-GENERATE",
-        "assessment-generator",
-        ["TASK-CITATIONS"],
-        schema="question-bank-v2",
-        scope_included=["Approved course objectives and chapter assessment contract"],
-        input_artifacts=["evidence/approved-claims.json", "study-guide.md", "concept-map.md"],
+        "TASK-CONTRADICTIONS",
+        "contradiction-reviewer",
+        [*extractor_ids, *research_ids],
+        schema="contradiction-review-v1",
+        scope_included=accepted_branches or [scope_summary],
+        scope_excluded=excluded,
     )
-    validator = task(
+    citation = task(
         run_id,
-        "TASK-ASSESSMENT-VALIDATE",
-        "assessment-validator",
-        ["TASK-ASSESSMENT-GENERATE"],
+        "TASK-CITATIONS",
+        "citation-verifier",
+        ["TASK-CONTRADICTIONS", *extractor_ids, *research_ids],
         "reviews",
-        "assessment-validation-v1",
-        scope_included=["Generated question bank and approved evidence"],
-        input_artifacts=["evidence/approved-claims.json"],
+        "citation-review-v1",
+        scope_included=accepted_branches or [scope_summary],
+        scope_excluded=excluded,
+        input_source_ids=source_ids,
+        source_limit=len(source_ids),
     )
     now = datetime.now(timezone.utc).isoformat()
     payload = {
         "schema_version": "research-run-plan-v1",
         "run_id": run_id,
         "study_id": study.get("study_id"),
-        "goal": study.get("learner_goal", "Build a source-grounded study pack"),
+        "goal": scope_summary,
+        "course_target": study.get("workflow_target", "LEARNING_ACTIVE"),
         "mode": mode,
-        "authorization": {"status": "approved", "approved_at": now, "scope": "displayed-scope-card"},
+        "authorization": {
+            "status": "approved",
+            "approved_at": approval.get("approved_at") or now,
+            "scope": scope_summary,
+            "source_limit": approved_source_limit,
+            "research_workers": approved_workers,
+        },
+        "learning_contract": {
+            "goal": scope_summary,
+            "assumed_level": approval.get("assumed_level"),
+            "accepted_branches": accepted_branches,
+            "excluded": excluded,
+            "source_limit": approved_source_limit,
+            "research_workers": approved_workers,
+        },
+        "predecessor_run_id": predecessor_run_id,
+        "predecessor_relation": predecessor_relation,
+        "supersession_reason": args.supersede_reason,
         "publication_intent": True,
         "capabilities": {"filesystem": True, "web": True, "citations": True, "scripts": True, "subagents": True, "parallel_subagents": True},
         "workflow_state": "tasks_planned",
-        "task_graph": [mapper, *research, contradiction, citation, generator, validator],
+        "task_graph": [mapper, *extractors, *research, contradiction, citation],
         "created_at": now,
         "updated_at": now,
     }
-    path = root / ".work" / "orchestration" / "run-plan.yaml"
-    atomic_yaml(path, payload)
+    path = save_active_plan(root, payload)
     append_event(root, {
         "action": "research.plan_compiled", "actor": "main-agent", "status": "complete",
         "summary": f"Compiled an authorized plan with {args.research_workers} research workers and ordered review phases.",
@@ -167,7 +236,7 @@ def main() -> int:
         "status": "complete",
         "run_id": run_id,
         "path": str(path),
-        "first_context_task_ids": ["TASK-MAP"],
+        "first_context_task_ids": ["TASK-MAP", *extractor_ids],
         "first_ready_task_ids": [],
     }, sort_keys=False))
     return 0

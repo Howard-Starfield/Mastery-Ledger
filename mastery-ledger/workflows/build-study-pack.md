@@ -76,15 +76,16 @@ Hard prerequisites require main-agent or user approval. LLM-proposed relationshi
 
 Each question must map to objectives, concepts, and canonical `source-ref-v1` objects from [citation contract](../references/citation-contract.md). Important concepts need recall and application questions. Explanations must address common wrong answers without exposing answers before an attempt.
 
-Follow [assessment contract](../references/assessment-contract.md) exactly. Core chapters contain 10 selectable items: 8 `standalone_mcq` and 2 `passage_mcq`. Short or optional chapters contain 5: 4 standalone and 1 passage. Use four options and exactly one correct option. Generate the Markdown review copy and build the ready exam only after independent assessment validation:
+Follow [assessment contract](../references/assessment-contract.md) exactly. Core chapters contain 10 selectable items: 8 `standalone_mcq` and 2 `passage_mcq`. Short or optional chapters contain 5: 4 standalone and 1 passage. Use four options and exactly one correct option. After evidence approval, write substantive source-grounded `study-guide.md` and `concept-map.md`, then create a separate assessment run. Generate the Markdown review copy and build the ready exam only after independent assessment validation:
 
 ```bash
-# For a provided-source course without a research graph:
 python scripts/create_assessment_plan.py studies/my-study --authorized
-# Dispatch only the validator-reported ready task IDs, then:
+# Compile, dispatch, and route only validator-reported ready task IDs, then:
 python scripts/render_question_bank.py studies/my-study/questions/question-bank.json
 python scripts/build_exam.py studies/my-study --exam-id EXAM-001 --title "Course exam" --ready
 ```
+
+`create_assessment_plan.py` requires `EVIDENCE_APPROVED` (or a later draft state), non-empty approved claims, substantive guide and concept map drafts, and a finished predecessor research run when one exists. It records that predecessor before activating the assessment plan. This deliberate phase boundary ensures rejected research never consumes assessment-generation or citation tokens.
 
 ## Validation
 

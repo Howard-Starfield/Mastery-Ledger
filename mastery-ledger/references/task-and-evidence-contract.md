@@ -29,6 +29,7 @@ dispatch_path: .work/runs/RUN-001/tasks/TASK-001/dispatch-message.txt
 event_path: .work/runs/RUN-001/tasks/TASK-001/events.jsonl
 output_path: .work/runs/RUN-001/tasks/TASK-001/submission.json
 completion_path: .work/runs/RUN-001/tasks/TASK-001/completion.json
+completion_template_path: .work/runs/RUN-001/tasks/TASK-001/completion-template.json
 required_schema: evidence-packet-v1
 reviewer_role: citation-verifier
 acceptance_criteria:
@@ -37,9 +38,9 @@ acceptance_criteria:
 status: planned
 ```
 
-Do not dispatch this conceptual brief directly. Run `compile_worker_context.py`, which freezes a `worker-task-brief-v1`, `worker-context-v1`, role profile, required contract hashes, allowed inputs, and dispatch message inside the assigned task directory. Then run the orchestration validator and dispatch only IDs in `ready_task_ids`.
+Do not dispatch this conceptual brief directly. Run `compile_worker_context.py`, which freezes a `worker-task-brief-v1`, `worker-context-v1`, role-specific output template, prefilled completion template, required contract hashes, allowed inputs, and dispatch message inside the assigned task directory. Then run the orchestration validator and dispatch only IDs in `ready_task_ids`.
 
-Every worker writes only its assigned event shard, submission, and one `completion-envelope-v1` JSON record shaped like `assets/completion-envelope.json`. The envelope acknowledges the exact role profile and contract hashes. It contains an observable summary, artifacts, blockers, and next actions; it must not contain prompts, hidden reasoning, scratch notes, or chain-of-thought. Scratch remains inside the task's `tmp/` directory and is never promoted.
+Every worker writes only its assigned event shard, submission, and one `completion-envelope-v1` JSON record copied from its compiled `completion-template.json`. Do not ask the worker to infer field names from prose or the generic asset. The envelope acknowledges the exact task, role profile, context, and contract hashes. It contains an observable summary, artifacts, blockers, and next actions; it must not contain prompts, hidden reasoning, scratch notes, or chain-of-thought. Scratch remains inside the task's `tmp/` directory and is never promoted. Every return is accepted or repaired through `route_worker_completion.py`; the main agent must not hand-edit task status.
 
 ## Evidence packet
 

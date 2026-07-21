@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -20,7 +22,7 @@ CONTRADICTION_ROLE = "contradiction-reviewer"
 CITATION_ROLE = "citation-verifier"
 ASSESSMENT_GENERATOR_ROLE = "assessment-generator"
 ASSESSMENT_VALIDATOR_ROLE = "assessment-validator"
-CONTEXT_PATH_FIELDS = ("brief_path", "context_path", "dispatch_path", "event_path")
+CONTEXT_PATH_FIELDS = ("brief_path", "context_path", "dispatch_path", "event_path", "completion_template_path")
 PROHIBITED_EVENT_FIELDS = {
     "authorization",
     "authorization_header",
@@ -107,7 +109,7 @@ def _context_errors(
     if task.get("context_status") != "compiled":
         return errors
     paths: dict[str, Path] = {}
-    for field in ("brief_path", "context_path", "dispatch_path"):
+    for field in ("brief_path", "context_path", "dispatch_path", "completion_template_path"):
         path = _safe_course_path(course_root, task.get(field))
         if path is None or not path.is_file() or path.is_symlink():
             errors.append(f"{task_id}.{field} is missing or unsafe")
@@ -117,6 +119,7 @@ def _context_errors(
         ("brief_path", "brief_sha256"),
         ("context_path", "context_sha256"),
         ("dispatch_path", "dispatch_sha256"),
+        ("completion_template_path", "completion_template_sha256"),
     ):
         path = paths.get(field)
         if path is not None and task.get(hash_field) != _sha256_file(path):
@@ -195,8 +198,18 @@ def _context_errors(
     dispatch = paths.get("dispatch_path")
     if dispatch is not None:
         text = dispatch.read_text(encoding="utf-8")
-        if str(paths.get("context_path", "")) not in text or "Read every required contract" not in text:
+        if (
+            str(paths.get("context_path", "")) not in text
+            or str(paths.get("completion_template_path", "")) not in text
+            or "Read every required contract" not in text
+        ):
             errors.append(f"{task_id} dispatch message does not require its compiled context and contracts")
+    expected_completion_template = {
+        "path": str(paths["completion_template_path"].resolve()) if "completion_template_path" in paths else "",
+        "sha256": task.get("completion_template_sha256"),
+    }
+    if context.get("completion_template") != expected_completion_template:
+        errors.append(f"{task_id} context completion template does not match the run plan")
     if brief is not None:
         if brief.get("required_contracts") != context.get("required_contracts"):
             errors.append(f"{task_id} brief and context contracts differ")
@@ -207,6 +220,8 @@ def _context_errors(
         for field in ("event_path", "output_path", "completion_path"):
             if brief.get(field) != task.get(field):
                 errors.append(f"{task_id} brief {field} does not match the run plan")
+        if brief.get("completion_template") != expected_completion_template:
+            errors.append(f"{task_id} brief completion template does not match the run plan")
     return errors
 
 
@@ -431,6 +446,51 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
                         or output_payload.get("schema_version") != expected_schema
                     ):
                         errors.append(f"{task_id} output must use {expected_schema}")
+                    elif expected_schema == "source-candidate-ledger-v1":
+                        if output_payload.get("task_id") != task_id:
+                            errors.append(f"{task_id} source candidate ledger task_id does not match")
+                        candidates = output_payload.get("candidates")
+                        if not isinstance(candidates, list):
+                            errors.append(f"{task_id} source candidate ledger requires a candidates list")
+                        else:
+                            source_limit = int(task.get("source_limit") or 0)
+                            if source_limit and len(candidates) > source_limit:
+                                errors.append(f"{task_id} source candidate ledger exceeds its approved source limit of {source_limit}")
+                            seen_candidate_ids: set[str] = set()
+                            seen_urls: set[str] = set()
+                            for candidate_index, candidate in enumerate(candidates):
+                                prefix = f"{task_id} candidates[{candidate_index}]"
+                                if not isinstance(candidate, dict):
+                                    errors.append(f"{prefix} must be an object")
+                                    continue
+                                for field in ("candidate_id", "title", "authority_rationale"):
+                                    if not isinstance(candidate.get(field), str) or not candidate.get(field, "").strip():
+                                        errors.append(f"{prefix}.{field} is required")
+                                candidate_id = str(candidate.get("candidate_id") or "")
+                                if candidate_id and candidate_id in seen_candidate_ids:
+                                    errors.append(f"{prefix}.candidate_id is duplicated")
+                                seen_candidate_ids.add(candidate_id)
+                                url = str(candidate.get("url") or "")
+                                if not isinstance(candidate.get("url"), str) or re.fullmatch(r"https?://[^\s]+", url) is None:
+                                    errors.append(f"{prefix}.url must be an absolute HTTP(S) URL")
+                                elif url in seen_urls:
+                                    errors.append(f"{prefix}.url is duplicated")
+                                seen_urls.add(url)
+                    elif expected_schema == "corpus-map-v1":
+                        if (
+                            output_payload.get("run_id") != task.get("run_id")
+                            or output_payload.get("task_id") != task_id
+                            or output_payload.get("worker_role") != task.get("role")
+                        ):
+                            errors.append(f"{task_id} corpus map identity does not match its task brief")
+                        if output_payload.get("sources_used") != task.get("input_source_ids", []):
+                            errors.append(f"{task_id} corpus map must account for every assigned source ID")
+                    elif expected_schema == "evidence-packet-v1":
+                        if output_payload.get("task_id") != task_id or output_payload.get("worker_role") != task.get("role"):
+                            errors.append(f"{task_id} evidence packet identity does not match its task brief")
+                        used = output_payload.get("sources_used")
+                        if not isinstance(used, list) or not set(str(item) for item in used).issubset(set(str(item) for item in task.get("input_source_ids", []))):
+                            errors.append(f"{task_id} evidence packet uses an unassigned source ID")
             completion_relative = task.get("completion_path")
             completion = _safe_course_path(course_root, completion_relative)
             if completion is None:
@@ -454,6 +514,8 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
                             errors.append(f"{task_id} completion run or role identity does not match its task brief")
                         if not isinstance(envelope.get("summary"), str) or not envelope.get("summary", "").strip():
                             errors.append(f"{task_id} completion summary is required")
+                        elif envelope.get("summary") == "REPLACE_WITH_SHORT_OBSERVABLE_SUMMARY":
+                            errors.append(f"{task_id} completion summary still contains its template placeholder")
                         expected_profile = {
                             "id": task.get("role_profile_id"),
                             "version": task.get("role_profile_version"),
@@ -472,6 +534,19 @@ def validate_plan(payload: dict[str, Any], *, course_root: Path | None = None) -
                             errors.append(f"{task_id} completion did not acknowledge its required contracts")
                         if envelope.get("event_path") != task.get("event_path"):
                             errors.append(f"{task_id} completion event_path does not match its task brief")
+                        if envelope.get("artifacts") != [task.get("output_path")]:
+                            errors.append(f"{task_id} completion artifacts must contain only its declared output")
+                        for field in ("blockers", "next_actions"):
+                            if not isinstance(envelope.get(field), list):
+                                errors.append(f"{task_id} completion {field} must be a list")
+                        completed_at = envelope.get("completed_at")
+                        if not isinstance(completed_at, str) or completed_at == "REPLACE_WITH_ISO_8601_TIMESTAMP":
+                            errors.append(f"{task_id} completion completed_at must be an ISO-8601 timestamp")
+                        else:
+                            try:
+                                datetime.fromisoformat(completed_at.replace("Z", "+00:00"))
+                            except ValueError:
+                                errors.append(f"{task_id} completion completed_at must be an ISO-8601 timestamp")
             event = _safe_course_path(course_root, task.get("event_path"))
             if event is None or not event.is_file() or event.is_symlink():
                 errors.append(f"{task_id} is {state} but its event shard is missing")

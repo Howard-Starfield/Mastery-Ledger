@@ -7,11 +7,11 @@ Build a bounded, current, source-grounded corpus for an on-the-fly learning topi
 ## Preconditions
 
 The learning outcome, scope, exclusions, source policy, and worker budget must be approved. If they are not, return to `intake-and-scope.md`.
-The calibration disposition and authorized deterministic run plan must also exist. If subagents are unavailable, stop at `DRAFT_UNVERIFIED`; do not convert a conversational self-review into publishable evidence.
+The calibration disposition and canonical learning contract must also exist. When no source is supplied, reconciliation requires an authorized deterministic source-discovery plan before source acquisition. The evidence run is compiled later, only after retained sources are registered and the course reaches `SOURCES_READY`. If subagents are unavailable, stop at `DRAFT_UNVERIFIED`; do not convert a conversational self-review into publishable evidence.
 
 ## Scout before fan-out
 
-Run one bounded scout to identify:
+Run one bounded source-scout subagent through `create_source_discovery_plan.py`, compiled context, orchestration validation, and `route_worker_completion.py`. The scout identifies:
 
 - canonical terminology;
 - prerequisites;
@@ -20,7 +20,7 @@ Run one bounded scout to identify:
 - source availability;
 - candidate modules and adjacent branches.
 
-Do not treat scout snippets as evidence.
+Do not treat scout snippets or its candidate ledger as evidence. The main agent reviews the ledger, opens retained candidates, extracts locator-preserving Markdown, and registers each accepted source with `register_source.py`. Do not create the research/evidence plan until reconciliation reaches `SOURCES_READY`.
 
 ## Source priorities
 
@@ -38,7 +38,7 @@ Open and inspect a source before citing it. Record publication date, subject dat
 
 Respect the approved source limit. Stop when objectives and prerequisites are adequately supported. More sources are not automatically better.
 
-Create a source manifest entry for every inspected source. Workers submit claims through evidence packets, not prose-only summaries.
+Create a source manifest entry for every retained source through `register_source.py`. Workers submit claims through evidence packets, not prose-only summaries.
 
 For every retained source, create `source/SRC-NNN.md` containing the extracted knowledge and exact locators. Keep downloaded originals and media under `source/media/SRC-NNN/`. Set `knowledge_path` in the manifest and do not mark the source `ready` until the Markdown artifact exists and is non-empty.
 

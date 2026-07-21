@@ -33,13 +33,13 @@ The main agent owns:
 
 Workers never approve their own output and never edit final learner-facing artifacts.
 
-Use a completion router as the receptionist for worker returns. It checks completion envelopes and presents a sorted inbox to the main agent; it has no authority to approve evidence or bypass dependencies.
+Use `scripts/route_worker_completion.py` as the receptionist for every worker return. It checks the exact prefilled completion envelope, runs the orchestration gate, and either accepts the submission or returns a same-task repair packet. It has no authority to approve evidence or bypass dependencies.
 
 ## Two-pass decomposition
 
 ### Pass A: corpus mapping
 
-Use one mapper to propose concept IDs, prerequisite edges, source coverage, ambiguities, and task boundaries. The main agent reviews and freezes a versioned provisional map.
+Use one mapper to propose concept IDs, prerequisite edges, source coverage, ambiguities, and task boundaries. In the same first wave, use one isolated source extractor per retained source; each receives exactly one registered source and cannot synthesize across the corpus. The mapper output must match `corpus-map-v1` and name exactly the pre-authorized research task IDs. Wait for the whole mapper/extractor wave. After the completion router accepts the mapper, the main agent reviews it and runs `freeze_corpus_map.py`; this binds those existing concept-research tasks in the same run. Never replace the run plan merely because mapping finished.
 
 ### Pass B: bounded investigation
 
@@ -53,9 +53,7 @@ After every source extractor and research worker in the run has submitted, route
 
 Run citation verification only on the claims retained after contradiction review. This is the final worker phase before the main agent approves evidence, which avoids reopening locators for material already rejected as contradictory, stale, duplicated, or out of scope.
 
-### Pass E: assessment generation and validation
-
-After final citation verification and main-agent evidence approval, dispatch one assessment generator. When it completes, dispatch a different assessment validator. The validator checks answer-key support, ambiguity, distractors, duplicates, chapter coverage, and the exact 80/20 format contract. It must not approve its own generated items.
+Assessment generation is a separate authorized run created only after final citation verification, main-agent evidence approval, and substantive study-pack drafts. See `build-study-pack.md`. Keeping assessment out of the research graph prevents it from becoming ready against rejected or superseded claims.
 
 ## Task rules
 
@@ -77,7 +75,7 @@ All output, completion, review, draft, and scratch paths must be relative descen
 
 ## Worker prompt recipe
 
-Do not compose the worker prompt. Compile the deterministic context packet and pass its generated dispatch message. The packet provides only:
+Do not compose the worker prompt. Compile the deterministic context packet and pass its generated dispatch message. The compiler also writes a role-specific output template and a prefilled `completion-template.json`; the worker must copy that exact completion template and fill only the declared result fields. The packet provides only:
 
 1. role and objective;
 2. included and excluded scope;
@@ -88,7 +86,7 @@ Do not compose the worker prompt. Compile the deterministic context packet and p
 7. output path;
 8. instruction to preserve contradictions and gaps;
 9. versioned role profile and required contract hashes;
-10. exact event, submission, and completion paths.
+10. exact event, submission, completion-template, and completion paths.
 
 Do not leak the expected conclusion. Do not ask the worker to “make the guide coherent”; that is the main agent’s job.
 
@@ -102,7 +100,7 @@ A citation verifier may mark `VERIFIED`; only the main agent may mark `APPROVED`
 
 ## Executable dispatch gate
 
-Compile the approved plan instead of hand-authoring it, then run the gate before spawning any task and whenever a completion arrives:
+Once reconciliation reports `SOURCES_READY`, compile the approved plan instead of hand-authoring it, then run the gate before spawning any task and whenever a completion arrives:
 
 ```bash
 python scripts/create_research_plan.py studies/my-study --research-workers 3 --authorized
@@ -111,9 +109,15 @@ python scripts/validate_orchestration.py studies/my-study/.work/orchestration/ru
   --course-root studies/my-study
 ```
 
-Compile IDs listed in `context_required_task_ids`, rerun the gate, and dispatch only task IDs listed in `ready_task_ids`. Pass the generated `dispatch-message.txt` without substantive edits. Citation verification remains unavailable until every extraction, research, and contradiction task submits. Assessment generation remains unavailable until citation verification submits; assessment validation remains unavailable until generation submits. A submitted task without a matching event shard, contract acknowledgements, role-profile acknowledgement, output, and `completion-envelope-v1` fails validation. The main agent updates task state, merges accepted worker events through `merge_worker_events.py`, and reruns this gate; workers and the completion router never infer readiness themselves.
+Compile IDs listed in `context_required_task_ids`, rerun the gate, and dispatch only task IDs listed in `ready_task_ids`. Pass the generated `dispatch-message.txt` without substantive edits. Route every return with:
 
-After each complete ready wave, return to `reconcile_workflow.py` with the original target. The returned next gate determines whether another wave, evidence review, study-pack repair, or learner input is allowed. Never self-dispatch by recursively calling the worker topology.
+```bash
+python scripts/route_worker_completion.py studies/my-study TASK-ID
+```
+
+If it returns `changes_required`, send the generated repair dispatch to the same task and worker context. Do not create a replacement run. When `TASK-MAP` is accepted, run `freeze_corpus_map.py`, compile the now-bound research tasks, validate, and dispatch only the returned ready wave. Citation verification remains unavailable until every research and contradiction task submits. A submitted task without a matching event shard, contract acknowledgements, role-profile acknowledgement, output, and exact `completion-envelope-v1` fails validation. Only accepted completions are merged into durable events.
+
+After each complete ready wave, run `reconcile_workflow.py COURSE_ROOT --json`; it reads the course's persistent `workflow_target`. The returned next gate determines whether another wave, evidence review, study-pack repair, or learner input is allowed. Never self-dispatch by recursively calling the worker topology.
 
 ## Cost controls
 
@@ -132,7 +136,7 @@ The phase is complete only when:
 - each task has a unique output path and reviewer;
 - worker count matches the approved budget;
 - reports exist for completed tasks;
-- failed tasks have a recovery decision;
+- failed tasks have a bounded same-task recovery decision;
 - submitted reports are routed to evidence verification.
 - every submitted task has a matching completion envelope;
 - contradiction review finished before citation verification;

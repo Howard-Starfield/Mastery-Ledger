@@ -13,7 +13,13 @@ Turn supplied files, an existing course folder, or an authorized local corpus in
 
 ## Source manifest first
 
-Create or update `source-manifest.yaml` before semantic extraction. Assign stable source and item IDs. Record:
+Initialization deliberately creates `source-manifest.yaml` with `sources: []`. A sample source is never a ready source. Extract each source into a non-empty `source/SRC-NNN.md`, then register it atomically with:
+
+```bash
+python scripts/register_source.py COURSE_ROOT --source-id SRC-NNN --title "TITLE" --source-type "TYPE" --knowledge-path source/SRC-NNN.md --location "URL_OR_PATH"
+```
+
+Do not hand-edit a source to `status: ready`; `register_source.py` computes the content hash, validates the entire manifest, and records the observable registration event. Assign stable source and item IDs. Record:
 
 - title, author, publisher, source type, and dates;
 - original location and local path;
@@ -26,7 +32,7 @@ Create or update `source-manifest.yaml` before semantic extraction. Assign stabl
 - processing status;
 - version and supersession links.
 
-Use `assets/source-manifest.yaml` as the shape.
+`assets/source-manifest.yaml` is intentionally empty. Use `assets/source-record.example.yaml` only to understand the generated record fields; `register_source.py` remains the sole writer for ready records.
 
 ## Preserve four structures
 
@@ -83,3 +89,5 @@ The phase is complete only when:
 - source hierarchy is represented;
 - missing or failed artifacts are recorded;
 - the corpus is ready for mapping or topic research.
+
+After at least one source registers successfully, rerun `reconcile_workflow.py COURSE_ROOT --json`. A research run plan may be created only when reconciliation has advanced the course to `SOURCES_READY`.

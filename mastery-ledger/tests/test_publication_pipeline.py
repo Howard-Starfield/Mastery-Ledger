@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import subprocess
 import sys
@@ -50,6 +49,21 @@ def question(index: int) -> dict:
     }
 
 
+def prepare_assessment_inputs(course: Path) -> None:
+    study_path = course / "study.yaml"
+    study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
+    study["mode"] = "provided-material-only"
+    study["workflow_state"] = "EVIDENCE_APPROVED"
+    study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
+    (course / "evidence" / "approved-claims.json").write_text(
+        json.dumps({"schema_version": "approved-claims-v1", "claims": [{"claim_id": "CLM-001", "claim": "A source-grounded approved claim."}]}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    substantive = "# Draft\n\n" + ("Source-grounded instructional material with examples and limitations. " * 3) + "\n"
+    (course / "study-guide.md").write_text(substantive, encoding="utf-8")
+    (course / "concept-map.md").write_text(substantive, encoding="utf-8")
+
+
 def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
     with tempfile.TemporaryDirectory() as directory:
         studies = Path(directory)
@@ -61,14 +75,35 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
         )
         course = studies / "publishable-course"
 
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "record_calibration.py"), "start", str(course), "--count", "0", "--concept-questions", "0", "--scenario-questions", "0", "--disposition", "skip"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Publish the bounded fixture", "--source-limit", "5", "--research-workers", "2", "--accepted-branch", "concept-id", "--excluded", "out-of-scope"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
         knowledge = "# Extracted knowledge\n\n## Section 1\n\nA source-grounded statement used by the assessment.\n"
         (course / "source" / "SRC-001.md").write_text(knowledge, encoding="utf-8")
-        manifest_path = course / "source-manifest.yaml"
-        manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
-        manifest["sources"][0]["knowledge_path"] = "source/SRC-001.md"
-        manifest["sources"][0]["processing_status"] = "ready"
-        manifest["sources"][0]["content_hash"] = "sha256:" + hashlib.sha256(knowledge.encode()).hexdigest()
-        manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "register_source.py"), str(course), "--source-id", "SRC-001", "--title", "Fixture source", "--location", "https://example.invalid/source", "--knowledge-path", "source/SRC-001.md"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        sources_ready = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "reconcile_workflow.py"), str(course), "--json"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert sources_ready.returncode == 2, sources_ready.stdout + sources_ready.stderr
+        assert json.loads(sources_ready.stdout)["current_state"] == "SOURCES_READY"
 
         bank_path = course / "questions" / "question-bank.json"
         bank = {
@@ -100,14 +135,11 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
         )
         plan_path = course / ".work" / "orchestration" / "run-plan.yaml"
         plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
-        for task in plan["task_graph"]:
-            if task["role"] == "research-worker":
-                task["scope_included"] = ["concept-id"]
-                task["concept_ids"] = ["concept-id"]
-        plan_path.write_text(yaml.safe_dump(plan, sort_keys=False), encoding="utf-8")
         question_ids = [item["question_id"] for item in bank["questions"]]
-        task_ids = [item["task_id"] for item in plan["task_graph"]]
-        for task_id in task_ids:
+        research_task_ids = [item["task_id"] for item in plan["task_graph"] if item["role"] == "research-worker"]
+        extractor_task_ids = [item["task_id"] for item in plan["task_graph"] if item["role"] == "source-extractor"]
+
+        def complete_task(task_id: str, output: dict) -> dict:
             compiled = subprocess.run(
                 [sys.executable, str(ROOT / "scripts" / "compile_worker_context.py"), str(course), task_id, "--json"],
                 check=False,
@@ -118,19 +150,6 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
             plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
             task = next(item for item in plan["task_graph"] if item["task_id"] == task_id)
             role = task["role"]
-            schema = task["required_schema"]
-            if role == "contradiction-reviewer":
-                output = {"schema_version": schema, "status": "complete", "retained_claim_ids": ["CLM-001"], "rejected_claim_ids": [], "contradictions": [], "gaps": []}
-            elif role == "citation-verifier":
-                output = {"schema_version": schema, "decision": "verified", "verified_claim_ids": ["CLM-001"], "issues": []}
-            elif role == "assessment-generator":
-                output = bank
-            elif role == "assessment-validator":
-                output = {"schema_version": schema, "decision": "approved", "validated_question_ids": question_ids, "rejected_question_ids": [], "issues": []}
-            elif role == "research-worker":
-                output = {"schema_version": schema, "source_ref_schema": "source-ref-v1", "report_id": task["task_id"], "task_id": task["task_id"], "worker_role": role, "claims": []}
-            else:
-                output = {"schema_version": schema, "concepts": ["concept-id"], "gaps": []}
             output_path = course / task["output_path"]
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")
@@ -147,42 +166,69 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
                 "summary": "Submitted the assigned bounded output.",
                 "artifacts": [task["output_path"]],
             }, separators=(",", ":")) + "\n", encoding="utf-8")
-            context = json.loads((course / task["context_path"]).read_text(encoding="utf-8"))
+            completion = json.loads((course / task["completion_template_path"]).read_text(encoding="utf-8"))
+            completion["summary"] = "Submitted the assigned bounded output."
+            completion["completed_at"] = "2026-07-20T00:00:00Z"
             completion_path = course / task["completion_path"]
-            completion_path.write_text(json.dumps({
-                "schema_version": "completion-envelope-v1",
-                "task_id": task_id,
-                "run_id": task["run_id"],
-                "role": role,
-                "role_profile_acknowledged": context["role_profile"],
-                "contracts_acknowledged": [
-                    {"contract_id": item["contract_id"], "sha256": item["sha256"]}
-                    for item in context["required_contracts"]
-                ],
-                "status": "submitted",
-                "summary": "Submitted the assigned bounded output.",
-                "event_path": task["event_path"],
-                "output_path": task["output_path"],
-                "artifacts": [task["output_path"]],
-            }, indent=2) + "\n", encoding="utf-8")
-            task["status"] = "submitted"
-            plan_path.write_text(yaml.safe_dump(plan, sort_keys=False), encoding="utf-8")
-            merged = subprocess.run(
-                [sys.executable, str(ROOT / "scripts" / "merge_worker_events.py"), str(course), task_id],
+            completion_path.write_text(json.dumps(completion, indent=2) + "\n", encoding="utf-8")
+            routed = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "route_worker_completion.py"), str(course), task_id],
                 check=False,
                 capture_output=True,
                 text=True,
             )
-            assert merged.returncode == 0, merged.stdout + merged.stderr
-            if task_id == task_ids[0]:
-                merged_again = subprocess.run(
-                    [sys.executable, str(ROOT / "scripts" / "merge_worker_events.py"), str(course), task_id],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                assert merged_again.returncode == 0, merged_again.stdout + merged_again.stderr
-                assert json.loads(merged_again.stdout)["idempotent"] is True
+            assert routed.returncode == 0, routed.stdout + routed.stderr
+            assert json.loads(routed.stdout)["status"] == "accepted"
+            return yaml.safe_load(plan_path.read_text(encoding="utf-8"))
+
+        mapper_output = {
+            "schema_version": "corpus-map-v1",
+            "run_id": plan["run_id"],
+            "task_id": "TASK-MAP",
+            "worker_role": "corpus-mapper",
+            "status": "proposed_unapproved",
+            "sources_used": ["SRC-001"],
+            "concepts": [{"concept_id": "concept-id", "name": "Concept", "coverage_source_ids": ["SRC-001"], "prerequisite_candidates": [], "ambiguities": [], "gaps": []}],
+            "proposed_tasks": [
+                {"task_id": task_id, "objective": f"Investigate bounded lane {task_id}.", "scope_included": ["concept-id"], "scope_excluded": ["out-of-scope"], "concept_ids": ["concept-id"], "source_ids": ["SRC-001"]}
+                for task_id in research_task_ids
+            ],
+            "ambiguities": [],
+            "gaps": [],
+        }
+        complete_task("TASK-MAP", mapper_output)
+        for task_id in extractor_task_ids:
+            complete_task(task_id, {"schema_version": "evidence-packet-v1", "source_ref_schema": "source-ref-v1", "report_id": f"REPORT-{task_id}", "task_id": task_id, "worker_role": "source-extractor", "scope": {"included": ["concept-id"], "excluded": ["out-of-scope"]}, "sources_used": ["SRC-001"], "claims": [], "contradictions": [], "unresolved_questions": [], "suggested_concepts": [], "scope_drift": [], "quality_notes": []})
+        frozen = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "freeze_corpus_map.py"), str(course)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert frozen.returncode == 0, frozen.stdout + frozen.stderr
+        for task_id in research_task_ids:
+            complete_task(task_id, {"schema_version": "evidence-packet-v1", "source_ref_schema": "source-ref-v1", "report_id": f"REPORT-{task_id}", "task_id": task_id, "worker_role": "research-worker", "scope": {"included": ["concept-id"], "excluded": ["out-of-scope"]}, "sources_used": ["SRC-001"], "claims": [], "contradictions": [], "unresolved_questions": [], "suggested_concepts": [], "scope_drift": [], "quality_notes": []})
+        complete_task("TASK-CONTRADICTIONS", {"schema_version": "contradiction-review-v1", "status": "complete", "retained_claim_ids": ["CLM-001"], "rejected_claim_ids": [], "contradictions": [], "gaps": []})
+        complete_task("TASK-CITATIONS", {"schema_version": "citation-review-v1", "decision": "verified", "verified_claim_ids": ["CLM-001"], "rejected_claim_ids": [], "issues": [], "checked_source_ids": ["SRC-001"], "remaining_gaps": []})
+
+        evidence_reconciled = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "reconcile_workflow.py"), str(course), "--json"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert evidence_reconciled.returncode == 2, evidence_reconciled.stdout + evidence_reconciled.stderr
+        assert json.loads(evidence_reconciled.stdout)["current_state"] == "STUDY_PACK_DRAFTED"
+
+        assessment = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "create_assessment_plan.py"), str(course), "--authorized"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert assessment.returncode == 0, assessment.stdout + assessment.stderr
+        complete_task("TASK-ASSESSMENT-GENERATE", bank)
+        complete_task("TASK-ASSESSMENT-VALIDATE", {"schema_version": "assessment-validation-v1", "decision": "approved", "validated_question_ids": question_ids, "rejected_question_ids": [], "issues": []})
 
         build = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "build_exam.py"), str(course), "--exam-id", "EXAM-001", "--title", "Publishable exam", "--ready"],
@@ -199,20 +245,8 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
         )
         assert validation.returncode == 0, validation.stdout + validation.stderr
 
-        subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "record_calibration.py"), "start", str(course), "--count", "0", "--concept-questions", "0", "--scenario-questions", "0", "--disposition", "skip"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "record_scope_approval.py"), str(course), "--summary", "Publish the bounded fixture", "--source-limit", "5", "--research-workers", "2"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
         reconciled = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "reconcile_workflow.py"), str(course), "LEARNING_ACTIVE", "--json"],
+            [sys.executable, str(ROOT / "scripts" / "reconcile_workflow.py"), str(course), "--json"],
             check=False,
             capture_output=True,
             text=True,
@@ -221,7 +255,7 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
         reconciliation = json.loads(reconciled.stdout)
         assert reconciliation["status"] == "complete"
         assert reconciliation["current_state"] == "LEARNING_ACTIVE"
-        assert len(reconciliation["advanced"]) == 10
+        assert len(reconciliation["advanced"]) == 2
 
         sys.path.insert(0, str(REPO / "src"))
         from mastery_ledger.exam_service import load_exam
@@ -318,10 +352,7 @@ def test_provided_source_assessment_plan_starts_with_generator_only() -> None:
             text=True,
         )
         course = studies / "provided-course"
-        study_path = course / "study.yaml"
-        study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
-        study["mode"] = "provided-material-only"
-        study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
+        prepare_assessment_inputs(course)
         compiled = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "create_assessment_plan.py"), str(course), "--authorized"],
             check=False,
@@ -410,7 +441,7 @@ def test_reconciliation_returns_exact_next_work_and_stops_repeated_no_progress()
         assert progressed_payload["current_state"] == "SCOPED"
         assert progressed_payload["blocked_state"] == "SOURCES_READY"
         assert progressed_payload["consecutive_identical_passes"] == 1
-        assert progressed_payload["requirements"][0]["code"] == "sources.not_ready"
+        assert progressed_payload["requirements"][0]["code"] == "sources.discovery_plan_missing"
 
 
 def test_dispatch_gate_rejects_tampered_compiled_context() -> None:
@@ -423,10 +454,7 @@ def test_dispatch_gate_rejects_tampered_compiled_context() -> None:
             text=True,
         )
         course = studies / "tamper-course"
-        study_path = course / "study.yaml"
-        study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
-        study["mode"] = "provided-material-only"
-        study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
+        prepare_assessment_inputs(course)
         subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "create_assessment_plan.py"), str(course), "--authorized"],
             check=True,

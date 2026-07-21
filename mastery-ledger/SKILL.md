@@ -49,19 +49,19 @@ Apply this gate before runtime detection, workspace questions, browsing, file cr
 
 ## Deterministic convergence loop
 
-For every durable target—including `SOURCES_READY`, `EVIDENCE_APPROVED`, `STUDY_PACK_VALIDATED`, and `LEARNING_ACTIVE`—run:
+For a course-building request, initialize and retain `workflow_target: LEARNING_ACTIVE`. Treat intermediate states as progress gates, never as terminal success. Run reconciliation without substituting a narrower conversational target:
 
 ```text
-python "<SKILL_ROOT>/scripts/reconcile_workflow.py" "<COURSE_ROOT>" "<TARGET_STATE>" --json
+python "<SKILL_ROOT>/scripts/reconcile_workflow.py" "<COURSE_ROOT>" --json
 ```
 
 Follow [workflow reconciliation](references/workflow-reconciliation.md) exactly. On `needs_work`, perform only the returned next actions, run the named validator or ready task wave, and rerun the same command. On `needs_user_input`, ask only for the returned blocking decision and resume after recording it. On `retry_exhausted`, stop instead of repeating or widening the work. On `complete`, continue with learner-facing delivery. Never recursively spawn workers, infer a later gate, or call reconciliation repeatedly without observable progress.
 
 ## Deterministic worker dispatch
 
-For every dependency-ready task, run `scripts/compile_worker_context.py` with absolute paths, then run `scripts/validate_orchestration.py`. Dispatch only IDs in `ready_task_ids`; `context_required_task_ids` are not dispatchable. The compiler selects the versioned role profile, required contracts, bounded inputs, exact outputs, and immutable dispatch message. If compilation or validation fails, stop with `blocked` rather than paraphrasing a role or inventing context.
+For every dependency-ready task, run `scripts/compile_worker_context.py` with absolute paths, then run `scripts/validate_orchestration.py`. Dispatch only IDs in `ready_task_ids`; `context_required_task_ids` are not dispatchable. The compiler selects the versioned role profile, required contracts, bounded inputs, exact output template, prefilled completion template, and immutable dispatch message. If compilation or validation fails, stop with `blocked` rather than paraphrasing a role or inventing context.
 
-Require each worker to read its generated brief, context manifest, and assigned contracts before work. A worker writes only inside its assigned `.work/runs/<run-id>/tasks/<task-id>/` directory and returns the declared submission, `action-event-v1` shard, and completion envelope. Reject or quarantine missing contract acknowledgements, profile/hash mismatches, unexpected writes, self-approval, scope expansion, or worker-spawned delegation. After an accepted completion, merge its observable events only through `scripts/merge_worker_events.py`.
+Require each worker to read its generated brief, context manifest, assigned contracts, output template, and `completion-template.json` before work. A worker writes only inside its assigned `.work/runs/<run-id>/tasks/<task-id>/` directory and returns the declared submission, `action-event-v1` shard, and completion envelope. Route every return through `scripts/route_worker_completion.py`; never edit task status by hand. On `changes_required`, dispatch only the generated same-task repair message. On `retry_exhausted`, the router preserves a labelled draft, records `DRAFT_UNVERIFIED`, and stops the run; do not create a replacement. When a researched course has no registered source, reconciliation requires `scripts/create_source_discovery_plan.py` and the compiled `TASK-SOURCE-SCOUT` before acquisition. After mapper acceptance, run `scripts/freeze_corpus_map.py` before compiling research-worker contexts.
 
 ## Route by phase
 
@@ -99,7 +99,7 @@ The main agent must:
 - synthesize approved evidence rather than concatenate reports;
 - keep learner-facing tutoring single-agent for continuity.
 
-For a single user-provided source, research and extraction workers are optional; a ready exam still requires an independent assessment validator. For `topic-research` and `hybrid`, use independent subagents for research, contradiction review, final citation verification, and assessment validation. If the required workers are unavailable, preserve drafts under `.work/`, record `DRAFT_UNVERIFIED`, and do not activate learning or mark an exam ready.
+For a single user-provided source in a provided-material mode, research workers are optional; a ready exam still requires an independent assessment validator. For `topic-research` and `hybrid`, require the source scout when no source is supplied, one isolated extractor per retained source, bounded concept-research workers, contradiction review, final citation verification, and assessment validation. If the required workers are unavailable, preserve drafts under `.work/`, record `DRAFT_UNVERIFIED`, and do not activate learning or mark an exam ready.
 
 ## Completion gates
 

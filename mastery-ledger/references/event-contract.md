@@ -9,7 +9,7 @@ Record observable actions, decisions, evidence references, failures, and short j
 - Durable course audit remains `logs/events.jsonl` during the current compatibility period.
 - A worker writes only `.work/runs/<run-id>/tasks/<task-id>/events.jsonl`.
 - Workers never append to the durable log.
-- The main agent invokes `scripts/merge_worker_events.py` only after the completion validates and the result is accepted for routing.
+- The main agent routes every return through `scripts/route_worker_completion.py`; the router invokes `merge_worker_events.py` only after the completion validates and appends a short acceptance or repair decision event of its own.
 
 ## `action-event-v1`
 

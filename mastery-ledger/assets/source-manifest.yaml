@@ -1,32 +1,3 @@
 schema_version: "1.0"
 study_id: STUDY-001
-sources:
-  - source_id: SRC-001
-    title: Example source
-    author: Example author
-    publisher: Example publisher
-    provider: local
-    source_type: local_document
-    original_location: /absolute/path/to/source.md
-    local_path: source/media/SRC-001/source.md
-    knowledge_path: source/SRC-001.md
-    publication_date: null
-    subject_date: null
-    retrieved_at: "2026-07-19T00:00:00Z"
-    content_hash: sha256:replace-with-real-hash
-    language: en
-    primary_or_secondary: primary
-    authority_notes: User-provided original material
-    license_or_usage_notes: Personal study
-    rights_basis: user_owned
-    permitted_uses: [personal_study, derived_notes]
-    processing_mode: local_only
-    included_sections: [all]
-    excluded_sections: []
-    processing_status: ready
-    supersedes: null
-    superseded_by: null
-    items: []
-    artifacts:
-      - kind: extracted_knowledge
-        path: source/SRC-001.md
+sources: []

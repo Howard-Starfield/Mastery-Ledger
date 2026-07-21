@@ -1,0 +1,22 @@
+{
+  "schema_version": "source-candidate-ledger-v1",
+  "task_id": "TASK-SOURCE-SCOUT",
+  "status": "proposed_unapproved",
+  "scope_summary": "Approved learning scope",
+  "candidates": [
+    {
+      "candidate_id": "CAND-001",
+      "title": "Candidate source title",
+      "url": "https://example.invalid/source",
+      "source_type": "official_documentation",
+      "publisher": "Publisher",
+      "published_at": null,
+      "authority_rationale": "Why this source is appropriate for the approved topic.",
+      "coverage": ["approved-concept"],
+      "known_limitations": [],
+      "recommended_action": "retain"
+    }
+  ],
+  "search_gaps": [],
+  "scope_drift": []
+}

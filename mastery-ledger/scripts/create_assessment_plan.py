@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
-from create_research_plan import atomic_yaml, task
+from create_research_plan import task
+from plan_store import is_placeholder, load_active_plan, save_active_plan
 from record_action import append_event
 
 
@@ -24,8 +26,33 @@ def main() -> int:
     root = args.course_root.resolve()
     study = yaml.safe_load((root / "study.yaml").read_text(encoding="utf-8"))
     mode = str(study.get("mode", ""))
-    if mode in {"topic-research", "hybrid"}:
-        parser.error("Use create_research_plan.py for topic-research or hybrid studies.")
+    state = str(study.get("workflow_state", "")).strip().replace("-", "_").upper()
+    if state not in {"EVIDENCE_APPROVED", "STUDY_PACK_DRAFTED"}:
+        parser.error("Assessment planning requires EVIDENCE_APPROVED and substantive course drafts.")
+    claims_path = root / "evidence" / "approved-claims.json"
+    try:
+        claims_payload = json.loads(claims_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        parser.error("Assessment input is unreadable: evidence/approved-claims.json")
+    if not isinstance(claims_payload, dict) or not isinstance(claims_payload.get("claims"), list) or not claims_payload["claims"]:
+        parser.error("Assessment input has no approved claims: evidence/approved-claims.json")
+    for relative in ("study-guide.md", "concept-map.md"):
+        path = root / relative
+        if not path.is_file() or path.is_symlink() or len(path.read_text(encoding="utf-8").strip()) < 100:
+            parser.error(f"Assessment input is missing or not substantive: {relative}")
+    predecessor_run_id = None
+    active_path = root / ".work" / "orchestration" / "run-plan.yaml"
+    if active_path.is_file():
+        active = load_active_plan(root)
+        if not is_placeholder(active):
+            predecessor_run_id = active.get("run_id")
+            unfinished = [
+                str(item.get("task_id"))
+                for item in active.get("task_graph", [])
+                if isinstance(item, dict) and item.get("status") not in {"submitted", "verified", "approved", "merged"}
+            ]
+            if unfinished:
+                parser.error("Active research run is unfinished: " + ", ".join(unfinished))
     run_id = f"RUN-{uuid.uuid4().hex[:8].upper()}"
     generator = task(
         run_id,
@@ -53,6 +80,9 @@ def main() -> int:
         "study_id": study.get("study_id"),
         "goal": "Generate and independently validate a ready exam from approved provided-source evidence",
         "mode": mode,
+        "course_target": study.get("workflow_target", "LEARNING_ACTIVE"),
+        "predecessor_run_id": predecessor_run_id,
+        "predecessor_relation": "evidence" if predecessor_run_id else None,
         "authorization": {"status": "approved", "approved_at": now, "scope": "displayed-assessment-card"},
         "publication_intent": True,
         "capabilities": {"filesystem": True, "citations": True, "scripts": True, "subagents": True, "parallel_subagents": False},
@@ -61,8 +91,7 @@ def main() -> int:
         "created_at": now,
         "updated_at": now,
     }
-    path = root / ".work" / "orchestration" / "run-plan.yaml"
-    atomic_yaml(path, payload)
+    path = save_active_plan(root, payload)
     append_event(root, {
         "action": "assessment.plan_compiled", "actor": "main-agent", "status": "complete",
         "summary": "Compiled an authorized generation and independent validation plan.",

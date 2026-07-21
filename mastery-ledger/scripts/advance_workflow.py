@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +14,7 @@ from typing import Any
 import yaml
 
 from record_action import append_event
+from source_registry import load_manifest, source_errors
 from validate_orchestration import SUBMITTED_STATES, validate_plan
 from validate_study_pack import validate_workspace
 
@@ -79,56 +79,65 @@ def requirement(
 
 
 def _source_requirements(root: Path, mode: str) -> list[dict[str, Any]]:
-    manifest = _read_yaml(root / "source-manifest.yaml")
-    sources = manifest.get("sources")
-    if not isinstance(sources, list) or not sources:
+    try:
+        manifest = load_manifest(root)
+    except ValueError as error:
         return [requirement(
-            "sources.none",
-            "No source candidates are recorded in source-manifest.yaml.",
+            "sources.manifest_invalid",
+            str(error),
             workflow="ingest-material.md",
-            action="Ask for or collect sources within the approved source policy, then register them in the manifest.",
-            user_input_required=mode not in RESEARCH_MODES,
+            action="Repair source-manifest.yaml through the deterministic source registration workflow.",
             artifacts=["source-manifest.yaml"],
         )]
-
-    problems: list[str] = []
-    ready_count = 0
-    for index, source in enumerate(sources):
-        if not isinstance(source, dict):
-            problems.append(f"sources[{index}] is not an object")
-            continue
-        source_id = str(source.get("source_id") or f"sources[{index}]")
-        knowledge_path = source.get("knowledge_path")
-        digest = str(source.get("content_hash", ""))
-        ready = source.get("processing_status") == "ready"
-        knowledge_ok = False
-        if isinstance(knowledge_path, str) and knowledge_path.startswith("source/") and knowledge_path.endswith(".md"):
-            candidate = (root / knowledge_path).resolve(strict=False)
-            try:
-                candidate.relative_to((root / "source").resolve())
-            except ValueError:
-                pass
-            else:
-                knowledge_ok = candidate.is_file() and not candidate.is_symlink() and len(candidate.read_text(encoding="utf-8").strip()) >= 20
-        hash_ok = re.fullmatch(r"sha256:[0-9a-fA-F]{64}", digest) is not None
-        if ready and knowledge_ok and hash_ok:
-            ready_count += 1
-        else:
-            missing = []
-            if not ready:
-                missing.append("processing_status=ready")
-            if not knowledge_ok:
-                missing.append("non-empty extracted knowledge under source/")
-            if not hash_ok:
-                missing.append("a real sha256 content hash")
-            problems.append(f"{source_id} needs {', '.join(missing)}")
-    if ready_count and not problems:
+    problems = source_errors(root, manifest, require_nonempty=True)
+    if not problems:
         return []
+    if mode in RESEARCH_MODES and not manifest.get("sources"):
+        plan = _read_yaml(root / ".work" / "orchestration" / "run-plan.yaml")
+        scouts = [
+            item for item in plan.get("task_graph", [])
+            if isinstance(item, dict) and item.get("role") == "source-scout"
+        ] if isinstance(plan.get("task_graph"), list) else []
+        if not scouts:
+            return [requirement(
+                "sources.discovery_plan_missing",
+                "No registered source or delegated source-discovery task exists.",
+                workflow="research-topic.md",
+                action="Compile create_source_discovery_plan.py, compile TASK-SOURCE-SCOUT context, validate the plan, and dispatch only that ready task.",
+                artifacts=[".work/orchestration/run-plan.yaml", "source-manifest.yaml"],
+            )]
+        unfinished = [str(item.get("task_id")) for item in scouts if item.get("status") not in SUBMITTED_STATES]
+        if unfinished:
+            return [requirement(
+                "sources.discovery_unfinished",
+                "Delegated source discovery is unfinished: " + ", ".join(unfinished),
+                workflow="research-topic.md",
+                action="Compile or dispatch the returned source-scout task, route its completion, and keep the same run.",
+                artifacts=[".work/orchestration/run-plan.yaml"],
+            )]
+        ledger = _read_json(root / str(scouts[0].get("output_path", "")))
+        if not isinstance(ledger.get("candidates"), list) or not ledger.get("candidates"):
+            return [requirement(
+                "sources.discovery_no_candidates",
+                "Delegated source discovery found no retainable candidates within the approved scope and budget.",
+                workflow="research-topic.md",
+                action="Ask the learner to supply a source, approve a bounded source-policy expansion, or accept DRAFT_UNVERIFIED.",
+                user_input_required=True,
+                artifacts=[str(scouts[0].get("output_path", ""))],
+            )]
+        return [requirement(
+            "sources.candidates_unregistered",
+            "Source discovery finished, but no retained candidate has been extracted and registered.",
+            workflow="research-topic.md",
+            action="Review the accepted source-candidate ledger, extract retained candidates into source/SRC-NNN.md, and register each with register_source.py.",
+            artifacts=[str(scouts[0].get("output_path", "")), "source-manifest.yaml", "source/"],
+        )]
     return [requirement(
-        "sources.not_ready",
-        "; ".join(problems) if problems else "No source is ready.",
+        "sources.none" if not manifest.get("sources") else "sources.not_ready",
+        "; ".join(problems),
         workflow="ingest-material.md",
-        action="Finish extraction and provenance for each retained source; keep originals under source/media and Markdown knowledge at source/ root.",
+        action="Extract retained sources, then register each one with register_source.py; keep originals under source/media and Markdown knowledge at source/ root.",
+        user_input_required=mode not in RESEARCH_MODES and not manifest.get("sources"),
         artifacts=["source-manifest.yaml", "source/"],
     )]
 
@@ -164,11 +173,19 @@ def gate_requirements(root: Path, target: str) -> list[dict[str, Any]]:
                     user_input_required=True,
                     artifacts=["progress/calibration.json"],
                 ))
-        approval = study.get("scope_approval")
-        if not isinstance(approval, dict) or approval.get("status") != "approved":
+        approval = study.get("learning_contract")
+        if (
+            not isinstance(approval, dict)
+            or approval.get("status") != "approved"
+            or not str(approval.get("goal") or "").strip()
+            or not isinstance(approval.get("accepted_branches"), list)
+            or not isinstance(approval.get("excluded"), list)
+            or not isinstance(approval.get("source_limit"), int)
+            or not isinstance(approval.get("research_workers"), int)
+        ):
             result.append(requirement(
                 "scope.approval_missing",
-                "The learner-approved scope, source limit, and worker budget are not recorded.",
+                "The canonical learner-approved goal, branches, exclusions, source limit, and worker budget are not recorded.",
                 workflow="intake-and-scope.md",
                 action="Present the scope and topology card; after explicit approval, record it with record_scope_approval.py.",
                 user_input_required=True,
@@ -191,13 +208,23 @@ def gate_requirements(root: Path, target: str) -> list[dict[str, Any]]:
                 action="Compile the approved plan with create_research_plan.py, validate it, and dispatch only TASK-MAP.",
                 artifacts=[".work/orchestration/run-plan.yaml"],
             )]
-        unfinished = [str(task.get("task_id")) for task in mapper_tasks if task.get("status") not in SUBMITTED_STATES]
+        unfinished = [str(task.get("task_id")) for task in mapper_tasks if task.get("status") not in {"approved", "merged"}]
         if unfinished:
             return [requirement(
                 "corpus.mapper_unfinished",
-                "Corpus mapping is unfinished: " + ", ".join(unfinished),
+                "Corpus mapping has not been accepted and frozen: " + ", ".join(unfinished),
                 workflow="orchestrate-research.md",
-                action="Run the ready corpus-mapper task, route its completion envelope, update its observable status, and rerun reconciliation.",
+                action="Run the ready corpus-mapper task, route its completion envelope, review it, and freeze it with freeze_corpus_map.py.",
+                artifacts=[".work/orchestration/run-plan.yaml"],
+            )]
+        frozen = plan.get("frozen_corpus_map_path")
+        frozen_path = root / str(frozen or "")
+        if not frozen or not frozen_path.is_file() or frozen_path.is_symlink():
+            return [requirement(
+                "corpus.map_not_frozen",
+                "The accepted corpus map has not been frozen into the active run.",
+                workflow="orchestrate-research.md",
+                action="Run freeze_corpus_map.py after accepting TASK-MAP; do not create a replacement run.",
                 artifacts=[".work/orchestration/run-plan.yaml"],
             )]
         return []

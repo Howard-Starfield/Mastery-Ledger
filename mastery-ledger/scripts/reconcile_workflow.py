@@ -162,7 +162,6 @@ def reconcile(root: Path, target: str, *, max_same_blocker: int) -> tuple[dict[s
                 sys.executable,
                 str(Path(__file__).resolve()),
                 str(root),
-                target,
                 "--json",
                 "--max-same-blocker",
                 str(max_same_blocker),
@@ -174,14 +173,20 @@ def reconcile(root: Path, target: str, *, max_same_blocker: int) -> tuple[dict[s
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("course_root", type=Path)
-    parser.add_argument("target_state")
+    parser.add_argument("target_state", nargs="?", help="Defaults to study.yaml workflow_target")
     parser.add_argument("--json", action="store_true", dest="as_json")
     parser.add_argument("--max-same-blocker", type=int, default=3)
     args = parser.parse_args()
     if not 2 <= args.max_same_blocker <= 10:
         parser.error("--max-same-blocker must be 2-10")
     try:
-        payload, return_code = reconcile(args.course_root.resolve(), args.target_state, max_same_blocker=args.max_same_blocker)
+        root = args.course_root.resolve()
+        target = args.target_state
+        if target is None:
+            target = str(_read_study(root).get("workflow_target") or "").strip()
+            if not target:
+                parser.error("No target supplied and study.yaml has no workflow_target")
+        payload, return_code = reconcile(root, target, max_same_blocker=args.max_same_blocker)
     except ValueError as error:
         parser.error(str(error))
     if args.as_json:
