@@ -3,12 +3,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { applicationApi, type DashboardExam, type DashboardResult } from './api'
 import CurveSettings from './CurveSettings'
 import ExamRunner from './ExamRunner'
+import StudyReader from './StudyReader'
 
 type DashboardProps = {
   workspaceName: string
 }
 
 const navItems = [
+  { label: 'Study', icon: 'book', action: 'study' },
   { label: 'Exams', icon: 'paper', action: 'exams' },
   { label: 'Due review', icon: 'clock', action: 'review' },
   { label: 'Review curve', icon: 'grid', action: 'curve' },
@@ -16,6 +18,7 @@ const navItems = [
 
 function Icon({ name }: { name: string }) {
   const paths: Record<string, React.ReactNode> = {
+    book: <><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v17H7.5A3.5 3.5 0 0 0 4 22z" /><path d="M20 5.5A3.5 3.5 0 0 0 16.5 2H13v17h3.5A3.5 3.5 0 0 1 20 22z" /></>,
     grid: <><rect x="3" y="3" width="6" height="6" /><rect x="15" y="3" width="6" height="6" /><rect x="3" y="15" width="6" height="6" /><rect x="15" y="15" width="6" height="6" /></>,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
     paper: <><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v5h4M9 12h7M9 16h7" /></>,
@@ -60,6 +63,8 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [activeExam, setActiveExam] = useState<DashboardExam | null>(null)
   const [activeReview, setActiveReview] = useState(false)
   const [curveSettingsOpen, setCurveSettingsOpen] = useState(false)
+  const [activeScreen, setActiveScreen] = useState<'study' | 'exams'>('exams')
+  const [studyRefreshToken, setStudyRefreshToken] = useState(0)
 
   const refresh = () => {
     setLoading(true)
@@ -98,8 +103,8 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
           <span>ML</span>
           <strong>Mastery Ledger</strong>
         </a>
-        <div className="workspace-crumb"><span>Workspace</span><b>/</b><strong>{data?.workspace.name ?? workspaceName}</strong></div>
-        <button className="topbar-action" type="button" onClick={refresh} disabled={loading}>
+        <div className="workspace-crumb"><span>Workspace</span><b>/</b><strong>{data?.workspace.name ?? workspaceName}</strong>{activeScreen === 'study' && <><b>/</b><span>Study</span></>}</div>
+        <button className="topbar-action" type="button" onClick={() => { refresh(); if (activeScreen === 'study') setStudyRefreshToken((value) => value + 1) }} disabled={loading}>
           <span className={loading ? 'refresh-glyph is-spinning' : 'refresh-glyph'}>↻</span>
           {loading ? 'Scanning' : 'Rescan'}
         </button>
@@ -111,9 +116,11 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
             <button
               key={item.label}
               type="button"
-              className={item.action === 'exams' ? 'is-active' : ''}
+              className={item.action === activeScreen ? 'is-active' : ''}
               disabled={item.action === 'review' && !data?.due_now}
               onClick={() => {
+                if (item.action === 'study') setActiveScreen('study')
+                if (item.action === 'exams') setActiveScreen('exams')
                 if (item.action === 'review') setActiveReview(true)
                 if (item.action === 'curve') setCurveSettingsOpen(true)
               }}
@@ -130,7 +137,8 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
         </div>
       </aside>
 
-      <section className="ledger-main">
+      {activeScreen === 'study' ? <StudyReader refreshToken={studyRefreshToken} /> : <>
+        <section className="ledger-main">
         <header className="dashboard-heading">
           <div>
             <p className="kicker">Exam ledger / today</p>
@@ -188,9 +196,9 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
             )) : <div className="course-empty"><strong>No course folders discovered.</strong><span>Create a course through the Mastery Ledger skill, then rescan this workspace.</span></div>}
           </div>
         </section>
-      </section>
+        </section>
 
-      <aside className="curve-rail">
+        <aside className="curve-rail">
         <header><p className="kicker">Long-term record</p><h2>Ownership curve</h2><p>One transparent ladder, from first recall to ten-year maintenance.</p></header>
         <div className="curve-stages">
           {data?.ownership_curve.map((stage) => (
@@ -202,7 +210,8 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
         <div className="curve-note"><span>∞</span><p><strong>The curve is the goal.</strong> Correct due answers move one rung. A lapse returns the question to day one.</p></div>
         <button type="button" className="curve-edit" onClick={() => setCurveSettingsOpen(true)}>Edit curve in settings</button>
         {Boolean(data?.warnings.length) && <details className="scan-warnings"><summary>{data?.warnings.length} scan warning{data?.warnings.length === 1 ? '' : 's'}</summary>{data?.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>}
-      </aside>
+        </aside>
+      </>}
 
       {selectedExam && (
         <div className="exam-sheet-backdrop" role="presentation" onMouseDown={() => setSelectedExam(null)}>

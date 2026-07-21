@@ -9,7 +9,7 @@ Mastery Ledger has two cooperating but independently useful parts:
 | Part | Owns | Must not own |
 | --- | --- | --- |
 | Codex skill | learning intake, source acquisition, extraction, transcription, research, evidence review, course compilation, wiki files, question banks, and ready-exam generation | exam attempts, learner scheduling, application registry |
-| Offline application | workspace registration, ready-exam discovery and playback, attempts, progress, due reviews, and review-curve settings | source ingestion, research, course writing, wiki authoring, question generation, or mutation of generated exams |
+| Offline application | workspace registration, read-only playback of published lessons, ready-exam discovery and playback, attempts, progress, due reviews, and review-curve settings | source ingestion, research, course or lesson writing, wiki authoring, question generation, or mutation of generated exams |
 
 The application may be installed after a course is generated. A missing application never downgrades course building to provisional chat.
 
@@ -107,6 +107,8 @@ If independent workers are unavailable, preserve provisional material under `.wo
 - Raw or faithful extracted knowledge stays under `source/`.
 - The planned Markdown wiki catalog uses a global `index.md` and per-course `wiki/index.md`; migration from the current portable wiki format remains a separate implementation slice.
 - Each core chapter contains a readable lesson and exactly ten assessment items: eight concise standalone multiple-choice questions and two short passage-based multiple-choice questions.
+- The application Study tab lists only `learning_active` courses and reads chapter paths from the validated `question-bank-v2` catalog.
+- Study lessons have `Read` and `Raw` views. Read mode renders Markdown and embedded raw HTML inside a sandboxed document; Raw mode shows the exact stored source as inert text. Both views are read-only, and active content cannot run in the application shell.
 - Every published question has four options, one answer key, a supported explanation, misconception-based distractor rationales, objective and concept IDs, and canonical source references.
 - Only independently validated questions enter a ready exam.
 
@@ -154,7 +156,7 @@ Do not reintroduce these without a new approved decision:
 
 - application Source Inbox;
 - application ingestion workers or source job queue;
-- application Knowledge Wiki or Evidence Activity screens;
+- application Knowledge Wiki or Evidence Activity screens; the read-only Study lesson reader is not a wiki authoring or evidence interface;
 - source-processing or privacy mode in application onboarding;
 - application-owned PDF, DOCX, video, subtitle, or ASR extraction;
 - the claim that the skill is merely an application adapter;

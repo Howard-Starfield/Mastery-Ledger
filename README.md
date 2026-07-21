@@ -57,7 +57,7 @@ Mastery Ledger has two parts.
 | Part | Job | Writes |
 | --- | --- | --- |
 | Codex skill | Reads sources, runs research, checks evidence, writes lessons, and builds exams | Course files inside the learner's workspace |
-| Local app | Finds ready exams, runs practice sessions, scores answers, and schedules review | Attempts, progress, review dates, and local settings |
+| Local app | Reads published lessons, finds ready exams, runs practice sessions, scores answers, and schedules review | Attempts, progress, review dates, and local settings |
 
 The app does not browse the web, download video, transcribe audio, write lessons, or generate questions. The skill does not own the exam screen or learner history.
 
@@ -69,7 +69,8 @@ flowchart LR
     Course --> Notes["Source notes and evidence"]
     Course --> Lessons["Lessons and wiki"]
     Course --> Bank["Question bank and ready exam"]
-    Bank --> App["Local exam app"]
+    Lessons --> App["Local study and exam app"]
+    Bank --> App
     Learner --> App
     App --> History["Attempts, progress, and review dates"]
     History --> Course
@@ -160,9 +161,11 @@ The learner sees the finished course. Reviewers can inspect the work behind it.
 
 Logs record observable work. They do not record hidden reasoning.
 
-## How practice works
+The app's `Study` tab reads only lessons from courses in `learning_active`. `Read` mode renders Markdown and embedded HTML in an isolated read-only document. `Raw` mode displays the exact Markdown and HTML source without rendering it. The app never edits either form.
 
-The app reads a ready `exam.json` and shows one question at a time.
+## How reading and practice work
+
+The app reads validated chapter lessons and ready `exam.json` files. Lessons remain read-only; practice shows one question at a time.
 
 ```mermaid
 flowchart TD
@@ -201,7 +204,7 @@ Set-Location Mastery-Ledger
 Install the local exam app:
 
 ```powershell
-uv tool install . --force
+uv tool install . --force --no-cache
 mastery-ledger doctor --json
 mastery-ledger onboard --open --json
 ```
@@ -228,7 +231,8 @@ The app and skill are separate installs. Update both:
 ```powershell
 Set-Location Mastery-Ledger
 git pull --ff-only
-uv tool install . --force
+mastery-ledger stop --json
+uv tool install . --force --no-cache
 npx.cmd skills update mastery-ledger -g -y
 mastery-ledger doctor --json
 ```
@@ -236,7 +240,8 @@ mastery-ledger doctor --json
 If you edit the Python app in the clone, use an editable install:
 
 ```powershell
-uv tool install --editable . --force
+mastery-ledger stop --json
+uv tool install --editable . --force --no-cache
 ```
 
 Changes under `src/mastery_ledger/` then apply without another install. Frontend changes still require a new web build.

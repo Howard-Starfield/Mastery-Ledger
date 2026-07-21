@@ -10,7 +10,7 @@ from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from mastery_ledger.config import bundled_web_dir, default_workspace_path
+from mastery_ledger.config import bundled_web_dir, default_workspace_path, runtime_signature
 from mastery_ledger.dashboard import build_dashboard
 from mastery_ledger.database import (
     DatabaseReadError,
@@ -41,6 +41,8 @@ from mastery_ledger.models import (
     QuestionSubmissionRequest,
     ReviewCurveUpdateRequest,
     ReviewCurveUpdateResult,
+    StudyLessonResult,
+    StudyLibraryResult,
     WorkspaceState,
     WorkspaceRepairRequest,
     WorkspaceRepairResult,
@@ -55,6 +57,7 @@ from mastery_ledger.settings_service import (
     application_settings,
     update_review_curve,
 )
+from mastery_ledger.study_service import StudyMaterialNotFoundError, study_lesson, study_library
 SESSION_COOKIE = "mastery_ledger_session"
 
 
@@ -67,6 +70,7 @@ def create_app(
     token = session_token or os.environ.get("MASTERY_LEDGER_SESSION_TOKEN") or secrets.token_urlsafe(32)
     frontend = web_dir or bundled_web_dir()
     exam_sessions = ExamSessionStore()
+    process_signature = runtime_signature()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -88,7 +92,12 @@ def create_app(
 
     @app.get("/api/v1/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "schema_version": "health-v1", "application": "mastery-ledger"}
+        return {
+            "status": "ok",
+            "schema_version": "health-v1",
+            "application": "mastery-ledger",
+            "runtime_signature": process_signature,
+        }
 
     @app.get("/api/v1/status", response_model=DoctorResult, dependencies=[Depends(require_session)])
     def application_status() -> DoctorResult:
@@ -112,6 +121,25 @@ def create_app(
                 detail="Complete onboarding before starting an exam.",
             )
         return doctor.active_workspace
+
+    @app.get(
+        "/api/v1/study",
+        response_model=StudyLibraryResult,
+        dependencies=[Depends(require_session)],
+    )
+    def study_materials() -> StudyLibraryResult:
+        return study_library(ready_workspace())
+
+    @app.get(
+        "/api/v1/study/{course_id}/chapters/{chapter_id}",
+        response_model=StudyLessonResult,
+        dependencies=[Depends(require_session)],
+    )
+    def chapter_lesson(course_id: str, chapter_id: str) -> StudyLessonResult:
+        try:
+            return study_lesson(ready_workspace(), course_id, chapter_id)
+        except StudyMaterialNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 
     @app.get(
         "/api/v1/settings",

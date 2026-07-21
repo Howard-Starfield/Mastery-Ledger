@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
 from pathlib import Path
@@ -39,3 +40,20 @@ def default_workspace_path() -> Path:
 
 def bundled_web_dir() -> Path:
     return Path(__file__).resolve().parent / "web"
+
+
+def runtime_signature() -> str:
+    """Identify the installed backend and bundled frontend served by this process."""
+    package_root = Path(__file__).resolve().parent
+    digest = hashlib.sha256()
+    included_suffixes = {".css", ".html", ".js", ".py"}
+    for path in sorted(
+        candidate
+        for candidate in package_root.rglob("*")
+        if candidate.is_file() and candidate.suffix in included_suffixes
+    ):
+        digest.update(path.relative_to(package_root).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()[:16]

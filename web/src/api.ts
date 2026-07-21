@@ -93,6 +93,40 @@ export interface DashboardResult {
   warnings: string[]
 }
 
+export interface StudyChapter {
+  chapter_id: string
+  title: string
+  chapter_class: string
+  lesson_path: string
+  word_count: number
+}
+
+export interface StudyCourse {
+  course_id: string
+  title: string
+  updated_at: string | null
+  chapters: StudyChapter[]
+}
+
+export interface StudyLibraryResult {
+  schema_version: 'study-library-v1'
+  workspace: OnboardingResult['workspace']
+  courses: StudyCourse[]
+  warnings: string[]
+}
+
+export interface StudyLessonResult {
+  schema_version: 'study-lesson-v1'
+  course_id: string
+  course_title: string
+  chapter_id: string
+  title: string
+  lesson_path: string
+  format: 'markdown'
+  content: string
+  word_count: number
+}
+
 export interface ReviewCurveProfile {
   curve_id: string
   version: number
@@ -242,6 +276,11 @@ export const onboardingApi = {
 export const applicationApi = {
   status: () => request<ApplicationStatus>('/api/v1/status'),
   dashboard: () => request<DashboardResult>('/api/v1/dashboard'),
+  studyLibrary: () => request<StudyLibraryResult>('/api/v1/study'),
+  studyLesson: (courseId: string, chapterId: string) =>
+    request<StudyLessonResult>(
+      `/api/v1/study/${encodeURIComponent(courseId)}/chapters/${encodeURIComponent(chapterId)}`,
+    ),
   settings: () => request<ApplicationSettings>('/api/v1/settings'),
   updateReviewCurve: (payload: ReviewCurveUpdatePayload) =>
     request<ReviewCurveUpdateResult>('/api/v1/settings/review-curve', {

@@ -188,6 +188,40 @@ class DashboardResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class StudyChapter(BaseModel):
+    chapter_id: str
+    title: str
+    chapter_class: str
+    lesson_path: str
+    word_count: int = Field(ge=0)
+
+
+class StudyCourse(BaseModel):
+    course_id: str
+    title: str
+    updated_at: str | None = None
+    chapters: list[StudyChapter] = Field(default_factory=list)
+
+
+class StudyLibraryResult(BaseModel):
+    schema_version: Literal["study-library-v1"] = "study-library-v1"
+    workspace: WorkspaceState
+    courses: list[StudyCourse] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class StudyLessonResult(BaseModel):
+    schema_version: Literal["study-lesson-v1"] = "study-lesson-v1"
+    course_id: str
+    course_title: str
+    chapter_id: str
+    title: str
+    lesson_path: str
+    format: Literal["markdown"] = "markdown"
+    content: str
+    word_count: int = Field(ge=0)
+
+
 class ExamOption(BaseModel):
     option_id: str = Field(min_length=1, max_length=24)
     text: str = Field(min_length=1, max_length=10_000)

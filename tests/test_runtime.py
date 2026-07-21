@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from mastery_ledger.app import create_app
 from mastery_ledger import cli
 from mastery_ledger.cli import main
-from mastery_ledger.config import database_path
+from mastery_ledger.config import database_path, runtime_signature
 from mastery_ledger.database import initialize_database
 from mastery_ledger.models import FolderPickerResult
 from mastery_ledger.runtime import build_doctor_result, validate_workspace
@@ -205,6 +205,7 @@ def test_health_identifies_the_local_application(runtime_home: Path, tmp_path: P
         "status": "ok",
         "schema_version": "health-v1",
         "application": "mastery-ledger",
+        "runtime_signature": runtime_signature(),
     }
 
 
@@ -267,6 +268,104 @@ def test_repair_cli_uses_fixed_workspace_repair_launcher(
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == "workspace-repair-launch-v1"
     assert payload["opened"] is True
+
+
+def test_launcher_reuses_server_with_matching_runtime(
+    runtime_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    existing = {
+        "schema_version": "server-state-v1",
+        "port": 8765,
+        "pid": 123,
+        "session_token": "existing-token",
+    }
+    stopped: list[dict[str, object]] = []
+    spawned: list[tuple[int, str]] = []
+    monkeypatch.setattr(cli, "_read_server_state", lambda: existing)
+    monkeypatch.setattr(cli, "runtime_signature", lambda: "current-build")
+    monkeypatch.setattr(
+        cli,
+        "_server_is_healthy",
+        lambda port, expected_signature=None: port == 8765
+        and expected_signature in {None, "current-build"},
+    )
+    monkeypatch.setattr(cli, "_stop_server", stopped.append)
+    monkeypatch.setattr(cli, "_spawn_server", lambda port, token: spawned.append((port, token)))
+
+    result = cli.launch_onboarding(open_browser=False)
+
+    assert result["status"] == "already_running"
+    assert stopped == []
+    assert spawned == []
+
+
+def test_launcher_replaces_server_with_stale_runtime(
+    runtime_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    existing = {
+        "schema_version": "server-state-v1",
+        "port": 8765,
+        "pid": 123,
+        "session_token": "old-token",
+    }
+    stopped: list[dict[str, object]] = []
+    written: list[dict[str, object]] = []
+
+    class SpawnedProcess:
+        pid = 456
+
+    monkeypatch.setattr(cli, "_read_server_state", lambda: existing)
+    monkeypatch.setattr(cli, "runtime_signature", lambda: "current-build")
+    monkeypatch.setattr(
+        cli,
+        "_server_is_healthy",
+        lambda port, expected_signature=None: port == 8765 and expected_signature is None,
+    )
+    monkeypatch.setattr(cli, "_stop_server", stopped.append)
+    monkeypatch.setattr(cli, "_free_loopback_port", lambda: 9876)
+    monkeypatch.setattr(cli.secrets, "token_urlsafe", lambda _: "new-token")
+    monkeypatch.setattr(cli, "_spawn_server", lambda port, token: SpawnedProcess())
+    monkeypatch.setattr(cli, "_write_server_state", written.append)
+    monkeypatch.setattr(cli, "_wait_for_server", lambda port, signature: True)
+
+    result = cli.launch_onboarding(open_browser=False)
+
+    assert result["status"] == "launched"
+    assert stopped == [existing]
+    assert written == [{
+        "schema_version": "server-state-v1",
+        "port": 9876,
+        "pid": 456,
+        "session_token": "new-token",
+        "runtime_signature": "current-build",
+    }]
+
+
+def test_stop_cli_stops_registered_application_and_removes_state(
+    runtime_home: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = {
+        "schema_version": "server-state-v1",
+        "port": 8765,
+        "pid": 123,
+        "session_token": "session-token",
+    }
+    health_checks = iter([True, False])
+    stopped: list[dict[str, object]] = []
+    monkeypatch.setattr(cli, "_read_server_state", lambda: state)
+    monkeypatch.setattr(cli, "_server_is_healthy", lambda port, expected_signature=None: next(health_checks))
+    monkeypatch.setattr(cli, "_stop_server", stopped.append)
+    runtime_home.mkdir(parents=True)
+    (runtime_home / "server.json").write_text("{}", encoding="utf-8")
+
+    assert main(["stop", "--json"]) == 0
+
+    assert json.loads(capsys.readouterr().out) == {
+        "schema_version": "application-stop-v1",
+        "status": "stopped",
+    }
+    assert stopped == [state]
+    assert not (runtime_home / "server.json").exists()
 
 
 def test_dashboard_discovers_ready_exams_and_review_queue(
@@ -360,6 +459,129 @@ def test_dashboard_discovers_ready_exams_and_review_queue(
     }
     assert [stage["interval_days"] for stage in payload["ownership_curve"]] == [1, 3, 7, 14]
     assert [stage["question_count"] for stage in payload["ownership_curve"]] == [1, 0, 1, 0]
+
+
+def test_study_library_exposes_only_published_lessons_and_preserves_raw_html(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    app = create_app(session_token="study-session", web_dir=tmp_path / "missing-web")
+    workspace = tmp_path / "StudyWorkspace"
+
+    with TestClient(app) as client:
+        client.get("/bootstrap/study-session", follow_redirects=False)
+        completion = client.post(
+            "/api/v1/onboarding/complete",
+            json={
+                "workspace_path": str(workspace),
+                "workspace_name": "Study workspace",
+                "language": "en",
+                "reduced_motion": False,
+                "review_intervals": [1, 3, 7],
+            },
+        )
+        assert completion.status_code == 200
+
+        published = workspace / "published-course"
+        (published / "lessons").mkdir(parents=True)
+        (published / "questions").mkdir()
+        (published / "study.yaml").write_text(
+            "study_id: COURSE-STUDY\ntitle: Systems Thinking\nworkflow_state: LEARNING_ACTIVE\nupdated_at: '2026-07-20T12:00:00Z'\n",
+            encoding="utf-8",
+        )
+        lesson_content = (
+            "# Feedback loops\n\n"
+            "A feedback loop returns part of a system's output as a later input. "
+            "Reinforcing loops amplify change, while balancing loops resist it.\n\n"
+            "<aside class=\"worked-example\"><strong>Worked example</strong>: "
+            "A thermostat compares measured temperature with its target.</aside>\n\n"
+            "<script>window.parent.document.body.dataset.compromised = 'true'</script>\n"
+        )
+        (published / "lessons" / "CH-001.md").write_text(lesson_content, encoding="utf-8")
+        (published / "questions" / "question-bank.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "question-bank-v2",
+                    "chapters": [
+                        {
+                            "chapter_id": "CH-001",
+                            "title": "Feedback loops",
+                            "class": "core",
+                            "lesson_path": "lessons/CH-001.md",
+                        }
+                    ],
+                    "questions": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        draft = workspace / "draft-course"
+        (draft / "lessons").mkdir(parents=True)
+        (draft / "questions").mkdir()
+        (draft / "study.yaml").write_text(
+            "study_id: COURSE-DRAFT\ntitle: Draft course\nworkflow_state: STUDY_PACK_DRAFTED\n",
+            encoding="utf-8",
+        )
+        (draft / "lessons" / "CH-DRAFT.md").write_text("# Draft\n\n" + "Draft material. " * 20, encoding="utf-8")
+        (draft / "questions" / "question-bank.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "question-bank-v2",
+                    "chapters": [
+                        {
+                            "chapter_id": "CH-DRAFT",
+                            "title": "Draft",
+                            "class": "core",
+                            "lesson_path": "lessons/CH-DRAFT.md",
+                        }
+                    ],
+                    "questions": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        unsafe = workspace / "unsafe-course"
+        (unsafe / "lessons").mkdir(parents=True)
+        (unsafe / "questions").mkdir()
+        (unsafe / "study.yaml").write_text(
+            "study_id: COURSE-UNSAFE\ntitle: Unsafe course\nworkflow_state: LEARNING_ACTIVE\n",
+            encoding="utf-8",
+        )
+        (unsafe / "secret.md").write_text("# Secret\n\n" + "Outside lesson root. " * 20, encoding="utf-8")
+        (unsafe / "questions" / "question-bank.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "question-bank-v2",
+                    "chapters": [
+                        {
+                            "chapter_id": "CH-UNSAFE",
+                            "title": "Unsafe",
+                            "class": "core",
+                            "lesson_path": "lessons/../secret.md",
+                        }
+                    ],
+                    "questions": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        library = client.get("/api/v1/study")
+        assert library.status_code == 200
+        payload = library.json()
+        assert payload["schema_version"] == "study-library-v1"
+        assert [course["course_id"] for course in payload["courses"]] == ["COURSE-STUDY"]
+        assert payload["courses"][0]["chapters"][0]["lesson_path"] == "lessons/CH-001.md"
+        assert any("CH-UNSAFE" in warning for warning in payload["warnings"])
+
+        lesson = client.get("/api/v1/study/COURSE-STUDY/chapters/CH-001")
+        assert lesson.status_code == 200
+        assert lesson.json()["content"] == lesson_content
+        assert "<aside" in lesson.json()["content"]
+        assert "<script>" in lesson.json()["content"]
+        assert lesson.json()["word_count"] > 20
+        assert client.get("/api/v1/study/COURSE-DRAFT/chapters/CH-DRAFT").status_code == 404
 
 
 def test_dashboard_requires_completed_onboarding(runtime_home: Path, tmp_path: Path) -> None:
