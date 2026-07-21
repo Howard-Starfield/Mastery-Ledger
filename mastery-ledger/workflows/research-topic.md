@@ -40,7 +40,7 @@ Respect the approved source limit. Stop when objectives and prerequisites are ad
 
 Create a source manifest entry for every retained source through `register_source.py`. Workers submit claims through evidence packets, not prose-only summaries.
 
-For every retained source, create `source/SRC-NNN.md` containing the extracted knowledge and exact locators. Keep downloaded originals and media under `source/media/SRC-NNN/`. Set `knowledge_path` in the manifest and do not mark the source `ready` until the Markdown artifact exists and is non-empty.
+For every retained source, create `records/source/SRC-NNN.md` containing the extracted knowledge and exact locators. Keep downloaded originals and media under `records/source/media/SRC-NNN/`. Set `knowledge_path` in the manifest and do not mark the source `ready` until the Markdown artifact exists and is non-empty.
 
 ## Current and disputed material
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import yaml
 
+from course_paths import SOURCE_MANIFEST, relative_text
 from record_action import append_event
 from source_registry import atomic_manifest, load_manifest, safe_knowledge_path, sha256_file, source_errors
 
@@ -39,7 +40,7 @@ def main() -> int:
     root = args.course_root.resolve()
     knowledge = safe_knowledge_path(root, args.knowledge_path)
     if knowledge is None:
-        parser.error("--knowledge-path must identify non-empty Markdown under COURSE_ROOT/source")
+        parser.error("--knowledge-path must identify non-empty Markdown under COURSE_ROOT/records/source")
     manifest = load_manifest(root)
     sources = manifest["sources"]
     try:
@@ -90,7 +91,7 @@ def main() -> int:
         "actor": "main-agent",
         "status": "complete",
         "summary": f"Registered extracted source {args.source_id}.",
-        "artifacts": ["source-manifest.yaml", record["knowledge_path"]],
+        "artifacts": [relative_text(SOURCE_MANIFEST), record["knowledge_path"]],
         "decision": "retained",
         "justification": "The extracted Markdown and content hash passed the deterministic source gate.",
     })

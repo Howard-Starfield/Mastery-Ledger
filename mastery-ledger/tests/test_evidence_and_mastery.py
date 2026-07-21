@@ -13,6 +13,20 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def substantive_lesson() -> str:
+    template = (ROOT / "assets" / "lesson.md").read_text(encoding="utf-8")
+    template = template.replace("estimated_minutes: 0", "estimated_minutes: 20")
+    filler = "The learner follows the mechanism, compares alternatives, checks assumptions, and applies the supported idea to a concrete case. " * 38
+    return template.replace("Teach definitions, mechanisms, relationships, and consequences in progressive prose. Bind factual claims to structured frontmatter references using markers such as `[^REF-001]`.", filler).replace(
+        "Model the complete reasoning or procedure step by step.", filler
+    ).replace("Apply the idea to a transfer case, comparison, or counterexample.", filler).replace(
+        "Explain at least one plausible wrong model and why it fails.", filler[:900]
+    ).replace("State boundaries, disagreements, and uncovered gaps.", filler[:900]).replace(
+        "Include 2-4 ungraded recall, explanation, comparison, or prediction checks.",
+        "- Recall the central mechanism.\n- Compare it with a misconception.\n- Predict a transfer case."
+    )
+
+
 def load_module(name: str, relative: str):
     path = ROOT / relative
     scripts = str(ROOT / "scripts")
@@ -191,7 +205,7 @@ class EvidenceAndMasteryTests(unittest.TestCase):
         ]
         payload = {
             "source_ref_schema": "source-ref-v1",
-            "chapters": [{"chapter_id": "CH-1", "title": "Core", "class": "core", "lesson_path": "lessons/CH-1.md"}],
+            "chapters": [{"chapter_id": "CH-1", "title": "Core", "class": "core", "question_tier": "standard", "lesson_path": "lessons/CH-1.md"}],
             "questions": questions,
         }
         errors, _ = tool.validate_question_bank(payload, source_ids={"SRC-1"}, concept_ids={"concept-a"}, publication=True)
@@ -206,6 +220,35 @@ class EvidenceAndMasteryTests(unittest.TestCase):
         legacy["distractors"] = ["First misconception", "Adjacent concept", "Overgeneralized claim"]
         errors, _ = tool.validate_question_bank({"source_ref_schema": "source-ref-v1", "questions": [legacy]}, source_ids={"SRC-1"}, concept_ids={"concept-a"})
         self.assertTrue(any("exactly four options" in error for error in errors))
+
+    def test_question_bank_accepts_only_declared_expanded_and_large_tiers(self) -> None:
+        tool = load_module("validate_study_pack_tiers", "scripts/validate_study_pack.py")
+        for tier, total, standalone in (("expanded", 15, 12), ("large", 20, 16)):
+            questions = [
+                self.canonical_question(
+                    f"Q-{tier}-{index:02d}",
+                    "CH-1",
+                    "standalone_mcq" if index <= standalone else "passage_mcq",
+                )
+                for index in range(1, total + 1)
+            ]
+            payload = {
+                "source_ref_schema": "source-ref-v1",
+                "chapters": [{
+                    "chapter_id": "CH-1",
+                    "title": "Tiered chapter",
+                    "question_tier": tier,
+                    "lesson_path": "lessons/CH-1.md",
+                }],
+                "questions": questions,
+            }
+            errors, _ = tool.validate_question_bank(
+                payload,
+                source_ids={"SRC-1"},
+                concept_ids={"concept-a"},
+                publication=True,
+            )
+            self.assertEqual([], errors, tier)
 
     def test_publication_gate_rejects_hollow_learning_active_course(self) -> None:
         tool = load_module("validate_study_pack_regression", "scripts/validate_study_pack.py")
@@ -223,7 +266,7 @@ class EvidenceAndMasteryTests(unittest.TestCase):
             study["workflow_state"] = "LEARNING_ACTIVE"
             study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
             errors, _ = tool.validate_workspace(course, publication=True)
-            self.assertTrue(any("non-empty orchestration task graph" in error for error in errors))
+            self.assertTrue(any("accepted-worker receipts" in error for error in errors))
             self.assertTrue(any("action log" in error for error in errors))
             self.assertTrue(any("ready exam" in error for error in errors))
             self.assertTrue(any("at least one source" in error for error in errors))
@@ -270,13 +313,12 @@ class EvidenceAndMasteryTests(unittest.TestCase):
             study["mode"] = "provided-material-only"
             study["workflow_state"] = "EVIDENCE_APPROVED"
             study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
-            (course_root / "evidence" / "approved-claims.json").write_text(
+            (course_root / "records" / "evidence" / "approved-claims.json").write_text(
                 json.dumps({"schema_version": "approved-claims-v1", "claims": [{"claim_id": "CLM-001", "claim": "Approved claim."}]}) + "\n",
                 encoding="utf-8",
             )
-            substantive = "# Draft\n\n" + ("Substantive source-grounded draft material. " * 4) + "\n"
-            (course_root / "study-guide.md").write_text(substantive, encoding="utf-8")
-            (course_root / "concept-map.md").write_text(substantive, encoding="utf-8")
+            (course_root / "index.md").write_text("# Course\n\n" + ("Substantive course map. " * 20), encoding="utf-8")
+            (course_root / "lessons" / "CH-001.md").write_text(substantive_lesson(), encoding="utf-8")
             subprocess.run(
                 [sys.executable, str(ROOT / "scripts" / "create_assessment_plan.py"), str(course_root), "--authorized"],
                 check=True,

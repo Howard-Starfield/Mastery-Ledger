@@ -13,10 +13,10 @@ Turn supplied files, an existing course folder, or an authorized local corpus in
 
 ## Source manifest first
 
-Initialization deliberately creates `source-manifest.yaml` with `sources: []`. A sample source is never a ready source. Extract each source into a non-empty `source/SRC-NNN.md`, then register it atomically with:
+Initialization deliberately creates `records/source-manifest.yaml` with `sources: []`. A sample source is never a ready source. Extract each source into a non-empty `records/source/SRC-NNN.md`, then register it atomically with:
 
 ```bash
-python scripts/register_source.py COURSE_ROOT --source-id SRC-NNN --title "TITLE" --source-type "TYPE" --knowledge-path source/SRC-NNN.md --location "URL_OR_PATH"
+python scripts/register_source.py COURSE_ROOT --source-id SRC-NNN --title "TITLE" --source-type "TYPE" --knowledge-path records/source/SRC-NNN.md --location "URL_OR_PATH"
 ```
 
 Do not hand-edit a source to `status: ready`; `register_source.py` computes the content hash, validates the entire manifest, and records the observable registration event. Assign stable source and item IDs. Record:

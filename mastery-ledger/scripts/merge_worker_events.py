@@ -12,6 +12,7 @@ from pathlib import Path
 import yaml
 
 from compile_worker_context import atomic_json, sha256_file
+from course_paths import EVENT_LOG
 from validate_orchestration import SUBMITTED_STATES, _safe_course_path, _worker_event_errors, validate_plan
 
 
@@ -63,7 +64,7 @@ def merge_events(root: Path, task_id: str) -> dict[str, object]:
             "idempotent": True,
         }
 
-    durable = root / "logs" / "events.jsonl"
+    durable = root / EVENT_LOG
     durable.parent.mkdir(parents=True, exist_ok=True)
     if durable.is_symlink():
         raise ValueError("Durable event log cannot be a symbolic link.")

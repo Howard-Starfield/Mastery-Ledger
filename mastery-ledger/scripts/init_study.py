@@ -11,6 +11,33 @@ import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from course_paths import (
+    APPROVED_CLAIMS,
+    ATTEMPTS,
+    CONTRADICTIONS,
+    COURSE_LAYOUT,
+    DRAFTS,
+    EVIDENCE,
+    EVENT_LOG,
+    EXAMS,
+    GAPS,
+    INDEX,
+    INGESTION,
+    LESSONS,
+    ORCHESTRATION,
+    PROGRESS,
+    QUESTIONS,
+    RECORDS,
+    RUNS,
+    SCRATCH,
+    SOURCE,
+    SOURCE_MANIFEST,
+    SOURCE_MEDIA,
+    STAGING,
+    VALIDATION,
+    layout_payload,
+    relative_text,
+)
 from record_action import append_event
 
 
@@ -41,34 +68,33 @@ def main() -> int:
 
     target.mkdir(parents=True, exist_ok=True)
     for directory in (
-        "source/media",
-        "lessons",
-        "wiki/pages",
-        "questions",
-        "progress",
-        "exams",
-        "attempts",
-        "logs",
-        "evidence",
-        ".work/ingestion",
-        ".work/orchestration",
-        ".work/runs",
-        ".work/drafts",
-        ".work/scratch",
+        SOURCE_MEDIA,
+        LESSONS,
+        QUESTIONS,
+        PROGRESS,
+        EXAMS,
+        ATTEMPTS,
+        EVENT_LOG.parent,
+        EVIDENCE,
+        VALIDATION,
+        INGESTION,
+        ORCHESTRATION,
+        RUNS,
+        STAGING,
+        DRAFTS,
+        SCRATCH,
     ):
         (target / directory).mkdir(parents=True, exist_ok=True)
 
     mapping = {
         "study.yaml": "study.yaml",
-        "source-manifest.yaml": "source-manifest.yaml",
-        "study-guide.md": "study-guide.md",
+        "source-manifest.yaml": relative_text(SOURCE_MANIFEST),
+        "index.md": relative_text(INDEX),
         "question-bank.json": "questions/question-bank.json",
         "question-bank.md": "questions/question-bank.md",
         "lesson.md": "lessons/CH-001.md",
-        "approved-claims.json": "evidence/approved-claims.json",
+        "approved-claims.json": relative_text(APPROVED_CLAIMS),
         "learner-progress.json": "progress/learner-progress.json",
-        "wiki.json": "wiki/wiki.json",
-        "wiki-page.md": "wiki/pages/concept-id.md",
         "run-plan.yaml": ".work/orchestration/run-plan.yaml",
         "task-brief.yaml": ".work/orchestration/task-template.yaml",
     }
@@ -78,33 +104,10 @@ def main() -> int:
             replace_tokens(text, study_id=study_id, title=args.title),
             encoding="utf-8",
         )
-    (target / "concept-map.md").write_text(f"# Concept map: {args.title}\n\n", encoding="utf-8")
-    (target / "glossary.md").write_text(f"# Glossary: {args.title}\n\n", encoding="utf-8")
-    (target / "evidence" / "contradictions.json").write_text("{\n  \"contradictions\": []\n}\n", encoding="utf-8")
-    (target / "evidence" / "gaps.json").write_text("{\n  \"gaps\": []\n}\n", encoding="utf-8")
-    (target / ".work" / "course-layout.json").write_text(
-        json.dumps(
-            {
-                "schema_version": "course-layout-v1",
-                "durable_roots": [
-                    "source",
-                    "lessons",
-                    "wiki",
-                    "questions",
-                    "progress",
-                    "exams",
-                    "attempts",
-                    "logs",
-                    "evidence",
-                ],
-                "disposable_root": ".work",
-                "worker_root_pattern": ".work/runs/<run-id>/tasks/<task-id>",
-                "canonical_event_log": "logs/events.jsonl",
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
+    (target / CONTRADICTIONS).write_text("{\n  \"contradictions\": []\n}\n", encoding="utf-8")
+    (target / GAPS).write_text("{\n  \"gaps\": []\n}\n", encoding="utf-8")
+    (target / COURSE_LAYOUT).write_text(
+        json.dumps(layout_payload(), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
     append_event(
@@ -114,7 +117,7 @@ def main() -> int:
             "actor": "initializer",
             "status": "complete",
             "summary": "Created the canonical course layout and empty learning artifacts.",
-            "artifacts": ["study.yaml", "source-manifest.yaml", ".work/course-layout.json"],
+            "artifacts": ["study.yaml", relative_text(SOURCE_MANIFEST), relative_text(COURSE_LAYOUT)],
             "justification": "Initialization creates structure only; substantive knowledge still requires evidence approval.",
         },
     )

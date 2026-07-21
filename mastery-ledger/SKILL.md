@@ -1,6 +1,6 @@
 ---
 name: mastery-ledger
-description: Build and maintain source-grounded learning courses from documents, websites, video, audio, or researched material; create a cited knowledge wiki and independently checked exam-style assessments; interpret learner results when supplied. Use when a learner asks to study, understand, research, ingest learning sources, generate an exam, revisit a course, or review prior results.
+description: Build and maintain source-grounded learning courses from documents, websites, video, audio, or researched material; create book-like lessons and independently checked exam-style assessments; interpret learner results when supplied. Use when a learner asks to study, understand, research, ingest learning sources, generate an exam, revisit a course, or review prior results.
 ---
 
 # Mastery Ledger
@@ -27,6 +27,7 @@ Build a source-grounded learning workspace before tutoring. The main agent owns 
 - Never edit `workflow_state` by hand. Drive every durable workflow target with `scripts/reconcile_workflow.py`.
 - Before the first durable course action, read [artifact lifecycle](references/artifact-lifecycle.md) and [event contract](references/event-contract.md) in full. These required contracts are not optional background.
 - Never dispatch a worker from a conversationally composed prompt. Compile and validate its role-specific context first; pass the generated dispatch message without substantive edits.
+- Treat `.work/` as disposable execution state. Keep learner artifacts at the course root and durable source, evidence, validation, and audit records under `records/`.
 - Read only the workflow and reference files required for the current phase.
 
 ## First-turn learning gate
@@ -44,6 +45,7 @@ Apply this gate before capability detection, workspace questions, browsing, file
 1. Complete the first-turn learning gate when it applies.
 2. Resolve a learner-approved course workspace. If the learner did not identify an existing course or workspace, ask once for the absolute parent directory before the first durable write. Never discover it through an application setting or database.
 3. Look for an existing `study.yaml` and resume it when the request belongs to that study.
+   If it exists but `layout_schema` is not `course-layout-v2`, read [artifact lifecycle](references/artifact-lifecycle.md), verify no unfinished run is active, and invoke `scripts/migrate_course_layout.py`; never approximate or partially copy the v2 paths.
    If an application-created course has `course.yaml` but no `study.yaml`, read [artifact lifecycle](references/artifact-lifecycle.md) and run the packaged `scripts/adopt_course.py`; never fill the layout manually.
 4. Detect only capabilities needed by the selected course operation: filesystem, web, PDF/media reading, scripts, persistent storage, workers, parallelism, and source-citation support. For workers, inspect direct tools and any available deferred tool catalog for names or descriptions such as `spawn`, `worker`, `subagent`, or equivalent. Declare workers unavailable only after that inspection finds no callable facility or an attempted call returns an unavailable error. Record the observable result, not a guessed Boolean in the run plan.
 5. Determine the mode: `provided-material-only`, `existing-library`, `local-media`, `topic-research`, or `hybrid`.
@@ -71,6 +73,7 @@ Require each worker to read its generated brief, context manifest, assigned cont
 - Video, audio, SRT, or VTT: additionally read [process video](workflows/process-video.md) and [video transcript contract](references/video-transcript-contract.md).
 - Topic requiring external research: read [research topic](workflows/research-topic.md), [source policy](references/source-policy.md), [agent roles](references/agent-roles.md), and [orchestrate research](workflows/orchestrate-research.md). Delegation is required for a publishable researched course.
 - Creating calibration, chapter questions, a question bank, or an exam: read [assessment contract](references/assessment-contract.md).
+- Drafting, revising, or validating a lesson: read [lesson contract](references/lesson-contract.md) in full and run `scripts/validate_lesson.py`; a chapter outline or short source summary is not a lesson.
 - Submitted worker evidence: read [verify evidence](workflows/verify-evidence.md) before synthesis.
 - Approved evidence ready: read [build study pack](workflows/build-study-pack.md).
 - Creating or consuming source manifests, evidence, questions, explanations, or exams: read [citation contract](references/citation-contract.md) and validate every source reference before publishing the artifact.
@@ -101,7 +104,7 @@ The main agent must:
 - synthesize approved evidence rather than concatenate reports;
 - keep learner-facing tutoring single-agent for continuity.
 
-For a single user-provided source in a provided-material mode, research workers are optional; a ready exam still requires an independent assessment validator. For `topic-research` and `hybrid`, require the source scout when no source is supplied, one isolated extractor per retained source, bounded concept-research workers, contradiction review, final citation verification, and assessment validation. If the required workers are unavailable, preserve drafts under `.work/`, set publication status to `DRAFT_UNVERIFIED`, and do not activate learning or mark an exam ready.
+For a provided-material course, do not spawn open-web research workers unless the learner authorizes expansion. Still require one bounded source-extractor task per retained source and a later citation-verifier task; when two or more sources are retained, require contradiction review before citation verification. For `topic-research` and `hybrid`, require the source scout when no source is supplied, one isolated extractor per retained source, bounded concept-research workers, contradiction review, final citation verification, and assessment validation. Every publishable chapter requires a `lesson-v1` book-like lesson and at least the standard 10-question tier. If the required workers are unavailable, preserve drafts under `.work/`, set publication status to `DRAFT_UNVERIFIED`, and do not activate learning or mark an exam ready.
 
 ## Completion gates
 
@@ -141,6 +144,7 @@ Use [quality rubric](references/quality-rubric.md), [topic splitting policy](ref
 - [Task and evidence contract](references/task-and-evidence-contract.md)
 - [Topic splitting policy](references/topic-splitting-policy.md)
 - [Pedagogy](references/pedagogy.md)
+- [Lesson contract](references/lesson-contract.md)
 - [Assessment contract](references/assessment-contract.md)
 - [Mastery model](references/mastery-model.md)
 - [Quality rubric](references/quality-rubric.md)

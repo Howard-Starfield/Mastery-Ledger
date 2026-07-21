@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Turn approved evidence into a coherent curriculum, concept map, glossary, and assessment bank.
+Turn approved evidence into a coherent learner-facing course, book-like lessons, and assessment bank.
 
 ## Main-agent synthesis
 
@@ -22,61 +22,30 @@ Do not concatenate worker reports.
 
 Create:
 
-- `study-guide.md`
+- `index.md`, a concise course map linking every chapter
 - one source-grounded `lessons/<chapter-id>.md` file for every declared chapter
-- `concept-map.md`
-- `glossary.md`
-- `wiki/wiki.json` and approved Markdown pages under `wiki/pages/`
 - `questions/question-bank.json`
 - `questions/question-bank.md`, generated from the JSON bank
 - `progress/learner-progress.json`
-- `evidence/contradictions.json`
-- `evidence/gaps.json`
-- `evidence/approved-claims.json`
+- `records/evidence/contradictions.json`
+- `records/evidence/gaps.json`
+- `records/evidence/approved-claims.json`
+- durable accepted-worker receipts under `records/evidence/validation/`
 - at least one `exams/<exam-id>/exam.json` for an exam-building run
 
 Use templates from `assets/`.
 
-Keep all drafts, worker reports, reviewer notes, temporary extraction, and scratch files under `.work/`. Only the main agent may promote approved wiki, evidence, question, exam, and learner-state artifacts into their canonical course folders.
+Keep all drafts, worker reports, reviewer notes, temporary extraction, and scratch files under `.work/`. Only the main agent may promote approved lessons, evidence, questions, exams, and learner-state artifacts into their canonical course folders. `records/` is durable and auditable; `.work/` is disposable after accepted receipts are recorded.
 
-## Study-guide shape
+## Lesson shape
 
-Include:
-
-1. learning outcome and assumptions;
-2. prerequisite check;
-3. concise map of the subject;
-4. essential understanding;
-5. working understanding;
-6. advanced understanding;
-7. optional deep dives;
-8. worked examples;
-9. common misconceptions;
-10. comparisons between confusing concepts;
-11. applications and limitations;
-12. unresolved or disputed questions;
-13. summary and suggested sequence;
-14. source IDs and precise locators.
-
-Label source facts, interpretation, inference, disputes, outdated claims, and material not covered by the supplied corpus.
-
-## Concept map
-
-Use stable concept IDs and explicit relations:
-
-- `prerequisite_of`
-- `supports`
-- `deep_dive_of`
-- `adjacent_to`
-- `example_of`
-
-Hard prerequisites require main-agent or user approval. LLM-proposed relationships remain provisional until approved.
+Read and follow [lesson contract](../references/lesson-contract.md). A standard lesson is 1,200-1,800 words; an expanded lesson is 1,800-2,500 words. It must teach in a deliberate sequence, include two worked examples, retrieval pauses, misconceptions, limitations, transfer, and precise citations. A raw extraction, outline, catalog entry, or compressed source summary does not satisfy this contract.
 
 ## Questions
 
 Each question must map to objectives, concepts, and canonical `source-ref-v1` objects from [citation contract](../references/citation-contract.md). Important concepts need recall and application questions. Explanations must address common wrong answers without exposing answers before an attempt.
 
-Follow [assessment contract](../references/assessment-contract.md) exactly. Core chapters contain 10 selectable items: 8 `standalone_mcq` and 2 `passage_mcq`. Short or optional chapters contain 5: 4 standalone and 1 passage. Use four options and exactly one correct option. After evidence approval, write substantive source-grounded `study-guide.md` and `concept-map.md`, then create a separate assessment run. Generate the Markdown review copy and build the ready exam only after independent assessment validation:
+Follow [assessment contract](../references/assessment-contract.md) exactly. Every chapter declares a question tier: standard 10 (8 standalone, 2 passage), expanded 15 (12/3), or large 20 (16/4). Use four options and exactly one correct option. After evidence approval, write and validate `index.md` and every lesson, then create a separate assessment run. Generate the Markdown review copy and build the ready exam only after independent assessment validation:
 
 ```bash
 python scripts/create_assessment_plan.py studies/my-study --authorized
@@ -85,7 +54,7 @@ python scripts/render_question_bank.py studies/my-study/questions/question-bank.
 python scripts/build_exam.py studies/my-study --exam-id EXAM-001 --title "Course exam" --ready
 ```
 
-`create_assessment_plan.py` requires `EVIDENCE_APPROVED` (or a later draft state), non-empty approved claims, substantive guide and concept map drafts, and a finished predecessor research run when one exists. It records that predecessor before activating the assessment plan. This deliberate phase boundary ensures rejected research never consumes assessment-generation or citation tokens.
+`create_assessment_plan.py` requires `EVIDENCE_APPROVED` (or a later draft state), non-empty approved claims, a substantive index, contract-valid lessons, and a finished predecessor evidence run when one exists. It records that predecessor before activating the assessment plan. This deliberate phase boundary ensures rejected evidence never consumes assessment-generation tokens.
 
 If validation identifies an invalid legacy or hand-authored active plan, do not edit that YAML. After showing the exact validation errors and obtaining learner approval to replace that run, invoke `create_assessment_plan.py --authorized --supersede-reason "<observable reason>"`. The compiler snapshots the rejected plan, creates a clean assessment run, and excludes the superseded plan from the publication chain.
 

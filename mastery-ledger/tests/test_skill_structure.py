@@ -34,13 +34,13 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "references" / "task-and-evidence-contract.md",
             ROOT / "references" / "topic-splitting-policy.md",
             ROOT / "references" / "pedagogy.md",
+            ROOT / "references" / "lesson-contract.md",
             ROOT / "references" / "assessment-contract.md",
             ROOT / "references" / "mastery-model.md",
             ROOT / "references" / "quality-rubric.md",
             ROOT / "references" / "runtime-portability.md",
             ROOT / "references" / "linkvault-connector.md",
-            ROOT / "assets" / "wiki.json",
-            ROOT / "assets" / "wiki-page.md",
+            ROOT / "assets" / "index.md",
             ROOT / "assets" / "completion-envelope.json",
             ROOT / "assets" / "exam.json",
             ROOT / "assets" / "question-bank.md",
@@ -59,6 +59,9 @@ class SkillStructureTests(unittest.TestCase):
             ROOT / "scripts" / "create_source_discovery_plan.py",
             ROOT / "scripts" / "merge_worker_events.py",
             ROOT / "scripts" / "adopt_course.py",
+            ROOT / "scripts" / "migrate_course_layout.py",
+            ROOT / "scripts" / "validate_lesson.py",
+            ROOT / "scripts" / "validation_receipts.py",
         ]
         missing = [str(path.relative_to(ROOT)) for path in required if not path.exists()]
         self.assertEqual([], missing, f"Missing required files: {missing}")
@@ -153,17 +156,16 @@ class SkillStructureTests(unittest.TestCase):
         self.assertNotIn("python-docx", "\n".join(package["project"]["dependencies"]))
 
     def test_course_initializer_uses_canonical_clean_layout(self) -> None:
-        content = (ROOT / "scripts" / "init_study.py").read_text(encoding="utf-8")
-        self.assertIn('"source/media"', content)
-        self.assertIn('"lessons"', content)
-        self.assertIn('"wiki/pages"', content)
-        self.assertIn('".work/runs"', content)
-        self.assertIn('"questions/question-bank.json"', content)
-        self.assertIn('"progress/learner-progress.json"', content)
-        self.assertIn('"questions/question-bank.md"', content)
-        self.assertIn('"evidence/approved-claims.json"', content)
-        self.assertNotIn('"source-notes"', content)
-        self.assertNotIn('"orchestration/tasks"', content)
+        content = (ROOT / "scripts" / "course_paths.py").read_text(encoding="utf-8")
+        self.assertIn('SOURCE_MEDIA = SOURCE / "media"', content)
+        self.assertIn('LESSONS = Path("lessons")', content)
+        self.assertIn('RUNS = WORK / "runs"', content)
+        self.assertIn('QUESTION_BANK = QUESTIONS / "question-bank.json"', content)
+        self.assertIn('PROGRESS = Path("progress")', content)
+        self.assertIn('QUESTION_BANK_REVIEW = QUESTIONS / "question-bank.md"', content)
+        self.assertIn('APPROVED_CLAIMS = EVIDENCE / "approved-claims.json"', content)
+        self.assertIn('RECORDS = Path("records")', content)
+        self.assertNotIn('Path("wiki")', content)
 
         self.assertTrue((ROOT / "scripts" / "create_assessment_plan.py").is_file())
 

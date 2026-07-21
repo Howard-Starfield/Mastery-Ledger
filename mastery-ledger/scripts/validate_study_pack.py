@@ -11,22 +11,35 @@ from typing import Any
 
 import yaml
 
+from course_paths import (
+    APPROVED_CLAIMS,
+    EVENT_LOG,
+    INDEX,
+    PROGRESS,
+    QUESTION_BANK,
+    QUESTION_BANK_REVIEW,
+    SOURCE,
+    SOURCE_MANIFEST,
+    relative_text,
+)
 from source_registry import sha256_file
 from validate_evidence import load_source_ids, validate_source_ref
-from validate_orchestration import SUBMITTED_STATES, validate_plan
+from validate_lesson import validate_lesson
+from validation_receipts import load_validation_receipts
 
 REQUIRED_FILES = [
     "study.yaml",
-    "source-manifest.yaml",
-    "study-guide.md",
-    "concept-map.md",
-    "glossary.md",
-    "wiki/wiki.json",
-    "questions/question-bank.json",
-    "progress/learner-progress.json",
+    relative_text(INDEX),
+    relative_text(SOURCE_MANIFEST),
+    relative_text(QUESTION_BANK),
+    relative_text(PROGRESS / "learner-progress.json"),
 ]
 QUESTION_TYPES = {"free-recall", "multiple-choice", "application", "calculation", "explain", "compare", "synthesis"}
-RELATION_TYPES = {"prerequisite_of", "supports", "deep_dive_of", "adjacent_to", "example_of", "related_to"}
+QUESTION_TIERS = {
+    "standard": (10, 8, 2),
+    "expanded": (15, 12, 3),
+    "large": (20, 16, 4),
+}
 
 
 def normalized(value: str) -> str:
@@ -176,14 +189,14 @@ def validate_question_bank(
                     errors.append(f"{prefix} must be an object")
                     continue
                 chapter_id = str(chapter.get("chapter_id", "")).strip()
-                chapter_class = chapter.get("class")
                 if not chapter_id or chapter_id in seen_chapters:
                     errors.append(f"{prefix}.chapter_id is missing or duplicated")
                     continue
                 seen_chapters.add(chapter_id)
-                expected = {"core": (10, 8, 2), "short": (5, 4, 1), "optional": (5, 4, 1)}.get(str(chapter_class))
+                tier = str(chapter.get("question_tier", "")).strip()
+                expected = QUESTION_TIERS.get(tier)
                 if expected is None:
-                    errors.append(f"{prefix}.class must be core, short, or optional")
+                    errors.append(f"{prefix}.question_tier must be one of {sorted(QUESTION_TIERS)}")
                     continue
                 chapter_questions = questions_by_chapter.get(chapter_id, [])
                 standalone = sum(item.get("format") == "standalone_mcq" for item in chapter_questions)
@@ -199,11 +212,11 @@ def validate_question_bank(
     return errors, warnings
 
 
-def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
+def _publication_errors(root: Path, source_ids: set[str], *, require_ready_exam: bool = True) -> list[str]:
     errors: list[str] = []
     study = yaml.safe_load((root / "study.yaml").read_text(encoding="utf-8"))
     research_mode = isinstance(study, dict) and study.get("mode") in {"topic-research", "hybrid"}
-    manifest = yaml.safe_load((root / "source-manifest.yaml").read_text(encoding="utf-8"))
+    manifest = yaml.safe_load((root / SOURCE_MANIFEST).read_text(encoding="utf-8"))
     sources = manifest.get("sources", []) if isinstance(manifest, dict) else []
     if not isinstance(sources, list) or not sources:
         errors.append("Publication requires at least one source")
@@ -219,134 +232,142 @@ def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
         if not re.fullmatch(r"sha256:[0-9a-fA-F]{64}", content_hash):
             errors.append(f"{prefix}.content_hash must be a real sha256 digest")
         knowledge_path = source.get("knowledge_path")
-        if not isinstance(knowledge_path, str) or not knowledge_path.startswith("source/") or not knowledge_path.endswith(".md"):
-            errors.append(f"{prefix}.knowledge_path must name a Markdown file under source/")
+        source_prefix = relative_text(SOURCE) + "/"
+        if not isinstance(knowledge_path, str) or not knowledge_path.startswith(source_prefix) or not knowledge_path.endswith(".md"):
+            errors.append(f"{prefix}.knowledge_path must name a Markdown file under {relative_text(SOURCE)}/")
             continue
         candidate = (root / knowledge_path).resolve(strict=False)
         try:
-            candidate.relative_to((root / "source").resolve())
+            candidate.relative_to((root / SOURCE).resolve())
         except ValueError:
-            errors.append(f"{prefix}.knowledge_path escapes source/")
+            errors.append(f"{prefix}.knowledge_path escapes {relative_text(SOURCE)}/")
         else:
             if not candidate.is_file() or candidate.is_symlink() or len(candidate.read_text(encoding="utf-8").strip()) < 20:
                 errors.append(f"{prefix}.knowledge_path must resolve to non-empty extracted knowledge")
             elif re.fullmatch(r"sha256:[0-9a-fA-F]{64}", content_hash) and sha256_file(candidate).casefold() != content_hash.casefold():
                 errors.append(f"{prefix}.content_hash does not match its extracted knowledge")
 
-    source_root = root / "source"
+    source_root = root / SOURCE
     if source_root.is_dir():
         for child in source_root.iterdir():
             if child.is_file() and child.suffix.casefold() != ".md":
-                errors.append(f"Only Markdown files may live at source/ root: {child.name}")
+                errors.append(f"Only Markdown files may live at {relative_text(SOURCE)}/ root: {child.name}")
             if child.is_dir() and child.name != "media":
-                errors.append(f"Only the media/ directory may live under source/: {child.name}")
+                errors.append(f"Only the media/ directory may live under {relative_text(SOURCE)}/: {child.name}")
 
-    log = root / "logs" / "events.jsonl"
+    log = root / EVENT_LOG
     if not log.is_file() or log.is_symlink() or not log.read_text(encoding="utf-8").strip():
-        errors.append("Publication requires a non-empty logs/events.jsonl action log")
+        errors.append(f"Publication requires a non-empty {relative_text(EVENT_LOG)} action log")
     else:
         substantive_events = 0
         for line_number, line in enumerate(log.read_text(encoding="utf-8").splitlines(), 1):
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
-                errors.append(f"logs/events.jsonl line {line_number} is invalid JSON")
+                errors.append(f"{relative_text(EVENT_LOG)} line {line_number} is invalid JSON")
                 continue
             required = {"event_id", "schema_version", "timestamp", "action", "actor", "status", "summary"}
             if not isinstance(event, dict) or event.get("schema_version") != "action-event-v1" or not required.issubset(event):
-                errors.append(f"logs/events.jsonl line {line_number} is not a complete action-event-v1")
+                errors.append(f"{relative_text(EVENT_LOG)} line {line_number} is not a complete action-event-v1")
             elif event.get("action") != "course.initialized":
                 substantive_events += 1
         if substantive_events == 0:
             errors.append("Publication requires an action log beyond the course initialization event")
 
-    plan_path = root / ".work" / "orchestration" / "run-plan.yaml"
-    if not plan_path.is_file():
-        errors.append("Publication requires .work/orchestration/run-plan.yaml")
-    else:
-        plan = yaml.safe_load(plan_path.read_text(encoding="utf-8"))
-        plans: list[dict] = []
-        seen_runs: set[str] = set()
-        cursor = plan
-        while isinstance(cursor, dict):
-            run_id = str(cursor.get("run_id") or "").strip()
-            if not run_id:
-                errors.append("Publication orchestration plan has no run_id")
-                break
-            if run_id in seen_runs:
-                errors.append(f"Publication orchestration predecessor cycle includes {run_id}")
-                break
-            seen_runs.add(run_id)
-            plans.append(cursor)
-            predecessor = str(cursor.get("predecessor_run_id") or "").strip()
-            if not predecessor:
-                break
-            predecessor_relation = str(cursor.get("predecessor_relation") or "").strip()
-            if predecessor_relation == "supersedes":
-                break
-            predecessor_path = root / ".work" / "runs" / predecessor / "run-plan.yaml"
-            if not predecessor_path.is_file() or predecessor_path.is_symlink():
-                errors.append(f"Publication orchestration predecessor is missing: {predecessor}")
-                break
-            try:
-                cursor = yaml.safe_load(predecessor_path.read_text(encoding="utf-8"))
-            except (OSError, UnicodeError, yaml.YAMLError):
-                errors.append(f"Publication orchestration predecessor is unreadable: {predecessor}")
-                break
-            if not isinstance(cursor, dict) or cursor.get("run_id") != predecessor:
-                errors.append(f"Publication orchestration predecessor identity is invalid: {predecessor}")
-                break
-
-        tasks = []
-        for chained_plan in plans:
-            plan_errors, _, _ = validate_plan(chained_plan, course_root=root)
-            errors.extend(plan_errors)
-            tasks.extend(chained_plan.get("task_graph", []) if isinstance(chained_plan.get("task_graph"), list) else [])
-        if not tasks:
-            errors.append("Publication requires a non-empty orchestration task graph")
-        roles = {str(task.get("role")) for task in tasks if isinstance(task, dict)}
-        required_roles = {"assessment-generator", "assessment-validator"}
-        if research_mode:
-            required_roles.update({"corpus-mapper", "source-extractor", "research-worker", "contradiction-reviewer", "citation-verifier"})
-        for role in sorted(required_roles - roles):
-            errors.append(f"Publication orchestration is missing required role: {role}")
-        unfinished = [str(task.get("task_id")) for task in tasks if isinstance(task, dict) and task.get("status") not in SUBMITTED_STATES]
-        if unfinished:
-            errors.append("Publication has unfinished orchestration tasks: " + ", ".join(unfinished))
-        if not plans or any(item.get("authorization", {}).get("status") != "approved" for item in plans):
-            errors.append("Publication requires recorded scope and worker authorization")
-        assessment_plans = [
-            item for item in plans
-            if any(isinstance(task, dict) and task.get("role") == "assessment-validator" for task in item.get("task_graph", []))
-        ]
-        if not assessment_plans:
-            errors.append("A ready exam requires a generated independent assessment-validation plan")
-        question_bank = json.loads((root / "questions" / "question-bank.json").read_text(encoding="utf-8"))
-        bank_ids = {str(item.get("question_id")) for item in question_bank.get("questions", []) if isinstance(item, dict)}
-        for task in tasks:
-            if not isinstance(task, dict) or task.get("status") not in SUBMITTED_STATES:
-                continue
-            output_path = task.get("output_path")
-            if not isinstance(output_path, str):
-                continue
-            output = root / output_path
-            if not output.is_file():
-                continue
-            payload = json.loads(output.read_text(encoding="utf-8"))
-            role = task.get("role")
-            if role == "contradiction-reviewer" and payload.get("status") != "complete":
-                errors.append("Contradiction review output must have status=complete")
-            if role == "citation-verifier" and payload.get("decision") not in {"verified", "approved"}:
-                errors.append("Final citation review must have decision=verified or approved")
-            if role == "assessment-validator":
-                if payload.get("decision") != "approved":
-                    errors.append("Independent assessment validation must have decision=approved")
-                validated_ids = {str(item) for item in payload.get("validated_question_ids", [])}
-                if validated_ids != bank_ids:
-                    errors.append("Assessment validation must cover every published question ID")
-
-    question_bank = json.loads((root / "questions" / "question-bank.json").read_text(encoding="utf-8"))
+    question_bank = json.loads((root / QUESTION_BANK).read_text(encoding="utf-8"))
     bank_ids = {str(item.get("question_id")) for item in question_bank.get("questions", []) if isinstance(item, dict)}
+    bank_hash = sha256_file(root / QUESTION_BANK)
+    approved_claim_ids: set[str] = set()
+    if (root / APPROVED_CLAIMS).is_file():
+        approved_payload = json.loads((root / APPROVED_CLAIMS).read_text(encoding="utf-8"))
+        approved_claim_ids = {
+            str(item.get("claim_id"))
+            for item in approved_payload.get("claims", [])
+            if isinstance(item, dict) and item.get("claim_id")
+        }
+    receipts, receipt_errors = load_validation_receipts(root)
+    errors.extend(receipt_errors)
+    by_run: dict[str, list[dict[str, Any]]] = {}
+    for receipt in receipts:
+        by_run.setdefault(str(receipt.get("run_id") or ""), []).append(receipt)
+        if receipt.get("task_status") not in {"submitted", "verified", "approved", "merged"}:
+            errors.append(f"Validation receipt {receipt.get('task_id')} is not accepted")
+        plan = receipt.get("plan")
+        if not isinstance(plan, dict) or not isinstance(plan.get("authorization"), dict) or plan["authorization"].get("status") != "approved":
+            errors.append(f"Validation receipt {receipt.get('task_id')} lacks approved worker authorization")
+
+    evidence_roles = {"source-extractor", "citation-verifier"}
+    if research_mode:
+        evidence_roles.update({"corpus-mapper", "research-worker", "contradiction-reviewer"})
+    evidence_runs = [
+        items for items in by_run.values()
+        if evidence_roles.issubset({str(item.get("role")) for item in items})
+    ]
+    if not evidence_runs:
+        errors.append("Publication requires durable accepted-worker receipts for: " + ", ".join(sorted(evidence_roles)))
+    else:
+        expected_plan = (
+            ("research-run-plan-v1", "create_research_plan.py")
+            if research_mode
+            else ("provided-evidence-plan-v1", "create_provided_evidence_plan.py")
+        )
+        verified_evidence_run = False
+        for items in evidence_runs:
+            plan_pairs = {
+                (item.get("plan", {}).get("schema_version"), item.get("plan", {}).get("compiler"))
+                for item in items
+            }
+            if plan_pairs != {expected_plan}:
+                continue
+            citations = [item for item in items if item.get("role") == "citation-verifier"]
+            if not citations or citations[-1].get("result", {}).get("decision") not in {"verified", "approved"}:
+                continue
+            verified_ids = {str(item) for item in citations[-1].get("result", {}).get("verified_claim_ids", [])}
+            if approved_claim_ids and not approved_claim_ids.issubset(verified_ids):
+                continue
+            if research_mode:
+                contradictions = [item for item in items if item.get("role") == "contradiction-reviewer"]
+                if not contradictions or contradictions[-1].get("result", {}).get("status") != "complete":
+                    continue
+            verified_evidence_run = True
+            break
+        if not verified_evidence_run:
+            errors.append("No generated evidence run has durable verification receipts covering every approved claim")
+
+    assessment_roles = {"assessment-generator", "assessment-validator"}
+    assessment_runs = [
+        items for items in by_run.values()
+        if assessment_roles.issubset({str(item.get("role")) for item in items})
+    ]
+    if not assessment_runs:
+        errors.append("A ready exam requires durable receipts for independent assessment generation and validation")
+    else:
+        validated_assessment_run = False
+        for items in assessment_runs:
+            plan_pairs = {
+                (item.get("plan", {}).get("schema_version"), item.get("plan", {}).get("compiler"))
+                for item in items
+            }
+            if plan_pairs != {("assessment-run-plan-v1", "create_assessment_plan.py")}:
+                continue
+            generators = [item for item in items if item.get("role") == "assessment-generator"]
+            validators = [item for item in items if item.get("role") == "assessment-validator"]
+            if not generators or not validators:
+                continue
+            result = validators[-1].get("result", {})
+            validated_ids = {str(item) for item in result.get("validated_question_ids", [])}
+            validator_dependencies = {str(item) for item in validators[-1].get("dependency_task_ids", [])}
+            if (
+                result.get("decision") == "approved"
+                and validated_ids == bank_ids
+                and generators[-1].get("output", {}).get("sha256") == bank_hash
+                and str(generators[-1].get("task_id")) in validator_dependencies
+            ):
+                validated_assessment_run = True
+                break
+        if not validated_assessment_run:
+            errors.append("No generated assessment run durably validates the current question-bank content and every published question ID")
+
     for chapter_index, chapter in enumerate(question_bank.get("chapters", [])):
         if not isinstance(chapter, dict):
             continue
@@ -361,16 +382,25 @@ def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
         except ValueError:
             errors.append(f"{prefix}.lesson_path escapes lessons/")
         else:
-            if not lesson.is_file() or lesson.is_symlink() or len(lesson.read_text(encoding="utf-8").strip()) < 100:
-                errors.append(f"{prefix}.lesson_path must resolve to a substantive lesson")
+            if not lesson.is_file() or lesson.is_symlink():
+                errors.append(f"{prefix}.lesson_path must resolve to a regular lesson file")
+            else:
+                lesson_errors, lesson_warnings = validate_lesson(
+                    lesson,
+                    source_ids=source_ids,
+                    publication=True,
+                    expected_chapter_id=str(chapter.get("chapter_id") or ""),
+                )
+                errors.extend(f"{lesson_path}: {error}" for error in lesson_errors)
+                errors.extend(f"{lesson_path}: {warning}" for warning in lesson_warnings)
 
-    approved = root / "evidence" / "approved-claims.json"
+    approved = root / APPROVED_CLAIMS
     if not approved.is_file():
-        errors.append("Publication requires evidence/approved-claims.json")
+        errors.append(f"Publication requires {relative_text(APPROVED_CLAIMS)}")
     else:
         payload = json.loads(approved.read_text(encoding="utf-8"))
         if not isinstance(payload.get("claims"), list) or not payload["claims"]:
-            errors.append("evidence/approved-claims.json must contain approved claims")
+            errors.append(f"{relative_text(APPROVED_CLAIMS)} must contain approved claims")
         else:
             for claim_index, claim in enumerate(payload["claims"]):
                 prefix = f"approved-claims claims[{claim_index}]"
@@ -384,7 +414,11 @@ def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
                 for ref_index, ref in enumerate(refs):
                     errors.extend(validate_source_ref(ref, source_ids, f"{prefix}.source_refs[{ref_index}]"))
 
-    markdown_bank = root / "questions" / "question-bank.md"
+    index_text = (root / INDEX).read_text(encoding="utf-8").strip()
+    if len(index_text) < 200:
+        errors.append("index.md must be a substantive learner-facing course map for publication")
+
+    markdown_bank = root / QUESTION_BANK_REVIEW
     if not markdown_bank.is_file() or len(markdown_bank.read_text(encoding="utf-8").strip()) < 20:
         errors.append("Publication requires a non-empty questions/question-bank.md review copy")
 
@@ -408,72 +442,17 @@ def _publication_errors(root: Path, source_ids: set[str]) -> list[str]:
         unknown_ids = set(exam_ids) - bank_ids
         if unknown_ids:
             errors.append(f"{path.relative_to(root)} contains questions outside the validated bank: {', '.join(sorted(unknown_ids))}")
-    if ready_exams == 0:
+    if require_ready_exam and ready_exams == 0:
         errors.append("Publication requires at least one app-compatible ready exam")
     return errors
 
 
-def validate_wiki(
-    root: Path, payload: dict[str, Any], *, source_ids: set[str], learner_concept_ids: set[str]
-) -> tuple[list[str], list[str], set[str]]:
-    errors: list[str] = []
-    warnings: list[str] = []
-    if payload.get("schema_version") != "wiki-v1":
-        errors.append("wiki/wiki.json schema_version must be wiki-v1")
-    concepts = payload.get("concepts")
-    if not isinstance(concepts, list):
-        return ["wiki/wiki.json must contain a concepts list"], warnings, set()
-    concept_ids: set[str] = set()
-    for index, concept in enumerate(concepts):
-        prefix = f"wiki concepts[{index}]"
-        if not isinstance(concept, dict) or not str(concept.get("concept_id", "")).strip():
-            errors.append(f"{prefix}.concept_id is required")
-            continue
-        concept_id = str(concept["concept_id"])
-        if concept_id in concept_ids:
-            errors.append(f"Duplicate wiki concept_id: {concept_id}")
-        concept_ids.add(concept_id)
-        if not str(concept.get("title", "")).strip() or not str(concept.get("summary", "")).strip():
-            errors.append(f"{prefix} requires title and summary")
-        page_path = concept.get("page_path")
-        if page_path:
-            candidate = (root / str(page_path)).resolve(strict=False)
-            try:
-                candidate.relative_to(root.resolve(strict=False))
-            except ValueError:
-                errors.append(f"{prefix}.page_path escapes the course folder")
-            else:
-                if candidate.suffix.casefold() != ".md" or not candidate.is_file() or candidate.is_symlink():
-                    errors.append(f"{prefix}.page_path must resolve to a regular Markdown file")
-        refs = concept.get("source_refs", [])
-        if not isinstance(refs, list):
-            errors.append(f"{prefix}.source_refs must be a list")
-        else:
-            for ref_index, ref in enumerate(refs):
-                errors.extend(validate_source_ref(ref, source_ids, f"{prefix}.source_refs[{ref_index}]"))
-    for missing in sorted(learner_concept_ids - concept_ids):
-        warnings.append(f"Learner concept has no wiki page: {missing}")
-    relationships = payload.get("relationships", [])
-    if not isinstance(relationships, list):
-        errors.append("wiki/wiki.json relationships must be a list")
-    else:
-        for index, edge in enumerate(relationships):
-            prefix = f"wiki relationships[{index}]"
-            if not isinstance(edge, dict):
-                errors.append(f"{prefix} must be an object")
-                continue
-            source = str(edge.get("from", ""))
-            target = str(edge.get("to", ""))
-            if source not in concept_ids or target not in concept_ids:
-                errors.append(f"{prefix} must reference two known concept IDs")
-            if edge.get("kind") not in RELATION_TYPES:
-                errors.append(f"{prefix}.kind must be one of {sorted(RELATION_TYPES)}")
-            if edge.get("status") not in {"approved", "provisional"}:
-                errors.append(f"{prefix}.status must be approved or provisional")
-    return errors, warnings, concept_ids
-
-
-def validate_workspace(root: Path, *, publication: bool = False) -> tuple[list[str], list[str]]:
+def validate_workspace(
+    root: Path,
+    *,
+    publication: bool = False,
+    require_ready_exam: bool = True,
+) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
     for relative in REQUIRED_FILES:
@@ -482,11 +461,11 @@ def validate_workspace(root: Path, *, publication: bool = False) -> tuple[list[s
     if errors:
         return errors, warnings
 
-    source_ids = load_source_ids(root / "source-manifest.yaml")
+    source_ids = load_source_ids(root / SOURCE_MANIFEST)
     if not source_ids:
-        warnings.append("No source IDs found in source-manifest.yaml")
+        warnings.append(f"No source IDs found in {relative_text(SOURCE_MANIFEST)}")
 
-    progress = json.loads((root / "progress" / "learner-progress.json").read_text(encoding="utf-8"))
+    progress = json.loads((root / PROGRESS / "learner-progress.json").read_text(encoding="utf-8"))
     concepts = progress.get("concepts")
     if not isinstance(concepts, list):
         errors.append("progress/learner-progress.json must contain a concepts list")
@@ -506,35 +485,20 @@ def validate_workspace(root: Path, *, publication: bool = False) -> tuple[list[s
                 if not isinstance(value, (int, float)) or not 0 <= float(value) <= 1:
                     errors.append(f"Concept {concept_id} has invalid {field}")
 
-    wiki_payload = json.loads((root / "wiki" / "wiki.json").read_text(encoding="utf-8"))
-    wiki_errors, wiki_warnings, wiki_concept_ids = validate_wiki(
-        root,
-        wiki_payload,
-        source_ids=source_ids,
-        learner_concept_ids=concept_ids,
-    )
-    errors.extend(wiki_errors)
-    warnings.extend(wiki_warnings)
-
-    question_payload = json.loads((root / "questions" / "question-bank.json").read_text(encoding="utf-8"))
+    question_payload = json.loads((root / QUESTION_BANK).read_text(encoding="utf-8"))
     question_errors, question_warnings = validate_question_bank(
         question_payload,
         source_ids=source_ids,
-        concept_ids=wiki_concept_ids or concept_ids,
+        concept_ids=concept_ids,
         publication=publication,
     )
     errors.extend(question_errors)
     warnings.extend(question_warnings)
 
-    for markdown_name in ("study-guide.md", "concept-map.md", "glossary.md"):
-        text = (root / markdown_name).read_text(encoding="utf-8").strip()
-        if len(text) < 100:
-            if publication:
-                errors.append(f"{markdown_name} is not substantive enough for publication")
-            else:
-                warnings.append(f"{markdown_name} is nearly empty")
+    if len((root / INDEX).read_text(encoding="utf-8").strip()) < 100:
+        warnings.append("index.md is nearly empty")
     if publication:
-        errors.extend(_publication_errors(root, source_ids))
+        errors.extend(_publication_errors(root, source_ids, require_ready_exam=require_ready_exam))
     return errors, warnings
 
 

@@ -10,7 +10,7 @@ Run:
 
 ```bash
 python scripts/validate_evidence.py \
-  --source-manifest studies/my-study/source-manifest.yaml \
+  --source-manifest studies/my-study/records/source-manifest.yaml \
   .work/runs/RUN-001/tasks/TASK-RESEARCH-01/submission.json
 ```
 
@@ -59,10 +59,10 @@ After main-agent approval:
 python scripts/aggregate_approved_evidence.py \
   --reports-dir .work/runs/RUN-001/tasks \
   --reviews-dir .work/runs/RUN-001/tasks \
-  --output evidence/approved-claims.json
+  --output records/evidence/approved-claims.json
 ```
 
-The aggregator combines structured approved claims only. It does not write study-guide prose or choose a side in disputes.
+The aggregator combines structured approved claims only. It does not write lesson prose or choose a side in disputes.
 
 ## Exit gate
 

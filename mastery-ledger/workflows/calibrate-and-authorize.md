@@ -50,7 +50,7 @@ Only learner-accepted branches enter this run. Do not silently expand the course
 For `topic-research` and `hybrid`, show the proposed source limit and topology before spawning workers. Use this shape:
 
 ```text
-Research plan: 1 bounded source scout when no source is supplied -> 1 isolated extractor per retained source plus 3 bounded concept-research workers -> 1 contradiction reviewer -> 1 final citation verifier. After evidence approval, a separate run uses 1 assessment generator -> 1 independent assessment validator. Later phases wait for their dependencies. Extractor count cannot exceed the approved source limit. Drafts and logs stay under the course .work/ and logs/ folders. Approve this scope and worker plan, or tell me what to adjust.
+Research plan: 1 bounded source scout when no source is supplied -> 1 isolated extractor per retained source plus 3 bounded concept-research workers -> 1 contradiction reviewer -> 1 final citation verifier. After evidence approval, a separate run uses 1 assessment generator -> 1 independent assessment validator. Later phases wait for their dependencies. Extractor count cannot exceed the approved source limit. Drafts stay under `.work/`; accepted validation receipts and the append-only log stay under `records/`. Approve this scope and worker plan, or tell me what to adjust.
 ```
 
 The learner's approval covers the displayed worker count, accepted branches, excluded topics, source limit, assumed level, and publication target. Record that approval as the canonical `learning_contract` in `study.yaml`. Ask again only when exceeding that boundary.

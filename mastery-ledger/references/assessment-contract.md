@@ -19,12 +19,13 @@ Every chapter record must declare a `lesson_path` under `lessons/`. Questions te
 
 ## 2. Required chapter mix
 
-Use one of two exact chapter sizes:
+Use one of three exact chapter tiers. Every published chapter has at least 10 questions:
 
-| Chapter class | Total | `standalone_mcq` | `passage_mcq` |
+| `question_tier` | Total | `standalone_mcq` | `passage_mcq` |
 | --- | ---: | ---: | ---: |
-| core | 10 | 8 | 2 |
-| short or optional | 5 | 4 | 1 |
+| standard | 10 | 8 | 2 |
+| expanded | 15 | 12 | 3 |
+| large | 20 | 16 | 4 |
 
 This 80/20 split is a Mastery Ledger product policy, not a universal psychometric law. A passage item contains a short reading, case, data extract, or scenario inside the prompt and still has selectable answers. Never satisfy the ratio with open-response items.
 
@@ -119,4 +120,4 @@ Only the main agent promotes validated questions and runs `scripts/build_exam.py
 
 ## 6. Interaction records
 
-Record only observable events: prompt or passage shown, option or answer submitted, confidence when supplied, feedback shown, hint level, source-disclosure action, timestamp, and resulting proficiency update. Never record hidden chain-of-thought. Keep calibration interactions in `progress/calibration.json`; application attempts remain under `attempts/`; machine-readable actions remain in `logs/events.jsonl`.
+Record only observable events: prompt or passage shown, option or answer submitted, confidence when supplied, feedback shown, hint level, source-disclosure action, timestamp, and resulting proficiency update. Never record hidden chain-of-thought. Keep calibration interactions in `progress/calibration.json`; application attempts remain under `attempts/`; machine-readable actions remain in `records/logs/events.jsonl`.

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import yaml
 
+from course_paths import SOURCE_MANIFEST, relative_text
 from record_action import append_event
 from plan_store import is_placeholder, load_active_plan, save_active_plan
 from source_registry import load_manifest, source_errors
@@ -150,7 +151,7 @@ def main() -> int:
         scope_included=accepted_branches or [scope_summary],
         scope_excluded=excluded,
         input_source_ids=source_ids,
-        input_artifacts=["source-manifest.yaml"],
+        input_artifacts=[relative_text(SOURCE_MANIFEST)],
         source_limit=len(source_ids),
     )
     extractors = [task(

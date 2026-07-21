@@ -11,9 +11,12 @@ from pathlib import Path
 
 import yaml
 
+from course_paths import APPROVED_CLAIMS, INDEX, QUESTION_BANK, SOURCE_MANIFEST, relative_text
 from create_research_plan import task
 from plan_store import is_placeholder, load_active_plan, save_active_plan
 from record_action import append_event
+from validate_evidence import load_source_ids
+from validate_lesson import validate_lesson
 from validate_orchestration import validate_plan
 
 
@@ -31,17 +34,47 @@ def main() -> int:
     state = str(study.get("workflow_state", "")).strip().replace("-", "_").upper()
     if state not in {"EVIDENCE_APPROVED", "STUDY_PACK_DRAFTED"}:
         parser.error("Assessment planning requires EVIDENCE_APPROVED and substantive course drafts.")
-    claims_path = root / "evidence" / "approved-claims.json"
+    claims_path = root / APPROVED_CLAIMS
     try:
         claims_payload = json.loads(claims_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
-        parser.error("Assessment input is unreadable: evidence/approved-claims.json")
+        parser.error(f"Assessment input is unreadable: {relative_text(APPROVED_CLAIMS)}")
     if not isinstance(claims_payload, dict) or not isinstance(claims_payload.get("claims"), list) or not claims_payload["claims"]:
-        parser.error("Assessment input has no approved claims: evidence/approved-claims.json")
-    for relative in ("study-guide.md", "concept-map.md"):
-        path = root / relative
-        if not path.is_file() or path.is_symlink() or len(path.read_text(encoding="utf-8").strip()) < 100:
-            parser.error(f"Assessment input is missing or not substantive: {relative}")
+        parser.error(f"Assessment input has no approved claims: {relative_text(APPROVED_CLAIMS)}")
+    index_path = root / INDEX
+    if not index_path.is_file() or index_path.is_symlink() or len(index_path.read_text(encoding="utf-8").strip()) < 200:
+        parser.error(f"Assessment input is missing or not substantive: {relative_text(INDEX)}")
+    try:
+        bank = json.loads((root / QUESTION_BANK).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        parser.error(f"Assessment input is unreadable: {relative_text(QUESTION_BANK)}")
+    chapters = bank.get("chapters", []) if isinstance(bank, dict) else []
+    if not isinstance(chapters, list) or not chapters:
+        parser.error("Assessment planning requires at least one declared chapter and lesson.")
+    source_ids = load_source_ids(root / SOURCE_MANIFEST)
+    lesson_artifacts: list[str] = []
+    for chapter in chapters:
+        if not isinstance(chapter, dict):
+            parser.error("Assessment planning found a malformed chapter record.")
+        lesson_relative = chapter.get("lesson_path")
+        if not isinstance(lesson_relative, str) or not lesson_relative.startswith("lessons/") or not lesson_relative.endswith(".md"):
+            parser.error("Assessment planning requires a Markdown lesson_path under lessons/ for every chapter.")
+        lesson = (root / lesson_relative).resolve(strict=False)
+        try:
+            lesson.relative_to((root / "lessons").resolve())
+        except ValueError:
+            parser.error(f"Assessment lesson path escapes lessons/: {lesson_relative}")
+        if lesson.is_symlink():
+            parser.error(f"Assessment lesson cannot be a symlink: {lesson_relative}")
+        errors, warnings = validate_lesson(
+            lesson,
+            source_ids=source_ids,
+            publication=False,
+            expected_chapter_id=str(chapter.get("chapter_id") or ""),
+        )
+        if errors or warnings:
+            parser.error("Assessment lesson input is not substantive: " + "; ".join([*errors, *warnings]))
+        lesson_artifacts.append(lesson_relative)
     predecessor_run_id = None
     predecessor_relation = None
     active_to_archive = None
@@ -69,7 +102,7 @@ def main() -> int:
         [],
         schema="question-bank-v2",
         scope_included=["Approved course objectives and chapter assessment contract"],
-        input_artifacts=["evidence/approved-claims.json", "study-guide.md", "concept-map.md"],
+        input_artifacts=[relative_text(APPROVED_CLAIMS), relative_text(INDEX), *lesson_artifacts],
     )
     validator = task(
         run_id,
@@ -79,7 +112,7 @@ def main() -> int:
         "reviews",
         "assessment-validation-v1",
         scope_included=["Generated question bank and approved evidence"],
-        input_artifacts=["evidence/approved-claims.json"],
+        input_artifacts=[relative_text(APPROVED_CLAIMS)],
     )
     now = datetime.now(timezone.utc).isoformat()
     payload = {

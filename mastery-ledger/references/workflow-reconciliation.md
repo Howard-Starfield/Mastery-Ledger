@@ -44,7 +44,7 @@ Do not call the script in a tight loop. A return is a work order for the main ag
 | Entering state | Observable requirement | Workflow that owns repair |
 | --- | --- | --- |
 | `SCOPED` | Learning contract, calibration disposition when applicable, and recorded scope approval | `intake-and-scope.md`, `calibrate-and-authorize.md` |
-| `SOURCES_READY` | At least one retained source with ready status, matching hash, and non-empty `source/SRC-NNN.md`; source-less research first requires an accepted source-scout ledger | `ingest-material.md`, `process-video.md`, or `research-topic.md` |
+| `SOURCES_READY` | At least one retained source with ready status, matching hash, and non-empty `records/source/SRC-NNN.md`; source-less research first requires an accepted source-scout ledger | `ingest-material.md`, `process-video.md`, or `research-topic.md` |
 | `CORPUS_MAPPED` | Submitted corpus mapper for researched modes; provided-source modes pass without one | `orchestrate-research.md` |
 | `TASKS_PLANNED` | Authorized, valid, non-empty dependency graph | `orchestrate-research.md` |
 | `EVIDENCE_SUBMITTED` | Required research/extraction and contradiction wave submitted, or direct provided-source claims recorded | `orchestrate-research.md`, `verify-evidence.md` |

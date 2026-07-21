@@ -54,6 +54,12 @@ PLAN_CONTRACTS = {
         "minimum_roles": {"source-extractor": 1, "research-worker": 1},
         "allowed_roles": {*RESEARCH_ROLES, CONTRADICTION_ROLE, CITATION_ROLE},
     },
+    "provided-evidence-plan-v1": {
+        "compiler": "create_provided_evidence_plan.py",
+        "exact_roles": {CITATION_ROLE: 1},
+        "minimum_roles": {"source-extractor": 1},
+        "allowed_roles": {"source-extractor", CONTRADICTION_ROLE, CITATION_ROLE},
+    },
     "assessment-run-plan-v1": {
         "compiler": "create_assessment_plan.py",
         "exact_roles": {ASSESSMENT_GENERATOR_ROLE: 1, ASSESSMENT_VALIDATOR_ROLE: 1},

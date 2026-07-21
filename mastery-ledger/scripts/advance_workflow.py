@@ -13,6 +13,7 @@ from typing import Any
 
 import yaml
 
+from course_paths import APPROVED_CLAIMS, SOURCE, SOURCE_MANIFEST, relative_text
 from record_action import append_event
 from source_registry import load_manifest, source_errors
 from validate_orchestration import SUBMITTED_STATES, validate_plan
@@ -86,8 +87,8 @@ def _source_requirements(root: Path, mode: str) -> list[dict[str, Any]]:
             "sources.manifest_invalid",
             str(error),
             workflow="ingest-material.md",
-            action="Repair source-manifest.yaml through the deterministic source registration workflow.",
-            artifacts=["source-manifest.yaml"],
+            action=f"Repair {relative_text(SOURCE_MANIFEST)} through the deterministic source registration workflow.",
+            artifacts=[relative_text(SOURCE_MANIFEST)],
         )]
     problems = source_errors(root, manifest, require_nonempty=True)
     if not problems:
@@ -104,7 +105,7 @@ def _source_requirements(root: Path, mode: str) -> list[dict[str, Any]]:
                 "No registered source or delegated source-discovery task exists.",
                 workflow="research-topic.md",
                 action="Compile create_source_discovery_plan.py, compile TASK-SOURCE-SCOUT context, validate the plan, and dispatch only that ready task.",
-                artifacts=[".work/orchestration/run-plan.yaml", "source-manifest.yaml"],
+                artifacts=[".work/orchestration/run-plan.yaml", relative_text(SOURCE_MANIFEST)],
             )]
         unfinished = [str(item.get("task_id")) for item in scouts if item.get("status") not in SUBMITTED_STATES]
         if unfinished:
@@ -129,16 +130,16 @@ def _source_requirements(root: Path, mode: str) -> list[dict[str, Any]]:
             "sources.candidates_unregistered",
             "Source discovery finished, but no retained candidate has been extracted and registered.",
             workflow="research-topic.md",
-            action="Review the accepted source-candidate ledger, extract retained candidates into source/SRC-NNN.md, and register each with register_source.py.",
-            artifacts=[str(scouts[0].get("output_path", "")), "source-manifest.yaml", "source/"],
+            action="Review the accepted source-candidate ledger, extract retained candidates into records/source/SRC-NNN.md, and register each with register_source.py.",
+            artifacts=[str(scouts[0].get("output_path", "")), relative_text(SOURCE_MANIFEST), relative_text(SOURCE)],
         )]
     return [requirement(
         "sources.none" if not manifest.get("sources") else "sources.not_ready",
         "; ".join(problems),
         workflow="ingest-material.md",
-        action="Extract retained sources, then register each one with register_source.py; keep originals under source/media and Markdown knowledge at source/ root.",
+        action="Extract retained sources, then register each one with register_source.py; keep originals under records/source/media and Markdown knowledge at records/source root.",
         user_input_required=mode not in RESEARCH_MODES and not manifest.get("sources"),
-        artifacts=["source-manifest.yaml", "source/"],
+        artifacts=[relative_text(SOURCE_MANIFEST), relative_text(SOURCE)],
     )]
 
 
@@ -232,26 +233,36 @@ def gate_requirements(root: Path, target: str) -> list[dict[str, Any]]:
     if target == "TASKS_PLANNED":
         errors, _, _ = validate_plan(plan, course_root=root)
         if errors or not tasks:
+            provided = mode not in RESEARCH_MODES
             return [requirement(
                 "tasks.plan_invalid",
                 "; ".join(errors or ["task graph is empty"]),
                 workflow="orchestrate-research.md",
-                action="Compile or repair the authorized deterministic plan, then run validate_orchestration.py.",
+                action=(
+                    "Compile create_provided_evidence_plan.py, then compile worker contexts and run validate_orchestration.py."
+                    if provided
+                    else "Compile or repair the authorized deterministic research plan, then run validate_orchestration.py."
+                ),
                 artifacts=[".work/orchestration/run-plan.yaml"],
             )]
         return []
 
     if target == "EVIDENCE_SUBMITTED":
         if mode not in RESEARCH_MODES:
-            approved = _read_json(root / "evidence" / "approved-claims.json")
-            if approved.get("claims"):
+            required = [
+                task for task in tasks
+                if isinstance(task, dict) and task.get("role") in {"source-extractor", "contradiction-reviewer"}
+            ]
+            extractors = [task for task in required if task.get("role") == "source-extractor"]
+            unfinished = [str(task.get("task_id")) for task in required if task.get("status") not in SUBMITTED_STATES]
+            if extractors and not unfinished:
                 return []
             return [requirement(
-                "evidence.provided_claims_missing",
-                "No source-grounded claims have been approved from the provided corpus.",
-                workflow="verify-evidence.md",
-                action="Extract claims with canonical source references, inspect their locators, and record the main-agent-approved set.",
-                artifacts=["evidence/approved-claims.json"],
+                "evidence.provided_wave_unfinished",
+                "Provided-source extraction or contradiction review is missing" if not extractors else "Unfinished tasks: " + ", ".join(unfinished),
+                workflow="orchestrate-research.md",
+                action="Compile create_provided_evidence_plan.py when absent; otherwise dispatch only ready task IDs and route every completion.",
+                artifacts=[".work/orchestration/run-plan.yaml"],
             )]
         required_roles = {"research-worker", "source-extractor", "contradiction-reviewer"}
         required = [task for task in tasks if isinstance(task, dict) and task.get("role") in required_roles]
@@ -267,8 +278,6 @@ def gate_requirements(root: Path, target: str) -> list[dict[str, Any]]:
         return []
 
     if target == "EVIDENCE_VERIFIED":
-        if mode not in RESEARCH_MODES:
-            return []
         verifiers = [task for task in tasks if isinstance(task, dict) and task.get("role") == "citation-verifier"]
         if len(verifiers) != 1 or verifiers[0].get("status") not in SUBMITTED_STATES:
             return [requirement(
@@ -291,14 +300,14 @@ def gate_requirements(root: Path, target: str) -> list[dict[str, Any]]:
         return []
 
     if target == "EVIDENCE_APPROVED":
-        approved = _read_json(root / "evidence" / "approved-claims.json")
+        approved = _read_json(root / APPROVED_CLAIMS)
         if not approved.get("claims"):
             return [requirement(
                 "evidence.approved_claims_empty",
                 "No main-agent-approved claims exist.",
                 workflow="verify-evidence.md",
                 action="Review verified evidence, record explicit decisions, and aggregate only approved claims.",
-                artifacts=["evidence/approved-claims.json"],
+                artifacts=[relative_text(APPROVED_CLAIMS)],
             )]
         return []
 

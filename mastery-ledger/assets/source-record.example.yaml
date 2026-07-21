@@ -6,7 +6,7 @@ provider: web
 source_type: official_documentation
 original_location: https://example.invalid/source
 local_path: null
-knowledge_path: source/SRC-001.md
+knowledge_path: records/source/SRC-001.md
 retrieved_at: "2026-07-20T00:00:00Z"
 content_hash: sha256:replace-with-computed-hash
 language: en
@@ -24,4 +24,4 @@ superseded_by: null
 items: []
 artifacts:
   - kind: extracted_knowledge
-    path: source/SRC-001.md
+    path: records/source/SRC-001.md

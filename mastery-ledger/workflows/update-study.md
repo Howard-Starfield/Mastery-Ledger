@@ -8,7 +8,7 @@ Refresh the current course artifacts when a source, goal, or learner request cha
 
 1. Record the requested change and identify the sources or concepts it affects.
 2. Run the normal research, contradiction, and citation gates for new or changed factual material.
-3. Regenerate the affected lessons, wiki pages, and canonical `questions/question-bank.json`.
+3. Regenerate the affected `index.md` entries, lessons, and canonical `questions/question-bank.json`.
 4. Rebuild each affected ready exam with `scripts/build_exam.py`. Reusing an `exam_id` atomically replaces that ready exam; a new exam ID is needed only when the learner wants both sets available.
 5. Run `scripts/validate_study_pack.py <course-root> --publication`.
 6. Summarize the learner-visible changes.

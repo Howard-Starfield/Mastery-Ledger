@@ -14,6 +14,7 @@ from typing import Any
 
 import yaml
 
+from course_paths import SOURCE_MANIFEST, relative_text
 from create_research_plan import _canonical_hash, load_role_profiles
 from plan_store import load_active_plan, save_active_plan
 
@@ -86,7 +87,7 @@ def atomic_json(path: Path, payload: object) -> None:
 def _source_artifacts(root: Path, source_ids: list[str]) -> list[str]:
     if not source_ids:
         return []
-    manifest_path = root / "source-manifest.yaml"
+    manifest_path = root / SOURCE_MANIFEST
     try:
         manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, yaml.YAMLError) as error:
@@ -97,7 +98,7 @@ def _source_artifacts(root: Path, source_ids: list[str]) -> list[str]:
         for item in sources
         if isinstance(item, dict) and item.get("source_id")
     }
-    result: list[str] = ["source-manifest.yaml"]
+    result: list[str] = [relative_text(SOURCE_MANIFEST)]
     for source_id in source_ids:
         record = index.get(source_id)
         if not record:

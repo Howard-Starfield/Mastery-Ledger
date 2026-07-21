@@ -8,9 +8,10 @@ Keep initialization, work-in-progress, approval, promotion, and durable audit st
 
 | Class | Location | Owner | Retention |
 | --- | --- | --- | --- |
-| Durable configuration | `study.yaml`, manifests, progress | deterministic scripts and main agent through scripts | preserve |
-| Durable knowledge | `source/`, `evidence/`, `wiki/`, `lessons/`, `questions/`, `exams/` | deterministic promotion after main-agent approval | preserve and version |
-| Durable audit | `logs/events.jsonl` | deterministic application or merge script | append-only |
+| Durable configuration | `study.yaml`, `index.md`, progress | deterministic scripts and main agent through scripts | preserve |
+| Durable knowledge | `lessons/`, `questions/`, `exams/` | deterministic promotion after main-agent approval | preserve and version |
+| Durable records | `records/source/`, `records/evidence/`, `records/source-manifest.yaml` | deterministic registration or promotion | preserve and version |
+| Durable audit | `records/logs/events.jsonl` | deterministic application or merge script | append-only |
 | Run state | `.work/runs/<run-id>/` | run controller | inspectable, disposable after closure policy |
 | Worker state | `.work/runs/<run-id>/tasks/<task-id>/` | assigned worker only | never publish directly |
 | Staging | `.work/runs/<run-id>/staging/` | main agent through deterministic helpers | promote only after validation |
@@ -33,7 +34,7 @@ If an existing application-created course has `course.yaml` but lacks `study.yam
 6. Let the main agent approve or reject the proposed result.
 7. Promote accepted artifacts with deterministic tooling; workers never write final targets.
 8. Merge accepted observable worker events through the packaged merger.
-9. Finalize the run and retain enough durable audit data to reconstruct accepted actions.
+9. Finalize the run. `route_worker_completion.py` writes a compact accepted-result receipt under `records/evidence/validation/<run-id>/`; retain those receipts and the durable action log even if `.work/` is later removed.
 
 ## Promotion order
 

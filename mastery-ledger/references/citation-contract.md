@@ -1,6 +1,6 @@
 # Citation contract
 
-Use `source-ref-v1` for every claim, question, explanation, and exam citation. Keep source identity and provenance in `source-manifest.yaml`; keep only the reference and precise locator in the consuming artifact. Never use a bare URL, source ID alone, or prose-only citation as the durable record.
+Use `source-ref-v1` for every claim, lesson assertion, question, explanation, and exam citation. Keep source identity and provenance in `records/source-manifest.yaml`; keep only the reference and precise locator in the consuming artifact. Never use a bare URL, source ID alone, or prose-only citation as the durable record.
 
 ## Canonical object
 
@@ -23,7 +23,7 @@ Use `source-ref-v1` for every claim, question, explanation, and exam citation. K
 
 Required fields:
 
-- `source_id`: an existing ID from `source-manifest.yaml`;
+- `source_id`: an existing ID from `records/source-manifest.yaml`;
 - `locator`: one structured locator object with `kind`, kind-specific fields, and a human-readable `label`;
 - `supports`: one or more of `claim`, `question_prompt`, `correct_answer`, `explanation`, `distractor`, `context`, or `counterevidence`;
 - `support_strength`: `direct`, `partial`, or `contextual`.

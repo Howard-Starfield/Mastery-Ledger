@@ -66,8 +66,8 @@ flowchart LR
     Learner["Learner"] --> Codex["Codex with the skill"]
     Sources["Files, links, video, or a topic"] --> Codex
     Codex --> Course["Course folder"]
-    Course --> Notes["Source notes and evidence"]
-    Course --> Lessons["Lessons and wiki"]
+    Course --> Notes["Source notes and evidence records"]
+    Course --> Lessons["Book-like lessons"]
     Course --> Bank["Question bank and ready exam"]
     Lessons --> App["Local study and exam app"]
     Bank --> App
@@ -94,9 +94,9 @@ For a researched course, Codex also states how many questions it will ask during
 
 ### 3. Read and preserve sources
 
-Each source receives an ID, rights basis, content hash, and exact location record in `source-manifest.yaml`.
+Each source receives an ID, rights basis, content hash, and exact location record in `records/source-manifest.yaml`.
 
-Extracted notes go in `source/`. Originals, captions, transcripts, audio, and video go in `source/media/`. Temporary files stay in `.work/`.
+Extracted notes go in `records/source/`. Originals, captions, transcripts, audio, and video go in `records/source/media/`. Temporary files stay in `.work/`.
 
 Video work follows this order:
 
@@ -124,7 +124,7 @@ flowchart TD
     WaitResearch --> Conflict["Review contradictions and reject weak claims"]
     Conflict --> Cite["Check exact citations for retained claims"]
     Cite --> Approve["Main agent approves evidence"]
-    Approve --> Write["Write lessons, wiki, glossary, and question bank"]
+    Approve --> Write["Write and validate the course index and lessons"]
     Write --> Generate["Generate chapter exams"]
     Generate --> Check["A different worker checks every question"]
     Check --> Validate["Run publication validation"]
@@ -137,12 +137,14 @@ The order matters. The citation worker waits until contradiction review has remo
 
 The main agent promotes only approved evidence into the course. Published questions must have four options, one answer, a concise explanation, concept links, and exact source references.
 
-Each core chapter uses ten questions:
+Each chapter also gets a real lesson, not an outline or source dump. A standard lesson is 1,200-1,800 words and includes prerequisites, a big-picture explanation, two worked examples, retrieval pauses, common misconceptions, limitations, transfer, and precise source locators. Expanded lessons may reach 2,500 words before they should be split.
+
+Each chapter uses at least ten questions. The standard tier is:
 
 * Eight concise multiple choice questions
 * Two short reading passages with multiple choice questions
 
-Short and optional chapters use five questions with the same four to one ratio.
+Expanded tiers contain 15 or 20 questions with the same 80/20 ratio. Five-question published chapters are not accepted.
 
 ### 6. Keep the work visible
 
@@ -150,14 +152,14 @@ The learner sees the finished course. Reviewers can inspect the work behind it.
 
 | Location | Contents |
 | --- | --- |
-| `source/` | Extracted notes with source locations |
-| `evidence/` | Approved claims, contradictions, and gaps |
+| `index.md` | Course map and chapter reading order |
 | `lessons/` | Reading material for each chapter |
-| `wiki/` | Concept pages and links |
 | `questions/` | The JSON test bank and its Markdown copy |
 | `exams/` | Ready exam files read by the app |
-| `logs/events.jsonl` | Actions, decisions, evidence paths, and short reasons |
-| `.work/` | Worker reports, drafts, temporary files, and rejected work |
+| `records/source/` | Extracted notes and permitted media with source locations |
+| `records/evidence/` | Approved claims, contradictions, gaps, and validation receipts |
+| `records/logs/events.jsonl` | Actions, decisions, evidence paths, and short reasons |
+| `.work/` | Disposable worker reports, drafts, temporary files, and rejected work |
 
 Logs record observable work. They do not record hidden reasoning.
 
@@ -279,6 +281,14 @@ Use Mastery Ledger to build a course from https://example.com/my-source
 
 Codex asks for a workspace when the request does not identify an existing course or previously approved path in the conversation. The skill never invokes the app, doctor, onboarding, or a handoff command. Install and open the app separately only when you want its exam interface and review schedule. To continue tutoring from app results, point Codex to the course's completed attempt or `progress/learner-progress.json` file.
 
+Courses created by an older skill layout can be migrated explicitly before resuming:
+
+```powershell
+python .\mastery-ledger\scripts\migrate_course_layout.py C:\path\to\course
+```
+
+The migration moves durable source, evidence, and log records under `records/`, converts `study-guide.md` to `index.md`, and quarantines retired wiki, concept-map, and glossary files under `.work/migration-backup/`. It refuses to run while an unfinished worker plan is active.
+
 ## Run the tests
 
 Run all Python and skill tests from the repository root:
@@ -304,7 +314,7 @@ The frontend build writes files to `src/mastery_ledger/web/`. Commit those files
 
 * The review curve is a product rule, not a proven memory model.
 * Local transcription needs the optional `faster-whisper` package and a model approved by the learner.
-* The current wiki uses `wiki/wiki.json`. The planned Markdown catalog is not built yet.
+* Lessons are Markdown files with a deterministic publication contract; the app is a reader and exam player, not the knowledge curator.
 * Releases do not yet include signed operating system installers.
 
 Mastery Ledger uses the [MIT License](LICENSE).

@@ -11,8 +11,10 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from course_paths import PUBLICATION_RECEIPT, SOURCE_MANIFEST
 from record_action import append_event
 from render_question_bank import render
+from source_registry import sha256_file
 from validate_evidence import load_source_ids
 from validate_study_pack import validate_question_bank, validate_workspace
 
@@ -54,7 +56,7 @@ def main() -> int:
         parser.error("One or more requested question IDs were not found.")
     if not selected:
         parser.error("No questions selected.")
-    bank_errors, _ = validate_question_bank(bank, source_ids=load_source_ids(root / "source-manifest.yaml"), concept_ids=set())
+    bank_errors, _ = validate_question_bank(bank, source_ids=load_source_ids(root / SOURCE_MANIFEST), concept_ids=set())
     if bank_errors:
         parser.error("Question bank is invalid: " + "; ".join(bank_errors))
     if args.ready and any(item.get("quality_status") != "validated" for item in selected):
@@ -73,20 +75,38 @@ def main() -> int:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "questions": selected,
     }
+    if args.ready:
+        errors, _ = validate_workspace(root, publication=True, require_ready_exam=False)
+        if errors:
+            print(json.dumps({"status": "fail", "errors": errors, "exam": None}, ensure_ascii=False, indent=2))
+            return 1
     path = root / "exams" / slug(exam_id) / "exam.json"
     atomic_json(path, payload)
+    artifacts = [path.relative_to(root).as_posix()]
     if args.ready:
-        errors, _ = validate_workspace(root, publication=True)
-        if errors:
-            payload["status"] = "changes_required"
-            payload["source_status"] = "review_needed"
-            atomic_json(path, payload)
-            print(json.dumps({"status": "fail", "errors": errors, "exam": str(path)}, ensure_ascii=False, indent=2))
-            return 1
+        lesson_hashes: dict[str, str] = {}
+        for chapter in bank.get("chapters", []):
+            if not isinstance(chapter, dict) or not isinstance(chapter.get("lesson_path"), str):
+                continue
+            lesson = root / chapter["lesson_path"]
+            if lesson.is_file() and not lesson.is_symlink():
+                lesson_hashes[chapter["lesson_path"]] = sha256_file(lesson)
+        receipt_path = root / PUBLICATION_RECEIPT
+        atomic_json(receipt_path, {
+            "schema_version": "publication-receipt-v1",
+            "exam_id": exam_id,
+            "exam_path": path.relative_to(root).as_posix(),
+            "exam_sha256": sha256_file(path),
+            "question_bank_sha256": sha256_file(root / "questions" / "question-bank.json"),
+            "source_manifest_sha256": sha256_file(root / SOURCE_MANIFEST),
+            "lesson_sha256": lesson_hashes,
+            "validated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        artifacts.append(receipt_path.relative_to(root).as_posix())
     append_event(root, {
         "action": "exam.built", "actor": "main-agent", "status": payload["status"],
         "summary": f"Built {len(selected)}-question exam {exam_id}.",
-        "artifacts": [path.relative_to(root).as_posix()], "decision": payload["status"],
+        "artifacts": artifacts, "decision": payload["status"],
         "justification": "Questions passed the canonical bank validator."
     })
     print(json.dumps({"status": payload["status"], "exam": str(path), "questions": len(selected)}))

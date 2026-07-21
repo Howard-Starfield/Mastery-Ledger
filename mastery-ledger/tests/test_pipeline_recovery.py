@@ -54,7 +54,7 @@ class PipelineRecoveryTests(unittest.TestCase):
             "--assumed-level",
             "intermediate",
         )
-        knowledge = course / "source" / "SRC-001.md"
+        knowledge = course / "records" / "source" / "SRC-001.md"
         knowledge.write_text(
             "# Registered source\n\nA sufficiently substantive extracted source for deterministic testing.\n",
             encoding="utf-8",
@@ -69,7 +69,7 @@ class PipelineRecoveryTests(unittest.TestCase):
             "--location",
             "https://example.invalid/source",
             "--knowledge-path",
-            "source/SRC-001.md",
+            "records/source/SRC-001.md",
         )
         reconciled = self.run_script("reconcile_workflow.py", str(course), "--json", check=False)
         self.assertEqual(2, reconciled.returncode, reconciled.stdout + reconciled.stderr)
@@ -113,7 +113,7 @@ class PipelineRecoveryTests(unittest.TestCase):
             parent = Path(directory)
             self.run_script("init_study.py", "Empty Course", "--studies-dir", str(parent))
             course = parent / "empty-course"
-            manifest = yaml.safe_load((course / "source-manifest.yaml").read_text(encoding="utf-8"))
+            manifest = yaml.safe_load((course / "records" / "source-manifest.yaml").read_text(encoding="utf-8"))
             self.assertEqual([], manifest["sources"])
             rejected = self.run_script(
                 "create_research_plan.py",
@@ -164,9 +164,9 @@ class PipelineRecoveryTests(unittest.TestCase):
             routed = self.run_script("route_worker_completion.py", str(course), "TASK-SOURCE-SCOUT", check=False)
             self.assertEqual("accepted", json.loads(routed.stdout)["status"])
 
-            knowledge = course / "source" / "SRC-001.md"
+            knowledge = course / "records" / "source" / "SRC-001.md"
             knowledge.write_text("# Official source\n\nExtracted, locator-preserving knowledge from the retained candidate.\n", encoding="utf-8")
-            self.run_script("register_source.py", str(course), "--source-id", "SRC-001", "--title", "Official source", "--location", "https://example.invalid/official", "--knowledge-path", "source/SRC-001.md")
+            self.run_script("register_source.py", str(course), "--source-id", "SRC-001", "--title", "Official source", "--location", "https://example.invalid/official", "--knowledge-path", "records/source/SRC-001.md")
             ready = self.run_script("reconcile_workflow.py", str(course), "--json", check=False)
             self.assertEqual("SOURCES_READY", json.loads(ready.stdout)["current_state"])
             self.run_script("create_research_plan.py", str(course), "--research-workers", "1", "--authorized")

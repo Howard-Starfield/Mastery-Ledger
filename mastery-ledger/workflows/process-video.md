@@ -41,7 +41,7 @@ Use the Python environment executing the installed skill helpers. The skill incl
 
 ```text
 python "<SKILL_ROOT>/scripts/normalize_subtitles.py" input.srt \
-  --output-dir studies/my-study/source/media/SRC-001 \
+  --output-dir studies/my-study/records/source/media/SRC-001 \
   --source-id SRC-001 --item-id LESSON-003 \
   --origin human_caption
 ```
@@ -82,7 +82,7 @@ The main agent creates one bounded staging folder under `.work/ingestion/<job-id
 
 `QUEUED`, `RUNNING`, `NEEDS_USER_ACTION`, `PARTIAL`, `COMPLETE`, `FAILED`, `CANCELLED`.
 
-Keep probe output, completion manifests, observable events, and recovery guidance in that staging folder. Retry only after inspecting the recorded failure and correcting an observable cause; do not recursively rerun a failed downloader. Promote verified media and transcripts to `source/media/<source-id>/`, write locator-preserving extracted knowledge to `source/<source-id>.md`, register it with `register_source.py`, and merge the short action event only after completion. Never call the local application for ingestion, transcription, retry, or promotion.
+Keep probe output, completion manifests, observable events, and recovery guidance in that staging folder. Retry only after inspecting the recorded failure and correcting an observable cause; do not recursively rerun a failed downloader. Promote verified media and transcripts to `records/source/media/<source-id>/`, write locator-preserving extracted knowledge to `records/source/<source-id>.md`, register it with `register_source.py`, and merge the short action event only after completion. Never call the local application for ingestion, transcription, retry, or promotion.
 
 ## Transcript quality checks
 

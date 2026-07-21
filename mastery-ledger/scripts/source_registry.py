@@ -12,6 +12,8 @@ from typing import Any
 
 import yaml
 
+from course_paths import SOURCE, SOURCE_MANIFEST, relative_text
+
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -22,22 +24,23 @@ def sha256_file(path: Path) -> str:
 
 
 def load_manifest(root: Path) -> dict[str, Any]:
-    path = root / "source-manifest.yaml"
+    path = root / SOURCE_MANIFEST
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, yaml.YAMLError) as error:
-        raise ValueError(f"Cannot read source-manifest.yaml: {error}") from error
+        raise ValueError(f"Cannot read {relative_text(SOURCE_MANIFEST)}: {error}") from error
     if not isinstance(payload, dict) or not isinstance(payload.get("sources"), list):
-        raise ValueError("source-manifest.yaml must contain a sources list")
+        raise ValueError(f"{relative_text(SOURCE_MANIFEST)} must contain a sources list")
     return payload
 
 
 def safe_knowledge_path(root: Path, relative: object) -> Path | None:
-    if not isinstance(relative, str) or not relative.startswith("source/") or not relative.endswith(".md"):
+    source_prefix = relative_text(SOURCE) + "/"
+    if not isinstance(relative, str) or not relative.startswith(source_prefix) or not relative.endswith(".md"):
         return None
     candidate = (root / relative).resolve(strict=False)
     try:
-        candidate.relative_to((root / "source").resolve())
+        candidate.relative_to((root / SOURCE).resolve())
     except (OSError, ValueError):
         return None
     if not candidate.is_file() or candidate.is_symlink():
@@ -53,9 +56,9 @@ def safe_knowledge_path(root: Path, relative: object) -> Path | None:
 def source_errors(root: Path, manifest: dict[str, Any], *, require_nonempty: bool = True) -> list[str]:
     sources = manifest.get("sources")
     if not isinstance(sources, list):
-        return ["source-manifest.yaml must contain a sources list"]
+        return [f"{relative_text(SOURCE_MANIFEST)} must contain a sources list"]
     if require_nonempty and not sources:
-        return ["No source candidates are recorded in source-manifest.yaml."]
+        return [f"No source candidates are recorded in {relative_text(SOURCE_MANIFEST)}."]
     errors: list[str] = []
     seen: set[str] = set()
     for index, source in enumerate(sources):
@@ -84,7 +87,8 @@ def source_errors(root: Path, manifest: dict[str, Any], *, require_nonempty: boo
 
 
 def atomic_manifest(root: Path, payload: dict[str, Any]) -> Path:
-    path = root / "source-manifest.yaml"
+    path = root / SOURCE_MANIFEST
+    path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, name = tempfile.mkstemp(prefix=".source-manifest.", suffix=".tmp", dir=path.parent)
     temporary = Path(name)
     try:

@@ -15,6 +15,7 @@ from compile_worker_context import atomic_json, atomic_text
 from merge_worker_events import merge_events
 from plan_store import load_active_plan, save_active_plan
 from record_action import append_event
+from validation_receipts import write_validation_receipt
 from validate_orchestration import context_required_task_ids, validate_plan
 
 
@@ -61,6 +62,7 @@ def route(root: Path, task_id: str) -> dict[str, Any]:
                 "ready_task_ids": [],
             }
         merged = merge_events(root, task_id)
+        receipt = write_validation_receipt(root, plan, task)
         return {
             "status": "accepted",
             "idempotent": True,
@@ -70,6 +72,7 @@ def route(root: Path, task_id: str) -> dict[str, Any]:
             "context_required_task_ids": context_required_task_ids(plan) if not errors else [],
             "ready_task_ids": ready,
             "event_merge": merged,
+            "validation_receipt": receipt.relative_to(root).as_posix(),
         }
 
     errors = _candidate_errors(root, plan, task_id)
@@ -156,16 +159,22 @@ def route(root: Path, task_id: str) -> dict[str, Any]:
     plan["updated_at"] = task["accepted_at"]
     save_active_plan(root, plan)
     merged = merge_events(root, task_id)
+    receipt = write_validation_receipt(root, plan, task)
     append_event(root, {
         "action": "worker.completion_accepted",
         "actor": "completion-router",
         "status": "complete",
         "summary": f"Accepted the contract-valid completion for {task_id}.",
-        "artifacts": [str(task.get("output_path")), str(task.get("completion_path"))],
+        "artifacts": [
+            str(task.get("output_path")),
+            str(task.get("completion_path")),
+            receipt.relative_to(root).as_posix(),
+        ],
         "decision": "accepted",
         "justification": "The output, event shard, identity, acknowledgements, and completion envelope passed validation.",
         "run_id": task.get("run_id"),
         "task_id": task_id,
+        "validation_receipt": receipt.relative_to(root).as_posix(),
     })
     plan = load_active_plan(root)
     validation_errors, warnings, ready = validate_plan(plan, course_root=root)

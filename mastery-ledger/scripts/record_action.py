@@ -10,6 +10,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from course_paths import EVENT_LOG
+
 
 PROHIBITED_FIELDS = {
     "authorization",
@@ -46,10 +48,10 @@ def _validated_event(event: dict[str, object]) -> dict[str, object]:
 
 def append_event(course_root: Path, event: dict[str, object]) -> Path:
     root = course_root.resolve()
-    path = root / "logs" / "events.jsonl"
+    path = root / EVENT_LOG
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.is_symlink() or path.resolve(strict=False).parent != (root / "logs").resolve():
-        raise ValueError("Event log must remain inside COURSE_ROOT/logs.")
+    if path.is_symlink() or path.resolve(strict=False).parent != (root / EVENT_LOG.parent).resolve():
+        raise ValueError("Event log must remain inside COURSE_ROOT/records/logs.")
     event = _validated_event(event)
     payload = {
         **event,

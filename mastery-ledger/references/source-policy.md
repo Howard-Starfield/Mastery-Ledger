@@ -32,7 +32,7 @@ Source priority is contextual. A user-experience question may require user repor
 
 ## Inspection requirements
 
-- Register every accepted source in `source-manifest.yaml` and cite it only through [citation contract](citation-contract.md).
+- Register every accepted source in `records/source-manifest.yaml` and cite it only through [citation contract](citation-contract.md).
 - Open and inspect a source before citing it.
 - Do not cite search-result snippets as final evidence.
 - Preserve publication date, subject date, retrieval date, and supersession status.

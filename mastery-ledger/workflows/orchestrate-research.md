@@ -25,7 +25,7 @@ Before planning or dispatch, read [artifact lifecycle](../references/artifact-li
 
 The main agent owns:
 
-- concept-map version;
+- frozen corpus-map version;
 - task graph;
 - scope and budget;
 - worker briefs;

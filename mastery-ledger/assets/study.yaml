@@ -1,4 +1,5 @@
 schema_version: "1.0"
+layout_schema: course-layout-v2
 study_id: STUDY-001
 parent_study_id: null
 title: Example study
@@ -30,20 +31,21 @@ learning_contract:
   source_limit: null
   research_workers: null
 source_cutoff_date: "2026-07-19"
-concept_map_version: "0.1"
 artifact_paths:
-  source_manifest: source-manifest.yaml
-  study_guide: study-guide.md
+  course_index: index.md
+  source_manifest: records/source-manifest.yaml
+  source: records/source
   lessons: lessons
-  concept_map: concept-map.md
-  glossary: glossary.md
   question_bank: questions/question-bank.json
   question_bank_review: questions/question-bank.md
   learner_progress: progress/learner-progress.json
-  knowledge_wiki: wiki/wiki.json
-  approved_claims: evidence/approved-claims.json
-  action_log: logs/events.jsonl
+  approved_claims: records/evidence/approved-claims.json
+  contradictions: records/evidence/contradictions.json
+  gaps: records/evidence/gaps.json
+  validation: records/evidence/validation
+  action_log: records/logs/events.jsonl
   calibration: progress/calibration.json
+  exams: exams
 workflow_history: []
 created_at: "2026-07-19T00:00:00Z"
 updated_at: "2026-07-19T00:00:00Z"

@@ -102,6 +102,7 @@ class AttemptState:
 
 def _source_manifest(course_root: Path) -> dict[str, Any] | None:
     for path in (
+        course_root / "records" / "source-manifest.yaml",
         course_root / "source-manifest.yaml",
         course_root / "source" / "source-manifest.yaml",
     ):

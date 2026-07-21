@@ -7,6 +7,7 @@
       "chapter_id": "CH-001",
       "title": "Example chapter",
       "class": "core",
+      "question_tier": "standard",
       "lesson_path": "lessons/CH-001.md"
     }
   ],

@@ -10,38 +10,63 @@ from pathlib import Path
 
 import yaml
 
+from course_paths import (
+    APPROVED_CLAIMS,
+    ATTEMPTS,
+    CONTRADICTIONS,
+    COURSE_LAYOUT,
+    DRAFTS,
+    EVIDENCE,
+    EVENT_LOG,
+    EXAMS,
+    GAPS,
+    INDEX,
+    INGESTION,
+    LESSONS,
+    ORCHESTRATION,
+    PROGRESS,
+    QUESTIONS,
+    RUNS,
+    SCRATCH,
+    SOURCE_MANIFEST,
+    SOURCE_MEDIA,
+    STAGING,
+    VALIDATION,
+    layout_payload,
+    relative_text,
+)
 from init_study import replace_tokens
+from migrate_course_layout import migrate
 from record_action import append_event
 
 
 DIRECTORIES = (
-    "source/media",
-    "lessons",
-    "wiki/pages",
-    "questions",
-    "progress",
-    "exams",
-    "attempts",
-    "logs",
-    "evidence",
-    ".work/ingestion",
-    ".work/orchestration",
-    ".work/runs",
-    ".work/drafts",
-    ".work/scratch",
+    SOURCE_MEDIA,
+    LESSONS,
+    QUESTIONS,
+    PROGRESS,
+    EXAMS,
+    ATTEMPTS,
+    EVENT_LOG.parent,
+    EVIDENCE,
+    VALIDATION,
+    INGESTION,
+    ORCHESTRATION,
+    RUNS,
+    STAGING,
+    DRAFTS,
+    SCRATCH,
 )
 
 TEMPLATES = {
     "study.yaml": "study.yaml",
-    "source-manifest.yaml": "source-manifest.yaml",
-    "study-guide.md": "study-guide.md",
+    "source-manifest.yaml": relative_text(SOURCE_MANIFEST),
+    "index.md": relative_text(INDEX),
     "question-bank.json": "questions/question-bank.json",
     "question-bank.md": "questions/question-bank.md",
     "lesson.md": "lessons/CH-001.md",
-    "approved-claims.json": "evidence/approved-claims.json",
+    "approved-claims.json": relative_text(APPROVED_CLAIMS),
     "learner-progress.json": "progress/learner-progress.json",
-    "wiki.json": "wiki/wiki.json",
-    "wiki-page.md": "wiki/pages/concept-id.md",
     "run-plan.yaml": ".work/orchestration/run-plan.yaml",
     "task-brief.yaml": ".work/orchestration/task-template.yaml",
 }
@@ -86,6 +111,10 @@ def adopt(root: Path) -> dict[str, object]:
     if not study_id or not title:
         raise ValueError("course.yaml requires course_id and title before adoption.")
 
+    legacy_paths = [root / name for name in ("source-manifest.yaml", "source", "evidence", "logs", "study-guide.md", "wiki")]
+    if any(path.exists() for path in legacy_paths):
+        migrate(root)
+
     for relative in DIRECTORIES:
         path = root / relative
         if path.exists() and (not path.is_dir() or path.is_symlink()):
@@ -105,7 +134,7 @@ def adopt(root: Path) -> dict[str, object]:
         _write_if_missing(target, text, created, root)
     if "study.yaml" in created:
         study = yaml.safe_load((root / "study.yaml").read_text(encoding="utf-8"))
-        source_manifest = yaml.safe_load((root / "source-manifest.yaml").read_text(encoding="utf-8"))
+        source_manifest = yaml.safe_load((root / SOURCE_MANIFEST).read_text(encoding="utf-8"))
         sources = source_manifest.get("sources", []) if isinstance(source_manifest, dict) else []
         study["mode"] = "provided-material-only" if sources else "topic-research"
         study["source_policy"] = study["mode"]
@@ -113,20 +142,11 @@ def adopt(root: Path) -> dict[str, object]:
             yaml.safe_dump(study, sort_keys=False, allow_unicode=True),
             encoding="utf-8",
         )
-    _write_if_missing(root / "concept-map.md", f"# Concept map: {title}\n\n", created, root)
-    _write_if_missing(root / "glossary.md", f"# Glossary: {title}\n\n", created, root)
-    _write_if_missing(root / "evidence" / "contradictions.json", "{\n  \"contradictions\": []\n}\n", created, root)
-    _write_if_missing(root / "evidence" / "gaps.json", "{\n  \"gaps\": []\n}\n", created, root)
-    layout = {
-        "schema_version": "course-layout-v1",
-        "durable_roots": ["source", "lessons", "wiki", "questions", "progress", "exams", "attempts", "logs", "evidence"],
-        "disposable_root": ".work",
-        "worker_root_pattern": ".work/runs/<run-id>/tasks/<task-id>",
-        "canonical_event_log": "logs/events.jsonl",
-    }
+    _write_if_missing(root / CONTRADICTIONS, "{\n  \"contradictions\": []\n}\n", created, root)
+    _write_if_missing(root / GAPS, "{\n  \"gaps\": []\n}\n", created, root)
     _write_if_missing(
-        root / ".work" / "course-layout.json",
-        json.dumps(layout, ensure_ascii=False, indent=2) + "\n",
+        root / COURSE_LAYOUT,
+        json.dumps(layout_payload(), ensure_ascii=False, indent=2) + "\n",
         created,
         root,
     )
@@ -135,7 +155,7 @@ def adopt(root: Path) -> dict[str, object]:
         "actor": "initializer",
         "status": "complete",
         "summary": "Added the canonical study layout while preserving existing course and source artifacts.",
-        "artifacts": ["course.yaml", "study.yaml", ".work/course-layout.json"],
+        "artifacts": ["course.yaml", "study.yaml", relative_text(COURSE_LAYOUT)],
         "justification": "Application-created courses must use the same deterministic skill workflow before publication.",
     })
     return {

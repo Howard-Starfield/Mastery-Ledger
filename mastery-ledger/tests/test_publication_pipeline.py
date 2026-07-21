@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -49,19 +50,89 @@ def question(index: int) -> dict:
     }
 
 
+def lesson_text(*, validated: bool = True) -> str:
+    core = "The learner traces the mechanism, compares alternatives, checks assumptions, and applies the supported concept to a concrete decision. " * 58
+    example = "First identify the goal and evidence, then apply each step, inspect the result, and explain why the tempting alternative fails. " * 14
+    detail = "A common mistake is to memorize a label without checking the mechanism, boundary conditions, evidence, or effect on the final decision. " * 4
+    return f"""---
+schema_version: lesson-v1
+chapter_id: CH-001
+title: Core chapter
+status: {"validated" if validated else "draft"}
+objective_ids: [OBJ-001, OBJ-002]
+concept_ids: [concept-id]
+prerequisite_chapter_ids: []
+estimated_minutes: 25
+last_updated: 2026-07-21
+source_refs:
+  - ref_id: REF-001
+    source_id: SRC-001
+    locator: {{kind: section, value: "1", label: "Section 1"}}
+    supports: [claim]
+    support_strength: direct
+---
+
+# Core chapter
+
+## Why this matters
+This chapter turns a source-grounded statement into an idea the learner can recognize and use.
+
+## Connect to what you know
+Begin with the learner's existing mental model, name the prerequisite, and distinguish familiarity from usable understanding.
+
+## What you will be able to do
+- Explain the supported mechanism in your own words.
+- Apply the mechanism to a new case and reject a plausible misconception.
+
+## Big picture
+The concept connects evidence, mechanism, decision, and feedback in a sequence that can be checked.
+
+## Core explanation
+{core} [^REF-001]
+
+## Worked example 1
+{example} [^REF-001]
+
+## Worked example 2
+{example} [^REF-001]
+
+## Pause and retrieve
+- Explain the mechanism without looking back.
+- Predict what changes when one assumption is removed.
+- Compare the correct model with the most plausible misconception.
+
+## Common misconceptions
+{detail}
+
+## Limitations and uncertainty
+{detail}
+
+## Transfer and practical use
+Use the sequence on a new case, state which evidence supports the choice, and identify where the conclusion would stop applying.
+
+## Key takeaways
+Evidence and mechanism must remain connected; application requires checking assumptions and limits.
+
+## What comes next
+The next chapter can increase complexity after the learner can explain and apply this model.
+
+## Sources used
+[^REF-001]: Fixture source, Section 1.
+"""
+
+
 def prepare_assessment_inputs(course: Path) -> None:
     study_path = course / "study.yaml"
     study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
     study["mode"] = "provided-material-only"
     study["workflow_state"] = "EVIDENCE_APPROVED"
     study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
-    (course / "evidence" / "approved-claims.json").write_text(
+    (course / "records" / "evidence" / "approved-claims.json").write_text(
         json.dumps({"schema_version": "approved-claims-v1", "claims": [{"claim_id": "CLM-001", "claim": "A source-grounded approved claim."}]}, indent=2) + "\n",
         encoding="utf-8",
     )
-    substantive = "# Draft\n\n" + ("Source-grounded instructional material with examples and limitations. " * 3) + "\n"
-    (course / "study-guide.md").write_text(substantive, encoding="utf-8")
-    (course / "concept-map.md").write_text(substantive, encoding="utf-8")
+    (course / "index.md").write_text("# Course\n\n" + ("A substantive chapter map links objectives, lessons, and review order. " * 20), encoding="utf-8")
+    (course / "lessons" / "CH-001.md").write_text(lesson_text(validated=False), encoding="utf-8")
 
 
 def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
@@ -89,9 +160,9 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
         )
 
         knowledge = "# Extracted knowledge\n\n## Section 1\n\nA source-grounded statement used by the assessment.\n"
-        (course / "source" / "SRC-001.md").write_text(knowledge, encoding="utf-8")
+        (course / "records" / "source" / "SRC-001.md").write_text(knowledge, encoding="utf-8")
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "register_source.py"), str(course), "--source-id", "SRC-001", "--title", "Fixture source", "--location", "https://example.invalid/source", "--knowledge-path", "source/SRC-001.md"],
+            [sys.executable, str(ROOT / "scripts" / "register_source.py"), str(course), "--source-id", "SRC-001", "--title", "Fixture source", "--location", "https://example.invalid/source", "--knowledge-path", "records/source/SRC-001.md"],
             check=True,
             capture_output=True,
             text=True,
@@ -110,19 +181,13 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
             "schema_version": "question-bank-v2",
             "source_ref_schema": "source-ref-v1",
             "study_id": yaml.safe_load((course / "study.yaml").read_text(encoding="utf-8"))["study_id"],
-            "chapters": [{"chapter_id": "CH-001", "title": "Core chapter", "class": "core", "lesson_path": "lessons/CH-001.md"}],
+            "chapters": [{"chapter_id": "CH-001", "title": "Core chapter", "class": "core", "question_tier": "standard", "lesson_path": "lessons/CH-001.md"}],
             "questions": [question(index) for index in range(1, 11)],
         }
         bank_path.write_text(json.dumps(bank, indent=2) + "\n", encoding="utf-8")
-        substantive = (
-            "# Course material\n\nThis source-grounded chapter explains the central concept, its prerequisite, "
-            "a worked example, a common misconception, a practical limitation, and the exact Section 1 locator.\n"
-        )
-        (course / "lessons" / "CH-001.md").write_text(substantive, encoding="utf-8")
-        (course / "study-guide.md").write_text(substantive.replace("Course material", "Study guide"), encoding="utf-8")
-        (course / "concept-map.md").write_text(substantive.replace("Course material", "Concept map"), encoding="utf-8")
-        (course / "glossary.md").write_text(substantive.replace("Course material", "Glossary"), encoding="utf-8")
-        (course / "evidence" / "approved-claims.json").write_text(json.dumps({
+        (course / "lessons" / "CH-001.md").write_text(lesson_text(), encoding="utf-8")
+        (course / "index.md").write_text("# Publishable course\n\n" + ("Read the core chapter, retrieve the mechanism, and then complete the validated exam. " * 20), encoding="utf-8")
+        (course / "records" / "evidence" / "approved-claims.json").write_text(json.dumps({
             "schema_version": "approved-claims-v1",
             "claims": [{"claim_id": "CLM-001", "claim": "Supported statement.", "source_refs": [source_ref()]}],
         }, indent=2) + "\n", encoding="utf-8")
@@ -237,6 +302,11 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
             text=True,
         )
         assert build.returncode == 0, build.stdout + build.stderr
+        publication_receipt = json.loads(
+            (course / "records" / "evidence" / "validation" / "publication-receipt.json").read_text(encoding="utf-8")
+        )
+        assert publication_receipt["schema_version"] == "publication-receipt-v1"
+        assert publication_receipt["exam_id"] == "EXAM-001"
         validation = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "validate_study_pack.py"), str(course), "--publication"],
             check=False,
@@ -256,6 +326,15 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
         assert reconciliation["status"] == "complete"
         assert reconciliation["current_state"] == "LEARNING_ACTIVE"
         assert len(reconciliation["advanced"]) == 2
+
+        shutil.rmtree(course / ".work")
+        durable_validation = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "validate_study_pack.py"), str(course), "--publication"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert durable_validation.returncode == 0, durable_validation.stdout + durable_validation.stderr
 
         sys.path.insert(0, str(REPO / "src"))
         from mastery_ledger.exam_service import load_exam
@@ -283,11 +362,12 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
             capture_output=True,
             text=True,
         )
-        assert rebuilt.returncode == 0, rebuilt.stdout + rebuilt.stderr
+        assert rebuilt.returncode == 1, rebuilt.stdout + rebuilt.stderr
+        assert "durably validates the current question-bank content" in rebuilt.stdout
 
         replacement = load_exam(workspace, bank["study_id"], "EXAM-001")
-        assert replacement.title == "Updated publishable exam"
-        assert replacement.questions[0].view.prompt == bank["questions"][0]["prompt"]
+        assert replacement.title == "Publishable exam"
+        assert replacement.questions[0].view.prompt != bank["questions"][0]["prompt"]
 
 
 def test_calibration_record_is_bounded_and_workflow_cannot_skip_gates() -> None:
@@ -627,11 +707,14 @@ def test_application_course_adoption_preserves_existing_sources() -> None:
         study = yaml.safe_load((course / "study.yaml").read_text(encoding="utf-8"))
         assert study["study_id"] == "COURSE-ADOPT"
         assert study["mode"] == "provided-material-only"
-        assert manifest_path.read_text(encoding="utf-8") == manifest_text
-        assert (source_root / "SRC-001.md").read_text(encoding="utf-8") == knowledge
-        assert (media_root / "original.bin").read_bytes() == original
-        events = [json.loads(line) for line in (course / "logs" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
-        assert [event["action"] for event in events] == ["course.adopted"]
+        migrated_manifest_path = course / "records" / "source-manifest.yaml"
+        migrated_manifest = yaml.safe_load(migrated_manifest_path.read_text(encoding="utf-8"))
+        assert migrated_manifest["sources"][0]["knowledge_path"] == "records/source/SRC-001.md"
+        migrated_source_root = course / "records" / "source"
+        assert (migrated_source_root / "SRC-001.md").read_text(encoding="utf-8") == knowledge
+        assert (migrated_source_root / "media" / "SRC-001" / "original.bin").read_bytes() == original
+        events = [json.loads(line) for line in (course / "records" / "logs" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert [event["action"] for event in events] == ["course.layout_migrated", "course.adopted"]
 
         repeated = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "adopt_course.py"), str(course)],
@@ -641,4 +724,4 @@ def test_application_course_adoption_preserves_existing_sources() -> None:
         )
         assert repeated.returncode == 0
         assert json.loads(repeated.stdout)["already_initialized"] is True
-        assert len((course / "logs" / "events.jsonl").read_text(encoding="utf-8").splitlines()) == 1
+        assert len((course / "records" / "logs" / "events.jsonl").read_text(encoding="utf-8").splitlines()) == 2

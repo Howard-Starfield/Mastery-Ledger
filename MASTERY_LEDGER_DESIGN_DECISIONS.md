@@ -8,7 +8,7 @@ Mastery Ledger has two cooperating but independently useful parts:
 
 | Part | Owns | Must not own |
 | --- | --- | --- |
-| Codex skill | learning intake, source acquisition, extraction, transcription, research, evidence review, course compilation, wiki files, question banks, and ready-exam generation | exam attempts, learner scheduling, application registry |
+| Codex skill | learning intake, source acquisition, extraction, transcription, research, evidence review, book-like lesson compilation, question banks, and ready-exam generation | exam attempts, learner scheduling, application registry |
 | Offline application | workspace registration, read-only playback of published lessons, ready-exam discovery and playback, attempts, progress, due reviews, and review-curve settings | source ingestion, research, course or lesson writing, wiki authoring, question generation, or mutation of generated exams |
 
 The application may be installed after a course is generated. A missing application never downgrades course building to provisional chat.
@@ -26,8 +26,7 @@ When the first request contains an attachment, local path, URL, pasted source ex
 
 ## Workspace ownership
 
-- Reuse the application's registered writable workspace when available and learner-approved.
-- Otherwise ask the learner for one absolute workspace path before the first durable write.
+- Ask the learner for one absolute workspace path before the first durable write unless the learner explicitly identifies an existing course or already-approved path in the conversation.
 - Never store courses, source media, models, logs, or generated artifacts inside the installed skill.
 - The skill writes only within the approved workspace and its course-specific `.work/` boundary.
 - The application scans the workspace for generated courses but does not edit their knowledge or exam definitions.
@@ -45,18 +44,20 @@ Durable course artifacts include:
 ```text
 course/
   study.yaml
-  source-manifest.yaml
-  source/
-    SRC-NNN.md
-    media/SRC-NNN/
-  evidence/
+  index.md
   lessons/
-  wiki/
   questions/
   exams/
   attempts/
   progress/
-  logs/events.jsonl
+  records/
+    source-manifest.yaml
+    source/
+      SRC-NNN.md
+      media/SRC-NNN/
+    evidence/
+      validation/
+    logs/events.jsonl
   .work/
     ingestion/
     runs/
@@ -66,8 +67,8 @@ Workers write only under their assigned `.work/runs/<run-id>/tasks/<task-id>/` d
 
 ## Source and media processing
 
-- Store extracted knowledge as Markdown directly under `source/`.
-- Store binaries, original documents, captions, transcripts, and media under `source/media/<source-id>/`.
+- Store extracted knowledge as Markdown directly under `records/source/`.
+- Store binaries, original documents, captions, transcripts, and media under `records/source/media/<source-id>/`.
 - Require an explicit rights basis before remote media acquisition.
 - Prefer human captions, then permitted platform captions, then labeled automatic captions, then optional local ASR.
 - Invoke packaged skill scripts through absolute paths resolved from `SKILL_ROOT`.
@@ -93,20 +94,23 @@ Compile each worker's context from the versioned role profile and required contr
 
 If independent workers are unavailable, preserve provisional material under `.work/`, record `DRAFT_UNVERIFIED`, and do not activate mastery or mark a researched exam ready.
 
+Provided-material courses use one bounded source extractor per retained source, contradiction review when two or more sources are retained, and final citation verification. They do not spawn open-web research workers unless the learner authorizes expansion. Assessment generation and a distinct assessment validator remain mandatory for a ready exam in every mode.
+
 ## Evidence and logging
 
 - Use canonical `source-ref-v1` objects with precise locators.
 - Keep contradictions, gaps, rejected claims, and limitations visible.
 - Logs contain observable actions, decisions, evidence paths, statuses, and short justifications—not hidden chain-of-thought.
-- Workers emit task-local event shards. The main agent validates and merges them into `logs/events.jsonl`.
+- Workers emit task-local event shards. The completion router validates and merges them into `records/logs/events.jsonl`, then writes compact accepted-result receipts under `records/evidence/validation/`.
 - Learner-facing pages may keep citations collapsed, but durable source references remain available for verification.
 
-## Lesson, wiki, and assessment products
+## Lesson and assessment products
 
-- Lessons and wiki pages are evidence-approved learning material, not raw web extracts.
-- Raw or faithful extracted knowledge stays under `source/`.
-- The planned Markdown wiki catalog uses a global `index.md` and per-course `wiki/index.md`; migration from the current portable wiki format remains a separate implementation slice.
-- Each core chapter contains a readable lesson and exactly ten assessment items: eight concise standalone multiple-choice questions and two short passage-based multiple-choice questions.
+- Lessons are evidence-approved learning material, not raw web extracts. A wiki is not part of the skill output.
+- Raw or faithful extracted knowledge stays under `records/source/`.
+- `index.md` is a concise course map. Definitions, examples, misconceptions, and limitations live in the lesson where the learner needs them.
+- Every chapter uses `lesson-v1`: standard lessons contain 1,200-1,800 words, expanded lessons may contain 1,800-2,500, and longer material is split. Each lesson includes measurable objectives, two worked examples, 2-4 retrieval checks, misconceptions, limitations, transfer, and structured source locators.
+- Every published chapter has at least ten items. Tiers are 10 with an 8/2 standalone/passage mix, 15 with 12/3, or 20 with 16/4.
 - The application Study tab lists only `learning_active` courses and reads chapter paths from the validated `question-bank-v2` catalog.
 - Study lessons have `Read` and `Raw` views. Read mode renders Markdown and embedded raw HTML inside a sandboxed document; Raw mode shows the exact stored source as inert text. Both views are read-only, and active content cannot run in the application shell.
 - Every published question has four options, one answer key, a supported explanation, misconception-based distractor rationales, objective and concept IDs, and canonical source references.
@@ -115,7 +119,7 @@ If independent workers are unavailable, preserve provisional material under `.wo
 ## Offline exam behavior
 
 - The application reads a ready `exam.json`; it never rewrites it.
-- A ready exam is replaceable generated input, not a versioned application record. Rebuilding the same `exam_id` atomically replaces its file, and the next dashboard scan and new attempt use the replacement.
+- A ready exam is replaceable generated input, not a versioned application record. Rebuilding the same `exam_id` atomically replaces its file only after the current bank has its own matching independent-validation receipt; a failed rebuild leaves the previous ready exam unchanged.
 - The application does not compare a ready exam with `question-bank.json`, maintain a drift ledger, migrate exam versions, or block a valid replacement. Those are skill-owned build artifacts, and the ready `exam.json` is the application's delivery boundary.
 - Completed attempt files remain historical learner records. An in-progress attempt resumes only while its exact exam content is unchanged; otherwise starting that exam creates a fresh attempt from the current file without mutating the older attempt.
 - The first response omits answer keys and explanations.
