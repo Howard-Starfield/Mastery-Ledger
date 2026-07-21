@@ -208,14 +208,16 @@ Install the local exam app:
 ```powershell
 uv tool install . --force --no-cache
 mastery-ledger doctor --json
-mastery-ledger onboard --open --json
+mastery-ledger onboard --open
 ```
 
-On first use, choose the workspace that will hold your course folders. The same command opens the running app on later uses:
+On first use, choose either one course folder or a parent workspace that contains course folders. After setup, open the app from any drive or directory with:
 
 ```powershell
-mastery-ledger onboard --open --json
+mastery-ledger open
 ```
+
+Use `mastery-ledger repair --open` only when you want to choose a different workspace. Add `--json` when another program needs machine-readable launch status.
 
 Install the Codex skill from the clone:
 
@@ -254,7 +256,7 @@ Install the current development preview of the app:
 
 ```powershell
 uv tool install "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
-mastery-ledger onboard --open --json
+mastery-ledger onboard --open
 ```
 
 Install the skill from GitHub:

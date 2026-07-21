@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from mastery_ledger.course_discovery import course_roots as _course_roots
 from mastery_ledger.models import (
     StudyChapter,
     StudyCourse,
@@ -15,7 +16,6 @@ from mastery_ledger.models import (
     WorkspaceState,
 )
 
-MAX_COURSES = 500
 MAX_LESSON_BYTES = 2 * 1024 * 1024
 WORD_PATTERN = re.compile(r"\b[\w'-]+\b", re.UNICODE)
 
@@ -50,32 +50,6 @@ def _read_json(path: Path, root: Path) -> dict[str, Any] | None:
     except (OSError, UnicodeError, json.JSONDecodeError):
         return None
     return payload if isinstance(payload, dict) else None
-
-
-def _course_roots(workspace: Path) -> list[Path]:
-    parents = [workspace]
-    nested = workspace / "courses"
-    if nested.is_dir() and not nested.is_symlink():
-        parents.insert(0, nested)
-    roots: list[Path] = []
-    seen: set[Path] = set()
-    for parent in parents:
-        try:
-            children = sorted(parent.iterdir(), key=lambda item: item.name.casefold())
-        except OSError:
-            continue
-        for child in children:
-            if len(roots) >= MAX_COURSES:
-                return roots
-            if not child.is_dir() or child.is_symlink():
-                continue
-            resolved = child.resolve(strict=False)
-            if resolved in seen:
-                continue
-            if (child / "study.yaml").is_file() or (child / "course.yaml").is_file():
-                roots.append(child)
-                seen.add(resolved)
-    return roots
 
 
 def _manifest(course_root: Path) -> dict[str, Any] | None:

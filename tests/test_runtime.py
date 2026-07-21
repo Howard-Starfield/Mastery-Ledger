@@ -11,6 +11,7 @@ from mastery_ledger.app import create_app
 from mastery_ledger import cli
 from mastery_ledger.cli import main
 from mastery_ledger.config import database_path, runtime_signature
+from mastery_ledger.course_discovery import course_roots
 from mastery_ledger.database import initialize_database
 from mastery_ledger.models import FolderPickerResult
 from mastery_ledger.runtime import build_doctor_result, validate_workspace
@@ -232,6 +233,18 @@ def test_repair_bootstrap_establishes_session_and_routes_to_application(
         assert client.get("/api/v1/status").status_code == 200
 
 
+def test_application_bootstrap_establishes_session_and_routes_to_dashboard(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    app = create_app(session_token="open-session", web_dir=tmp_path / "missing-web")
+
+    with TestClient(app) as client:
+        response = client.get("/bootstrap/open-session/open", follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == "/"
+        assert client.get("/api/v1/status").status_code == 200
+
+
 def test_doctor_cli_emits_one_json_object(runtime_home: Path, capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = main(["doctor", "--json", "--skill-version", "0.1.0"])
     captured = capsys.readouterr()
@@ -268,6 +281,50 @@ def test_repair_cli_uses_fixed_workspace_repair_launcher(
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == "workspace-repair-launch-v1"
     assert payload["opened"] is True
+
+
+def test_open_cli_launches_application_without_an_open_flag(
+    runtime_home: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        cli,
+        "launch_application",
+        lambda: {
+            "schema_version": "application-launch-v1",
+            "status": "launched",
+            "opened": True,
+            "pid": 123,
+            "url": "http://127.0.0.1:8765/",
+        },
+    )
+
+    assert main(["open", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "application-launch-v1"
+    assert payload["opened"] is True
+
+
+def test_course_discovery_accepts_course_folder_as_workspace(tmp_path: Path) -> None:
+    course = tmp_path / "single-course"
+    course.mkdir()
+    (course / "study.yaml").write_text("title: Single course\n", encoding="utf-8")
+    nested = course / "internal"
+    nested.mkdir()
+    (nested / "course.yaml").write_text("title: Not a separate course\n", encoding="utf-8")
+
+    assert course_roots(course) == [course]
+
+
+def test_course_discovery_accepts_workspace_collections(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    nested_course = workspace / "courses" / "alpha"
+    direct_course = workspace / "beta"
+    nested_course.mkdir(parents=True)
+    direct_course.mkdir(parents=True)
+    (nested_course / "study.yaml").write_text("title: Alpha\n", encoding="utf-8")
+    (direct_course / "course.yaml").write_text("title: Beta\n", encoding="utf-8")
+
+    assert course_roots(workspace) == [nested_course, direct_course]
 
 
 def test_launcher_reuses_server_with_matching_runtime(

@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 
+from mastery_ledger.course_discovery import course_roots as _course_roots
 from mastery_ledger.database import read_setting
 from mastery_ledger.models import (
     DashboardCourse,
@@ -18,7 +19,6 @@ from mastery_ledger.models import (
 )
 from mastery_ledger.settings_service import DEFAULT_REVIEW_INTERVALS, valid_intervals
 
-MAX_COURSES = 500
 MAX_EXAMS_PER_COURSE = 2_000
 MAX_ATTEMPTS_PER_COURSE = 2_000
 
@@ -49,33 +49,6 @@ def _read_yaml(path: Path, root: Path) -> dict[str, Any] | None:
     except (OSError, UnicodeError, yaml.YAMLError):
         return None
     return payload if isinstance(payload, dict) else None
-
-
-def _course_roots(workspace: Path) -> list[Path]:
-    parents = [workspace]
-    courses_dir = workspace / "courses"
-    if courses_dir.is_dir() and not courses_dir.is_symlink():
-        parents.insert(0, courses_dir)
-
-    roots: list[Path] = []
-    seen: set[Path] = set()
-    for parent in parents:
-        try:
-            children = sorted(parent.iterdir(), key=lambda item: item.name.casefold())
-        except OSError:
-            continue
-        for child in children:
-            if len(roots) >= MAX_COURSES:
-                return roots
-            if not child.is_dir() or child.is_symlink():
-                continue
-            resolved = child.resolve(strict=False)
-            if resolved in seen:
-                continue
-            if (child / "course.yaml").is_file() or (child / "study.yaml").is_file():
-                roots.append(child)
-                seen.add(resolved)
-    return roots
 
 
 def _manifest(course_root: Path) -> dict[str, Any] | None:

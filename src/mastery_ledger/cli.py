@@ -120,11 +120,15 @@ def _spawn_server(port: int, token: str) -> subprocess.Popen[bytes]:
 
 
 def _launch_application(*, open_browser: bool, purpose: str) -> dict[str, Any]:
-    if purpose not in {"onboarding", "workspace-repair"}:
+    if purpose not in {"application", "onboarding", "workspace-repair"}:
         raise ValueError(f"Unsupported application launch purpose: {purpose}")
     schema_version = f"{purpose}-launch-v1"
-    command_name = "onboard" if purpose == "onboarding" else "repair"
-    destination = "onboarding" if purpose == "onboarding" else "workspace repair"
+    command_name = {
+        "application": "open",
+        "onboarding": "onboard",
+        "workspace-repair": "repair",
+    }[purpose]
+    retry_command = f"mastery-ledger {command_name}{'' if purpose == 'application' else ' --open'} --json"
     existing = _read_server_state()
     expected_signature = runtime_signature()
     status_value = "launched"
@@ -151,10 +155,14 @@ def _launch_application(*, open_browser: bool, purpose: str) -> dict[str, Any]:
                 "schema_version": schema_version,
                 "status": "needs_user_action",
                 "opened": False,
-                "message": f"The local application did not start. Run mastery-ledger {command_name} --open --json again.",
+                "message": f"The local application did not start. Run {retry_command} again.",
             }
 
-    bootstrap_suffix = "" if purpose == "onboarding" else "/repair"
+    bootstrap_suffix = {
+        "application": "/open",
+        "onboarding": "",
+        "workspace-repair": "/repair",
+    }[purpose]
     bootstrap_url = (
         f"http://127.0.0.1:{state['port']}/bootstrap/{state['session_token']}"
         f"{bootstrap_suffix}"
@@ -166,16 +174,20 @@ def _launch_application(*, open_browser: bool, purpose: str) -> dict[str, Any]:
             "status": "needs_user_action",
             "opened": False,
             "pid": state["pid"],
-            "url": f"http://127.0.0.1:{state['port']}/{'' if purpose == 'workspace-repair' else 'onboarding'}",
-            "message": f"The application started, but the browser could not be opened. Rerun the {destination} command.",
+            "url": f"http://127.0.0.1:{state['port']}/{'onboarding' if purpose == 'onboarding' else ''}",
+            "message": f"The application started, but the browser could not be opened. Open the URL shown here or rerun mastery-ledger {command_name}.",
         }
     return {
         "schema_version": schema_version,
         "status": status_value,
         "opened": opened,
         "pid": state["pid"],
-        "url": f"http://127.0.0.1:{state['port']}/{'' if purpose == 'workspace-repair' else 'onboarding'}",
+        "url": f"http://127.0.0.1:{state['port']}/{'onboarding' if purpose == 'onboarding' else ''}",
     }
+
+
+def launch_application() -> dict[str, Any]:
+    return _launch_application(open_browser=True, purpose="application")
 
 
 def launch_onboarding(*, open_browser: bool) -> dict[str, Any]:
@@ -219,6 +231,9 @@ def build_parser() -> argparse.ArgumentParser:
     onboard.add_argument("--open", action="store_true", dest="open_browser")
     onboard.add_argument("--json", action="store_true", dest="as_json")
 
+    open_command = subparsers.add_parser("open", help="Open the local Mastery Ledger application")
+    open_command.add_argument("--json", action="store_true", dest="as_json")
+
     repair = subparsers.add_parser("repair", help="Open the workspace repair application")
     repair.add_argument("--open", action="store_true", dest="open_browser")
     repair.add_argument("--json", action="store_true", dest="as_json")
@@ -247,6 +262,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             _json_print(result)
         else:
             print(result.get("message") or f"Mastery Ledger onboarding: {result['status']}")
+        return 0 if result["status"] in {"launched", "already_running"} else 2
+
+    if args.command == "open":
+        result = launch_application()
+        if args.as_json:
+            _json_print(result)
+        else:
+            print(result.get("message") or f"Mastery Ledger opened: {result.get('url', result['status'])}")
         return 0 if result["status"] in {"launched", "already_running"} else 2
 
     if args.command == "repair":

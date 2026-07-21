@@ -323,6 +323,21 @@ def create_app(
         )
         return response
 
+    @app.get("/bootstrap/{bootstrap_token}/open", include_in_schema=False)
+    def bootstrap_application(bootstrap_token: str) -> Response:
+        if not secrets.compare_digest(bootstrap_token, token):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+        response.set_cookie(
+            SESSION_COOKIE,
+            token,
+            httponly=True,
+            samesite="strict",
+            secure=False,
+            path="/",
+        )
+        return response
+
     assets = frontend / "assets"
     if assets.is_dir():
         app.mount("/assets", StaticFiles(directory=assets), name="assets")

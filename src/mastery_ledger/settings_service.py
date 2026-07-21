@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from mastery_ledger.course_discovery import course_roots as _course_roots
 from mastery_ledger.database import read_setting, save_settings
 from mastery_ledger.models import (
     ApplicationSettings,
@@ -19,7 +20,6 @@ from mastery_ledger.models import (
 
 DEFAULT_REVIEW_INTERVALS = [1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584]
 DEFAULT_CURVE_ID = "CURVE-OWNERSHIP"
-MAX_COURSES = 500
 
 
 class SettingsUpdateError(RuntimeError):
@@ -80,32 +80,6 @@ def active_review_curve() -> ReviewCurveProfile:
         created_at=None,
         supersedes_version=None,
     )
-
-
-def _course_roots(workspace_root: Path) -> list[Path]:
-    parents = [workspace_root]
-    courses = workspace_root / "courses"
-    if courses.is_dir() and not courses.is_symlink():
-        parents.insert(0, courses)
-    roots: list[Path] = []
-    seen: set[Path] = set()
-    for parent in parents:
-        try:
-            children = sorted(parent.iterdir(), key=lambda item: item.name.casefold())
-        except OSError:
-            continue
-        for child in children:
-            if len(roots) >= MAX_COURSES:
-                return roots
-            if not child.is_dir() or child.is_symlink():
-                continue
-            resolved = child.resolve(strict=False)
-            if resolved in seen:
-                continue
-            if (child / "course.yaml").is_file() or (child / "study.yaml").is_file():
-                roots.append(child)
-                seen.add(resolved)
-    return roots
 
 
 def _review_queue_files(workspace_root: Path) -> list[Path]:
