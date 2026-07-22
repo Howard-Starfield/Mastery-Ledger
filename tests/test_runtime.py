@@ -563,6 +563,33 @@ def test_study_library_exposes_validated_lessons_without_frontmatter_and_preserv
             + lesson_body
         )
         (published / "lessons" / "CH-001.md").write_text(lesson_content, encoding="utf-8")
+        (published / "lessons" / "glossary.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "course-glossary-v1",
+                    "course_id": "COURSE-STUDY",
+                    "terms": [
+                        {
+                            "term_id": "TERM-001",
+                            "term": "Feedback loop",
+                            "definition": "A process whose output returns as a later input.",
+                            "aliases": ["feedback cycle"],
+                            "chapter_ids": ["CH-001", "CH-UNKNOWN"],
+                            "source_refs": [{"source_id": "SRC-001"}],
+                        },
+                        {
+                            "term_id": "TERM-002",
+                            "term": "Balancing loop",
+                            "definition": "A feedback loop that resists change around a target.",
+                            "aliases": [],
+                            "chapter_ids": ["CH-001"],
+                            "source_refs": [],
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
         (published / "questions" / "question-bank.json").write_text(
             json.dumps(
                 {
@@ -661,6 +688,33 @@ def test_study_library_exposes_validated_lessons_without_frontmatter_and_preserv
         draft_lesson = client.get("/api/v1/study/COURSE-DRAFT/chapters/CH-DRAFT")
         assert draft_lesson.status_code == 200
         assert draft_lesson.json()["content"] == draft_body
+
+        glossary = client.get("/api/v1/study/COURSE-STUDY/glossary")
+        assert glossary.status_code == 200
+        assert glossary.json() == {
+            "schema_version": "study-glossary-v1",
+            "course_id": "COURSE-STUDY",
+            "course_title": "Systems Thinking",
+            "terms": [
+                {
+                    "term_id": "TERM-002",
+                    "term": "Balancing loop",
+                    "definition": "A feedback loop that resists change around a target.",
+                    "aliases": [],
+                    "chapter_ids": ["CH-001"],
+                    "source_count": 0,
+                },
+                {
+                    "term_id": "TERM-001",
+                    "term": "Feedback loop",
+                    "definition": "A process whose output returns as a later input.",
+                    "aliases": ["feedback cycle"],
+                    "chapter_ids": ["CH-001"],
+                    "source_count": 1,
+                },
+            ],
+            "warnings": [],
+        }
 
 
 def test_dashboard_requires_completed_onboarding(runtime_home: Path, tmp_path: Path) -> None:

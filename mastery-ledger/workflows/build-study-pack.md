@@ -24,6 +24,7 @@ Create:
 
 - `index.md`, a concise course map linking every chapter
 - one source-grounded `lessons/<chapter-id>.md` file for every declared chapter
+- `lessons/glossary.json`, containing the course terms, concise definitions, chapter links, aliases, and source references
 - `questions/question-bank.json`
 - `questions/question-bank.md`, generated from the JSON bank
 - `progress/learner-progress.json`
@@ -36,6 +37,8 @@ Create:
 Read `study.yaml.learning_contract.output_contract` before authoring. Create exactly its `chapter_count` and `chapter_ids`; do not silently collapse an approved multi-chapter course into one lesson. Reconciliation rejects a question bank whose chapter count or order differs from that frozen output contract.
 
 Use templates from `assets/`.
+
+Populate `lessons/glossary.json` only from approved evidence and the final lesson vocabulary. Use `course-glossary-v1`. Give every term a stable `term_id`, a concise learner-facing `term`, a self-contained `definition`, zero or more `aliases`, one or more declared `chapter_ids`, and at least one canonical `source-ref-v1` object. Merge spelling and capitalization variants through `aliases`; do not create duplicate entries. Include the terms a learner needs to read the course, not every ordinary word in the sources.
 
 Keep all drafts, worker reports, reviewer notes, temporary extraction, and scratch files under `.work/`. Only the main agent may promote approved lessons, evidence, questions, exams, and learner-state artifacts into their canonical course folders. `records/` is durable and auditable; `.work/` is disposable after accepted receipts are recorded.
 

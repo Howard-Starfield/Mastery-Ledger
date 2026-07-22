@@ -30,6 +30,12 @@ def test_initializer_creates_v2_without_retired_wiki_artifacts() -> None:
         assert (course / "records" / "source" / "media").is_dir()
         assert (course / "records" / "evidence" / "validation").is_dir()
         assert (course / "records" / "logs" / "events.jsonl").is_file()
+        glossary = json.loads((course / "lessons" / "glossary.json").read_text(encoding="utf-8"))
+        assert glossary == {
+            "schema_version": "course-glossary-v1",
+            "course_id": yaml.safe_load((course / "study.yaml").read_text(encoding="utf-8"))["study_id"],
+            "terms": [],
+        }
         assert not (course / "wiki").exists()
         assert not (course / "study-guide.md").exists()
         assert not (course / "concept-map.md").exists()

@@ -9,6 +9,9 @@ describe('lessonDocument', () => {
     )
 
     expect(document).toContain('<h1>Feedback loops</h1>')
+    expect(document).toContain('<main class="lesson-note">')
+    expect(document).toContain('min-height: 100vh')
+    expect(document).toContain('background: #fbfbfa')
     expect(document).toContain('<aside><strong>Example</strong></aside>')
     expect(document).toContain('<script>window.parent.compromised = true</script>')
     expect(document).toContain("script-src 'none'")

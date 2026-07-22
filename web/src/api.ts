@@ -127,6 +127,23 @@ export interface StudyLessonResult {
   word_count: number
 }
 
+export interface StudyGlossaryTerm {
+  term_id: string
+  term: string
+  definition: string
+  aliases: string[]
+  chapter_ids: string[]
+  source_count: number
+}
+
+export interface StudyGlossaryResult {
+  schema_version: 'study-glossary-v1'
+  course_id: string
+  course_title: string
+  terms: StudyGlossaryTerm[]
+  warnings: string[]
+}
+
 export interface ReviewCurveProfile {
   curve_id: string
   version: number
@@ -281,6 +298,8 @@ export const applicationApi = {
     request<StudyLessonResult>(
       `/api/v1/study/${encodeURIComponent(courseId)}/chapters/${encodeURIComponent(chapterId)}`,
     ),
+  studyGlossary: (courseId: string) =>
+    request<StudyGlossaryResult>(`/api/v1/study/${encodeURIComponent(courseId)}/glossary`),
   settings: () => request<ApplicationSettings>('/api/v1/settings'),
   updateReviewCurve: (payload: ReviewCurveUpdatePayload) =>
     request<ReviewCurveUpdateResult>('/api/v1/settings/review-curve', {

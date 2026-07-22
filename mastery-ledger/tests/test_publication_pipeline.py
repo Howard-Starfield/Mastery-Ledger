@@ -139,6 +139,27 @@ def prepare_assessment_inputs(course: Path) -> None:
     )
     (course / "index.md").write_text("# Course\n\n" + ("A substantive chapter map links objectives, lessons, and review order. " * 20), encoding="utf-8")
     (course / "lessons" / "CH-001.md").write_text(lesson_text(validated=False), encoding="utf-8")
+    (course / "lessons" / "glossary.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "course-glossary-v1",
+                "course_id": study["study_id"],
+                "terms": [
+                    {
+                        "term_id": "TERM-001",
+                        "term": "Evidence mechanism",
+                        "definition": "A traceable explanation that connects source evidence to a decision.",
+                        "aliases": [],
+                        "chapter_ids": ["CH-001"],
+                        "source_refs": [source_ref()],
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
@@ -192,6 +213,27 @@ def test_full_publication_fixture_passes_skill_gate_and_app_parser() -> None:
         }
         bank_path.write_text(json.dumps(bank, indent=2) + "\n", encoding="utf-8")
         (course / "lessons" / "CH-001.md").write_text(lesson_text(), encoding="utf-8")
+        (course / "lessons" / "glossary.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "course-glossary-v1",
+                    "course_id": bank["study_id"],
+                    "terms": [
+                        {
+                            "term_id": "TERM-001",
+                            "term": "Evidence mechanism",
+                            "definition": "A traceable explanation that connects source evidence to a decision.",
+                            "aliases": [],
+                            "chapter_ids": ["CH-001"],
+                            "source_refs": [source_ref()],
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         (course / "index.md").write_text("# Publishable course\n\n" + ("Read the core chapter, retrieve the mechanism, and then complete the validated exam. " * 20), encoding="utf-8")
         (course / "records" / "evidence" / "approved-claims.json").write_text(json.dumps({
             "schema_version": "approved-claims-v1",

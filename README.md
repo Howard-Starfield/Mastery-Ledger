@@ -155,7 +155,7 @@ Larger chapters may use 15 or 20 questions with the same balance. Every question
 | Location | Contents |
 | --- | --- |
 | `index.md` | Course map and reading order |
-| `lessons/` | Chapter lessons |
+| `lessons/` | Chapter lessons and the course glossary |
 | `questions/` | Question bank and Markdown record |
 | `exams/` | Exams read by the app |
 | `records/source/` | Source notes and permitted media |
@@ -167,7 +167,7 @@ Logs record visible actions and decisions. They do not contain hidden reasoning.
 
 ## Reading and exams
 
-The `Study` view lists published lessons. Read mode renders the lesson without showing its metadata header. Raw mode shows the original Markdown and HTML. The app never edits the lesson.
+The `Study` view lists published lessons and loads the course glossary beside them. The reader renders each lesson without showing its metadata header. The app never edits the lesson.
 
 The exam view shows one question at a time. Before you answer, the browser does not receive the answer key or explanation.
 

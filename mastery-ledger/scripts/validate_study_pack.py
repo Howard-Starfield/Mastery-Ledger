@@ -15,6 +15,7 @@ import yaml
 from course_paths import (
     APPROVED_CLAIMS,
     EVENT_LOG,
+    GLOSSARY,
     INDEX,
     PROGRESS,
     QUESTION_BANK,
@@ -34,6 +35,7 @@ REQUIRED_FILES = [
     relative_text(SOURCE_MANIFEST),
     relative_text(QUESTION_BANK),
     relative_text(PROGRESS / "learner-progress.json"),
+    relative_text(GLOSSARY),
 ]
 QUESTION_TYPES = {"free-recall", "multiple-choice", "application", "calculation", "explain", "compare", "synthesis"}
 QUESTION_TIERS = {
@@ -42,6 +44,66 @@ QUESTION_TIERS = {
     "large": (20, 16, 4),
 }
 DELIVERY_OPTION_IDS = {"A", "B", "C", "D"}
+
+
+def validate_glossary(
+    payload: dict[str, Any],
+    *,
+    source_ids: set[str],
+    chapter_ids: set[str],
+    publication: bool = False,
+) -> list[str]:
+    errors: list[str] = []
+    if payload.get("schema_version") != "course-glossary-v1":
+        errors.append("lessons/glossary.json schema_version must be course-glossary-v1")
+    if not str(payload.get("course_id", "")).strip():
+        errors.append("lessons/glossary.json course_id is required")
+    terms = payload.get("terms")
+    if not isinstance(terms, list):
+        return [*errors, "lessons/glossary.json must contain a terms list"]
+    if len(terms) > 500:
+        errors.append("lessons/glossary.json cannot contain more than 500 terms")
+    if publication and not terms:
+        errors.append("Publication requires a non-empty course glossary")
+
+    seen_ids: set[str] = set()
+    seen_terms: set[str] = set()
+    for index, item in enumerate(terms):
+        prefix = f"lessons/glossary.json terms[{index}]"
+        if not isinstance(item, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+        term_id = str(item.get("term_id", "")).strip()
+        term = str(item.get("term", "")).strip()
+        definition = str(item.get("definition", "")).strip()
+        normalized_term = normalized(term)
+        if not term_id or term_id in seen_ids:
+            errors.append(f"{prefix}.term_id is missing or duplicated")
+        else:
+            seen_ids.add(term_id)
+        if not term or normalized_term in seen_terms:
+            errors.append(f"{prefix}.term is missing or duplicated")
+        else:
+            seen_terms.add(normalized_term)
+        if len(definition) < 20:
+            errors.append(f"{prefix}.definition must be at least 20 characters")
+        aliases = item.get("aliases", [])
+        if not isinstance(aliases, list) or not all(isinstance(alias, str) and alias.strip() for alias in aliases):
+            errors.append(f"{prefix}.aliases must be a list of non-empty strings")
+        item_chapters = item.get("chapter_ids")
+        if not isinstance(item_chapters, list) or not item_chapters:
+            errors.append(f"{prefix}.chapter_ids must be a non-empty list")
+        else:
+            unknown = {str(chapter_id) for chapter_id in item_chapters} - chapter_ids
+            if unknown:
+                errors.append(f"{prefix}.chapter_ids contains unknown chapters: {sorted(unknown)}")
+        refs = item.get("source_refs")
+        if not isinstance(refs, list) or not refs:
+            errors.append(f"{prefix}.source_refs must be a non-empty list")
+        else:
+            for ref_index, ref in enumerate(refs):
+                errors.extend(validate_source_ref(ref, source_ids, f"{prefix}.source_refs[{ref_index}]"))
+    return errors
 
 
 def normalized(value: str) -> str:
@@ -598,6 +660,23 @@ def validate_workspace(
     )
     errors.extend(question_errors)
     warnings.extend(question_warnings)
+    chapter_ids = {
+        str(chapter.get("chapter_id"))
+        for chapter in question_payload.get("chapters", [])
+        if isinstance(chapter, dict) and chapter.get("chapter_id")
+    }
+    glossary_payload = json.loads((root / GLOSSARY).read_text(encoding="utf-8"))
+    if not isinstance(glossary_payload, dict):
+        errors.append("lessons/glossary.json must contain an object")
+    else:
+        errors.extend(
+            validate_glossary(
+                glossary_payload,
+                source_ids=source_ids,
+                chapter_ids=chapter_ids,
+                publication=publication,
+            )
+        )
 
     if len((root / INDEX).read_text(encoding="utf-8").strip()) < 100:
         warnings.append("index.md is nearly empty")

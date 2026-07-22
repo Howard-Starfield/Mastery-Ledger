@@ -222,6 +222,23 @@ class StudyLessonResult(BaseModel):
     word_count: int = Field(ge=0)
 
 
+class StudyGlossaryTerm(BaseModel):
+    term_id: str
+    term: str
+    definition: str
+    aliases: list[str] = Field(default_factory=list)
+    chapter_ids: list[str] = Field(default_factory=list)
+    source_count: int = Field(ge=0)
+
+
+class StudyGlossaryResult(BaseModel):
+    schema_version: Literal["study-glossary-v1"] = "study-glossary-v1"
+    course_id: str
+    course_title: str
+    terms: list[StudyGlossaryTerm] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class ExamOption(BaseModel):
     option_id: str = Field(min_length=1, max_length=24)
     text: str = Field(min_length=1, max_length=10_000)

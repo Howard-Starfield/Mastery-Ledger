@@ -9,6 +9,7 @@ LAYOUT_SCHEMA = "course-layout-v2"
 
 INDEX = Path("index.md")
 LESSONS = Path("lessons")
+GLOSSARY = LESSONS / "glossary.json"
 QUESTIONS = Path("questions")
 QUESTION_BANK = QUESTIONS / "question-bank.json"
 QUESTION_BANK_REVIEW = QUESTIONS / "question-bank.md"
@@ -60,4 +61,3 @@ def layout_payload() -> dict[str, object]:
         "source_root": relative_text(SOURCE),
         "validation_root": relative_text(VALIDATION),
     }
-

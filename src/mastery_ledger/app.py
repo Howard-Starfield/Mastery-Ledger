@@ -42,6 +42,7 @@ from mastery_ledger.models import (
     ReviewCurveUpdateRequest,
     ReviewCurveUpdateResult,
     StudyLessonResult,
+    StudyGlossaryResult,
     StudyLibraryResult,
     WorkspaceState,
     WorkspaceRepairRequest,
@@ -57,7 +58,7 @@ from mastery_ledger.settings_service import (
     application_settings,
     update_review_curve,
 )
-from mastery_ledger.study_service import StudyMaterialNotFoundError, study_lesson, study_library
+from mastery_ledger.study_service import StudyMaterialNotFoundError, study_glossary, study_lesson, study_library
 SESSION_COOKIE = "mastery_ledger_session"
 
 
@@ -138,6 +139,17 @@ def create_app(
     def chapter_lesson(course_id: str, chapter_id: str) -> StudyLessonResult:
         try:
             return study_lesson(ready_workspace(), course_id, chapter_id)
+        except StudyMaterialNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+    @app.get(
+        "/api/v1/study/{course_id}/glossary",
+        response_model=StudyGlossaryResult,
+        dependencies=[Depends(require_session)],
+    )
+    def course_glossary(course_id: str) -> StudyGlossaryResult:
+        try:
+            return study_glossary(ready_workspace(), course_id)
         except StudyMaterialNotFoundError as error:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 

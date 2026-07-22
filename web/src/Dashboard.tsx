@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
-import { applicationApi, type DashboardExam, type DashboardResult } from './api'
+import { applicationApi, onboardingApi, type DashboardExam, type DashboardResult } from './api'
 import CurveSettings from './CurveSettings'
 import ExamRunner from './ExamRunner'
 import StudyReader from './StudyReader'
@@ -66,6 +66,11 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [activeScreen, setActiveScreen] = useState<'study' | 'exams'>('exams')
   const [studyRefreshToken, setStudyRefreshToken] = useState(0)
   const [studyCourseId, setStudyCourseId] = useState<string | null>(null)
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
+  const [workspacePath, setWorkspacePath] = useState('')
+  const [workspaceBusy, setWorkspaceBusy] = useState(false)
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null)
+  const workspaceMenuRef = useRef<HTMLDivElement>(null)
 
   const refresh = () => {
     setLoading(true)
@@ -78,6 +83,68 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   }
 
   useEffect(refresh, [])
+
+  useEffect(() => {
+    if (!workspaceMenuOpen && data?.workspace.path) setWorkspacePath(data.workspace.path)
+  }, [data?.workspace.path, workspaceMenuOpen])
+
+  useEffect(() => {
+    if (!workspaceMenuOpen) return
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (!workspaceMenuRef.current?.contains(event.target as Node)) setWorkspaceMenuOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setWorkspaceMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePress)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePress)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [workspaceMenuOpen])
+
+  const activateWorkspace = async (nextPath: string) => {
+    const trimmedPath = nextPath.trim()
+    if (!trimmedPath) {
+      setWorkspaceError('Enter a workspace folder or choose one with Browse.')
+      return
+    }
+    setWorkspaceBusy(true)
+    setWorkspaceError(null)
+    try {
+      const result = await applicationApi.repairWorkspace(trimmedPath, data?.workspace.name ?? workspaceName)
+      setData((current) => current ? { ...current, workspace: result.workspace } : current)
+      setWorkspacePath(result.workspace.path)
+      setWorkspaceMenuOpen(false)
+      setStudyCourseId(null)
+      setStudyRefreshToken((value) => value + 1)
+      refresh()
+    } catch (cause) {
+      setWorkspaceError(cause instanceof Error ? cause.message : 'The workspace could not be changed.')
+    } finally {
+      setWorkspaceBusy(false)
+    }
+  }
+
+  const browseForWorkspace = async () => {
+    setWorkspaceBusy(true)
+    setWorkspaceError(null)
+    try {
+      const selection = await onboardingApi.pickFolder(workspacePath || data?.workspace.path || null)
+      if (selection.status === 'selected' && selection.path) await activateWorkspace(selection.path)
+      if (selection.status === 'unavailable') setWorkspaceError(selection.message ?? 'The folder picker is unavailable. Paste an absolute path instead.')
+    } catch (cause) {
+      setWorkspaceError(cause instanceof Error ? cause.message : 'The folder picker could not open.')
+    } finally {
+      setWorkspaceBusy(false)
+    }
+  }
+
+  const submitWorkspacePath = (event: FormEvent) => {
+    event.preventDefault()
+    void activateWorkspace(workspacePath)
+  }
 
   const filteredExams = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
@@ -132,9 +199,44 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
             </button>
           ))}
         </nav>
-        <div className="nav-workspace">
-          <span className="nav-workspace__avatar">ML</span>
-          <div><strong>Local workspace</strong><small><i /> Session protected</small></div>
+        <div className="nav-workspace-shell" ref={workspaceMenuRef}>
+          {workspaceMenuOpen && (
+            <section className="workspace-menu" role="dialog" aria-label="Change workspace">
+              <header>
+                <span>Current workspace</span>
+                <strong>{data?.workspace.name ?? workspaceName}</strong>
+                <small title={data?.workspace.path}>{data?.workspace.path}</small>
+              </header>
+              <form onSubmit={submitWorkspacePath}>
+                <label htmlFor="workspace-location">Workspace location</label>
+                <input
+                  id="workspace-location"
+                  value={workspacePath}
+                  onChange={(event) => { setWorkspacePath(event.target.value); setWorkspaceError(null) }}
+                  placeholder="Absolute folder path"
+                  spellCheck={false}
+                  autoFocus
+                />
+                {workspaceError && <p role="alert">{workspaceError}</p>}
+                <div>
+                  <button type="button" onClick={browseForWorkspace} disabled={workspaceBusy}>Browse…</button>
+                  <button type="submit" className="is-primary" disabled={workspaceBusy}>{workspaceBusy ? 'Changing…' : 'Use this location'}</button>
+                </div>
+              </form>
+              <footer>Choose an existing ledger or a new folder. Your review settings stay with the app.</footer>
+            </section>
+          )}
+          <button
+            type="button"
+            className="nav-workspace"
+            aria-haspopup="dialog"
+            aria-expanded={workspaceMenuOpen}
+            onClick={() => { setWorkspaceMenuOpen((open) => !open); setWorkspaceError(null) }}
+          >
+            <span className="nav-workspace__avatar">ML</span>
+            <span className="nav-workspace__copy"><strong>{data?.workspace.name ?? 'Local workspace'}</strong><small><i /> Local workspace</small></span>
+            <span className="nav-workspace__chevron" aria-hidden="true">⌃</span>
+          </button>
         </div>
       </aside>
 

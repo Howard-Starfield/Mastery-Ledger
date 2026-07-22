@@ -31,6 +31,10 @@ Each source reference is a canonical `source-ref-v1` object plus a unique `ref_i
 11. Show transfer or practical recognition in a new situation.
 12. Close with key takeaways, the next dependency, and `## Sources used`.
 
+## Course glossary
+
+After the final lessons are stable, update `lessons/glossary.json` from their vocabulary. Define each technical term once, connect it to every chapter that uses it, and cite the approved evidence behind the definition. Keep definitions self-contained and short enough to scan beside a lesson. Use aliases for abbreviations, spelling variants, and alternate names rather than duplicating terms.
+
 ## Size and scope
 
 - Standard core chapter: 1,200-1,800 words.
@@ -43,4 +47,3 @@ Word count is a guardrail, not proof. A chapter also needs aligned objectives, c
 ## Ownership
 
 The main agent writes and normalizes final lesson prose from approved evidence. Workers submit bounded evidence or reviews under `.work/`; they do not write canonical chapters. Require an independent pedagogy reviewer for high-stakes domains, more than three chapters, substantial notation, or deterministic lesson warnings. Independent assessment validation remains mandatory for every ready exam.
-

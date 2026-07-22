@@ -11,12 +11,15 @@ from mastery_ledger.course_discovery import course_roots as _course_roots
 from mastery_ledger.models import (
     StudyChapter,
     StudyCourse,
+    StudyGlossaryResult,
+    StudyGlossaryTerm,
     StudyLessonResult,
     StudyLibraryResult,
     WorkspaceState,
 )
 
 MAX_LESSON_BYTES = 2 * 1024 * 1024
+MAX_GLOSSARY_BYTES = 2 * 1024 * 1024
 WORD_PATTERN = re.compile(r"\b[\w'-]+\b", re.UNICODE)
 
 
@@ -218,3 +221,64 @@ def study_lesson(workspace: WorkspaceState, course_id: str, chapter_id: str) -> 
             word_count=_word_count(content),
         )
     raise StudyMaterialNotFoundError("Published study material was not found.")
+
+
+def study_glossary(workspace: WorkspaceState, course_id: str) -> StudyGlossaryResult:
+    for course_root in _course_roots(Path(workspace.path)):
+        course, _ = _course_record(course_root)
+        if course is None or course.course_id != course_id:
+            continue
+        glossary_path = course_root / "lessons" / "glossary.json"
+        try:
+            too_large = glossary_path.stat().st_size > MAX_GLOSSARY_BYTES
+        except OSError:
+            too_large = False
+        payload = None if too_large else _read_json(glossary_path, course_root)
+        if payload is None or payload.get("schema_version") != "course-glossary-v1":
+            return StudyGlossaryResult(
+                course_id=course.course_id,
+                course_title=course.title,
+                warnings=["No readable glossary has been published for this course."],
+            )
+
+        known_chapters = {chapter.chapter_id for chapter in course.chapters}
+        terms: list[StudyGlossaryTerm] = []
+        seen: set[str] = set()
+        raw_terms = payload.get("terms")
+        if not isinstance(raw_terms, list):
+            raw_terms = []
+        for index, raw in enumerate(raw_terms[:500]):
+            if not isinstance(raw, dict):
+                continue
+            term = str(raw.get("term") or "").strip()
+            definition = str(raw.get("definition") or "").strip()
+            key = term.casefold()
+            if not term or not definition or key in seen:
+                continue
+            aliases = raw.get("aliases")
+            chapter_ids = raw.get("chapter_ids")
+            source_refs = raw.get("source_refs")
+            terms.append(
+                StudyGlossaryTerm(
+                    term_id=str(raw.get("term_id") or f"TERM-{index + 1:03d}"),
+                    term=term,
+                    definition=definition,
+                    aliases=[str(alias).strip() for alias in aliases if str(alias).strip()][:12]
+                    if isinstance(aliases, list)
+                    else [],
+                    chapter_ids=[str(chapter_id) for chapter_id in chapter_ids if str(chapter_id) in known_chapters]
+                    if isinstance(chapter_ids, list)
+                    else [],
+                    source_count=sum(isinstance(ref, dict) for ref in source_refs)
+                    if isinstance(source_refs, list)
+                    else 0,
+                )
+            )
+            seen.add(key)
+        terms.sort(key=lambda item: item.term.casefold())
+        return StudyGlossaryResult(
+            course_id=course.course_id,
+            course_title=course.title,
+            terms=terms,
+        )
+    raise StudyMaterialNotFoundError("Published course glossary was not found.")
