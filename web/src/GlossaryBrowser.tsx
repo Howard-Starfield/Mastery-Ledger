@@ -1,10 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { applicationApi, type GlossaryIndexResult, type GlossaryIndexTerm } from './api'
+import {
+  applicationApi,
+  type GlossaryCourseSummary,
+  type GlossaryIndexResult,
+  type GlossaryIndexTerm,
+} from './api'
+
+export type GlossaryNavigationSnapshot = {
+  courses: GlossaryCourseSummary[]
+  totalTerms: number
+  loading: boolean
+}
 
 type GlossaryBrowserProps = {
   refreshToken: number
   onOpenChapter: (courseId: string, chapterId: string) => void
+  courseId: string
+  query: string
+  showToolbar?: boolean
+  onCourseIdChange: (courseId: string) => void
+  onQueryChange: (query: string) => void
+  onNavigationChange?: (snapshot: GlossaryNavigationSnapshot) => void
 }
 
 const PAGE_SIZE = 100
@@ -23,9 +40,16 @@ export function groupGlossaryTerms(terms: GlossaryIndexTerm[]) {
   return [...groups.entries()]
 }
 
-export default function GlossaryBrowser({ refreshToken, onOpenChapter }: GlossaryBrowserProps) {
-  const [courseId, setCourseId] = useState('all')
-  const [query, setQuery] = useState('')
+export default function GlossaryBrowser({
+  refreshToken,
+  onOpenChapter,
+  courseId,
+  query,
+  showToolbar = true,
+  onCourseIdChange,
+  onQueryChange,
+  onNavigationChange,
+}: GlossaryBrowserProps) {
   const [settledQuery, setSettledQuery] = useState('')
   const [result, setResult] = useState<GlossaryIndexResult | null>(null)
   const [terms, setTerms] = useState<GlossaryIndexTerm[]>([])
@@ -58,6 +82,14 @@ export default function GlossaryBrowser({ refreshToken, onOpenChapter }: Glossar
     return () => { active = false }
   }, [courseId, refreshToken, settledQuery])
 
+  useEffect(() => {
+    onNavigationChange?.({
+      courses: result?.courses ?? [],
+      totalTerms: result?.total_terms ?? 0,
+      loading,
+    })
+  }, [loading, onNavigationChange, result?.courses, result?.total_terms])
+
   const groups = useMemo(() => groupGlossaryTerms(terms), [terms])
 
   const loadMore = async () => {
@@ -82,14 +114,14 @@ export default function GlossaryBrowser({ refreshToken, onOpenChapter }: Glossar
 
   return (
     <section className="glossary-browser" aria-labelledby="glossary-title">
-      <header className="glossary-toolbar">
+      {showToolbar && <header className="glossary-toolbar">
         <div>
           <p className="kicker">Knowledge index</p>
           <h1 id="glossary-title">Glossary</h1>
         </div>
         <label className="glossary-course-filter">
           <span>Course</span>
-          <select value={courseId} onChange={(event) => setCourseId(event.target.value)}>
+          <select value={courseId} onChange={(event) => onCourseIdChange(event.target.value)}>
             <option value="all">All courses</option>
             {result?.courses.map((course) => (
               <option key={course.course_id} value={course.course_id}>{course.title} ({course.term_count})</option>
@@ -98,18 +130,18 @@ export default function GlossaryBrowser({ refreshToken, onOpenChapter }: Glossar
         </label>
         <label className="glossary-browser-search">
           <span aria-hidden="true">⌕</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search terms, aliases, definitions" aria-label="Search glossary" />
-          {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear glossary search">×</button>}
+          <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search terms, aliases, definitions" aria-label="Search glossary" />
+          {query && <button type="button" onClick={() => onQueryChange('')} aria-label="Clear glossary search">×</button>}
         </label>
         <div className="glossary-result-count" aria-live="polite">
           <strong>{result?.total_terms ?? 0}</strong>
           <span>{result?.total_terms === 1 ? 'term' : 'terms'}</span>
         </div>
-      </header>
+      </header>}
 
       {error && <div className="dashboard-error glossary-error" role="alert"><strong>Glossary could not be opened.</strong><span>{error}</span></div>}
 
-      <div className="glossary-workspace">
+      <div className={showToolbar ? 'glossary-workspace' : 'glossary-workspace glossary-workspace--full'}>
         <nav className="alphabet-rail" aria-label="Glossary letters">
           {groups.map(([letter]) => <a key={letter} href={`#glossary-${encodeURIComponent(letter)}`}>{letter}</a>)}
         </nav>

@@ -71,6 +71,15 @@ def _published(manifest: dict[str, Any]) -> bool:
     return str(manifest.get("workflow_state", "")).strip().casefold() == "learning_active"
 
 
+def _draft_preview(manifest: dict[str, Any]) -> bool:
+    return (
+        manifest.get("bundle_schema") == "mastery-ledger-course-bundle-v1"
+        and manifest.get("layout_schema") == "course-layout-v2"
+        and str(manifest.get("workflow_state", "")).strip().casefold() == "study_pack_drafted"
+        and str(manifest.get("publication_status", "")).strip().casefold() == "draft_unverified"
+    )
+
+
 def _lesson_body(content: str) -> tuple[dict[str, Any] | None, str]:
     """Return lesson metadata and the Markdown intended for learners."""
     normalized = content.replace("\r\n", "\n")
@@ -131,6 +140,7 @@ def _course_record(course_root: Path) -> tuple[StudyCourse | None, list[str]]:
     if manifest is None:
         return None, warnings
     published = _published(manifest)
+    draft_preview = _draft_preview(manifest)
     course_id = str(manifest.get("course_id") or manifest.get("study_id") or course_root.name)
     title = str(manifest.get("title") or course_root.name.replace("-", " ").title())
     question_bank = _read_json(course_root / "questions" / "question-bank.json", course_root)
@@ -152,7 +162,7 @@ def _course_record(course_root: Path) -> tuple[StudyCourse | None, list[str]]:
         content = _lesson_text(
             course_root,
             raw.get("lesson_path"),
-            require_validated=not published,
+            require_validated=not published and not draft_preview,
         )
         if content is None:
             warnings.append(f"Skipped unreadable lesson {chapter_id} in {course_root.name}")
@@ -175,6 +185,7 @@ def _course_record(course_root: Path) -> tuple[StudyCourse | None, list[str]]:
             course_id=course_id,
             title=title,
             updated_at=str(manifest["updated_at"]) if manifest.get("updated_at") else None,
+            publication_status=str(manifest.get("publication_status") or "UNSPECIFIED"),
             chapters=chapters,
         ),
         warnings,
@@ -211,7 +222,7 @@ def study_lesson(workspace: WorkspaceState, course_id: str, chapter_id: str) -> 
         content = _lesson_text(
             course_root,
             chapter.lesson_path,
-            require_validated=not _published(manifest or {}),
+            require_validated=not _published(manifest or {}) and not _draft_preview(manifest or {}),
         )
         if content is None:
             break

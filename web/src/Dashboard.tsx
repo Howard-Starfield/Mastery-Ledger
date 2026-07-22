@@ -2,31 +2,18 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import { applicationApi, onboardingApi, type DashboardExam, type DashboardResult } from './api'
 import CurveSettings from './CurveSettings'
+import ExamContextPanel from './ExamContextPanel'
 import ExamRunner from './ExamRunner'
+import GlossaryContextPanel from './GlossaryContextPanel'
 import GlossaryBrowser from './GlossaryBrowser'
+import type { GlossaryNavigationSnapshot } from './GlossaryBrowser'
+import StudyContextPanel from './StudyContextPanel'
 import StudyReader from './StudyReader'
+import type { StudyNavigationSnapshot } from './StudyReader'
+import WorkbenchShell from './WorkbenchShell'
 
 type DashboardProps = {
   workspaceName: string
-}
-
-const navItems = [
-  { label: 'Study', icon: 'book', action: 'study' },
-  { label: 'Glossary', icon: 'letters', action: 'glossary' },
-  { label: 'Exams', icon: 'paper', action: 'exams' },
-  { label: 'Due review', icon: 'clock', action: 'review' },
-  { label: 'Review curve', icon: 'grid', action: 'curve' },
-]
-
-function Icon({ name }: { name: string }) {
-  const paths: Record<string, React.ReactNode> = {
-    book: <><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v17H7.5A3.5 3.5 0 0 0 4 22z" /><path d="M20 5.5A3.5 3.5 0 0 0 16.5 2H13v17h3.5A3.5 3.5 0 0 1 20 22z" /></>,
-    grid: <><rect x="3" y="3" width="6" height="6" /><rect x="15" y="3" width="6" height="6" /><rect x="3" y="15" width="6" height="6" /><rect x="15" y="15" width="6" height="6" /></>,
-    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
-    paper: <><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v5h4M9 12h7M9 16h7" /></>,
-    letters: <><path d="M4 19 9 5l5 14M6 14h6" /><path d="M15 9h5M17.5 9v10M15 19h5" /></>,
-  }
-  return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>
 }
 
 function formatDate(value: string | null) {
@@ -70,6 +57,19 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [studyRefreshToken, setStudyRefreshToken] = useState(0)
   const [studyCourseId, setStudyCourseId] = useState<string | null>(null)
   const [studyChapterId, setStudyChapterId] = useState<string | null>(null)
+  const [studyNavigation, setStudyNavigation] = useState<StudyNavigationSnapshot>({
+    courses: [],
+    selectedCourseId: null,
+    selectedChapterId: null,
+    loading: true,
+  })
+  const [glossaryCourseId, setGlossaryCourseId] = useState('all')
+  const [glossaryQuery, setGlossaryQuery] = useState('')
+  const [glossaryNavigation, setGlossaryNavigation] = useState<GlossaryNavigationSnapshot>({
+    courses: [],
+    totalTerms: 0,
+    loading: true,
+  })
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [workspacePath, setWorkspacePath] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
@@ -170,8 +170,58 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
     return <ExamRunner reviewMode onExit={() => { setActiveReview(false); refresh() }} />
   }
   return (
-    <main className="ledger-app">
-      <header className="ledger-topbar">
+    <main className="workbench-app">
+      <WorkbenchShell
+        activeDestination={activeScreen}
+        dueCount={data?.due_now ?? 0}
+        loading={loading}
+        workspaceName={data?.workspace.name ?? workspaceName}
+        workspacePath={data?.workspace.path}
+        contextContent={activeScreen === 'study' ? (
+          <StudyContextPanel
+            snapshot={studyNavigation}
+            onSelect={(nextCourseId, nextChapterId) => {
+              setStudyCourseId(nextCourseId)
+              setStudyChapterId(nextChapterId)
+            }}
+            onImported={(nextCourseId) => {
+              setStudyCourseId(nextCourseId)
+              setStudyChapterId(null)
+              setStudyRefreshToken((value) => value + 1)
+              refresh()
+            }}
+          />
+        ) : activeScreen === 'glossary' ? (
+          <GlossaryContextPanel
+            snapshot={glossaryNavigation}
+            courseId={glossaryCourseId}
+            query={glossaryQuery}
+            onCourseIdChange={setGlossaryCourseId}
+            onQueryChange={setGlossaryQuery}
+          />
+        ) : (
+          <ExamContextPanel
+            data={data}
+            query={query}
+            courseId={course}
+            evidence={evidence}
+            onQueryChange={setQuery}
+            onCourseIdChange={setCourse}
+            onEvidenceChange={setEvidence}
+            onStartReview={() => setActiveReview(true)}
+          />
+        )}
+        onNavigate={setActiveScreen}
+        onStartReview={() => setActiveReview(true)}
+        onOpenSettings={() => setCurveSettingsOpen(true)}
+        onChangeWorkspace={() => void browseForWorkspace()}
+        onRescan={() => {
+          refresh()
+          if (activeScreen !== 'exams') setStudyRefreshToken((value) => value + 1)
+        }}
+      >
+      <div className={`workbench-canvas workbench-canvas--${activeScreen}`}>
+      <header className="legacy-ledger-topbar">
         <a className="ledger-wordmark" href="/" aria-label="Mastery Ledger home">
           <span>ML</span>
           <strong>Mastery Ledger</strong>
@@ -183,27 +233,9 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
         </button>
       </header>
 
-      <aside className="ledger-nav">
+      <aside className="legacy-ledger-nav">
         <nav aria-label="Primary navigation">
-          {navItems.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              className={item.action === activeScreen ? 'is-active' : ''}
-              disabled={item.action === 'review' && !data?.due_now}
-              onClick={() => {
-                if (item.action === 'study') setActiveScreen('study')
-                if (item.action === 'glossary') setActiveScreen('glossary')
-                if (item.action === 'exams') setActiveScreen('exams')
-                if (item.action === 'review') setActiveReview(true)
-                if (item.action === 'curve') setCurveSettingsOpen(true)
-              }}
-            >
-              <Icon name={item.icon} />
-              <span>{item.label}</span>
-              {item.action === 'review' && Boolean(data?.due_now) && <em>{data?.due_now}</em>}
-            </button>
-          ))}
+          <button type="button" onClick={() => setActiveScreen('study')}>Study</button>
         </nav>
         <div className="nav-workspace-shell" ref={workspaceMenuRef}>
           {workspaceMenuOpen && (
@@ -246,9 +278,23 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
         </div>
       </aside>
 
-      {activeScreen === 'study' ? <StudyReader refreshToken={studyRefreshToken} initialCourseId={studyCourseId} initialChapterId={studyChapterId} /> : activeScreen === 'glossary' ? (
+      {activeScreen === 'study' ? (
+        <StudyReader
+          refreshToken={studyRefreshToken}
+          initialCourseId={studyCourseId}
+          initialChapterId={studyChapterId}
+          showCatalog={false}
+          onNavigationChange={setStudyNavigation}
+        />
+      ) : activeScreen === 'glossary' ? (
         <GlossaryBrowser
           refreshToken={studyRefreshToken}
+          courseId={glossaryCourseId}
+          query={glossaryQuery}
+          showToolbar={false}
+          onCourseIdChange={setGlossaryCourseId}
+          onQueryChange={setGlossaryQuery}
+          onNavigationChange={setGlossaryNavigation}
           onOpenChapter={(nextCourseId, nextChapterId) => {
             setStudyCourseId(nextCourseId)
             setStudyChapterId(nextChapterId)
@@ -259,10 +305,14 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
         <section className="ledger-main">
         <header className="dashboard-heading">
           <div>
-            <p className="kicker">Exam ledger / today</p>
-            <h1>Your next proof of knowledge.</h1>
+            <h1>Exams</h1>
+            <p className="dashboard-heading__summary">Validated assessments available in this workspace.</p>
           </div>
-          <div className="dashboard-date">{new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())}</div>
+          <dl className="exam-summary">
+            <div><dt>Ready</dt><dd>{data?.ready_exams.length ?? 0}</dd></div>
+            <div><dt>Due</dt><dd>{data?.due_now ?? 0}</dd></div>
+            <div><dt>Courses</dt><dd>{data?.recent_courses.length ?? 0}</dd></div>
+          </dl>
         </header>
 
         {error && <div className="dashboard-error" role="alert"><strong>Workspace scan failed.</strong><span>{error}</span><button type="button" onClick={refresh}>Try again</button></div>}
@@ -279,7 +329,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
 
         <section className="exam-register" aria-labelledby="ready-exams-title">
           <header className="register-heading">
-            <div><p className="kicker">Assessment register</p><h2 id="ready-exams-title">Ready exams</h2></div>
+            <div><h2 id="ready-exams-title">Ready exams</h2><p>Select an exam to inspect its evidence and start or resume an attempt.</p></div>
             <span className="register-count" aria-live="polite">{filteredExams.length} of {data?.ready_exams.length ?? 0}</span>
           </header>
           <div className="register-tools">
@@ -302,7 +352,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
         </section>
 
         <section className="course-shelf" aria-labelledby="recent-courses-title">
-          <header><div><p className="kicker">Portable course folders</p><h2 id="recent-courses-title">Recent courses</h2></div><span>{data?.recent_courses.length ?? 0} registered</span></header>
+          <header><div><h2 id="recent-courses-title">Courses</h2><p>Portable course folders discovered in this workspace.</p></div><span>{data?.recent_courses.length ?? 0} registered</span></header>
           <div className="course-strip">
             {data?.recent_courses.length ? data.recent_courses.slice(0, 6).map((item) => (
               <article key={item.course_id}>
@@ -334,6 +384,9 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
         {Boolean(data?.warnings.length) && <details className="scan-warnings"><summary>{data?.warnings.length} scan warning{data?.warnings.length === 1 ? '' : 's'}</summary>{data?.warnings.map((warning) => <p key={warning}>{warning}</p>)}</details>}
         </aside>
       </>}
+
+      </div>
+      </WorkbenchShell>
 
       {selectedExam && (
         <div className="exam-sheet-backdrop" role="presentation" onMouseDown={() => setSelectedExam(null)}>

@@ -15,7 +15,6 @@ dependencies = [
   "pydantic>=2.10,<3",
   "pyyaml>=6.0,<7",
   "uvicorn>=0.30,<1",
-  "yt-dlp[default]>=2026.2.21,<2027",
 ]
 
 [project.urls]
@@ -24,9 +23,18 @@ Repository = "https://github.com/Howard-Starfield/Mastery-Ledger"
 Issues = "https://github.com/Howard-Starfield/Mastery-Ledger/issues"
 
 [project.optional-dependencies]
+desktop = [
+  "pywebview>=6.2,<7",
+]
+desktop-build = [
+  "pyinstaller>=6,<7",
+]
 dev = [
   "httpx>=0.27,<1",
   "pytest>=8,<10",
+]
+media = [
+  "yt-dlp[default]>=2026.2.21,<2027",
 ]
 transcription = [
   "faster-whisper>=1.1,<2",
@@ -34,6 +42,7 @@ transcription = [
 
 [project.scripts]
 mastery-ledger = "mastery_ledger.cli:main"
+mastery-ledger-desktop = "mastery_ledger.desktop:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

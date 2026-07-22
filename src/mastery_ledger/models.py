@@ -123,6 +123,21 @@ class ApplicationSettings(BaseModel):
     scheduled_question_count: int = Field(ge=0)
 
 
+class AppearanceSettings(BaseModel):
+    schema_version: Literal["appearance-settings-v1"] = "appearance-settings-v1"
+    theme_mode: Literal["system", "light", "dark"] = "system"
+    navigation_panel_open: bool = True
+    navigation_panel_width: int = Field(default=312, ge=220, le=432)
+    content_theme: Literal["infield"] = "infield"
+
+
+class AppearanceSettingsUpdateRequest(BaseModel):
+    theme_mode: Literal["system", "light", "dark"]
+    navigation_panel_open: bool
+    navigation_panel_width: int = Field(ge=220, le=432)
+    content_theme: Literal["infield"] = "infield"
+
+
 class ReviewCurveUpdateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     interval_days: list[int]
@@ -200,6 +215,7 @@ class StudyCourse(BaseModel):
     course_id: str
     title: str
     updated_at: str | None = None
+    publication_status: str = "UNSPECIFIED"
     chapters: list[StudyChapter] = Field(default_factory=list)
 
 

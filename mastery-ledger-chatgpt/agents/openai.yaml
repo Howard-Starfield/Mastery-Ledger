@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mastery Ledger for ChatGPT"
+  short_description: "Build source-grounded draft courses in ChatGPT"
+  default_prompt: "Use $mastery-ledger-chatgpt to turn my uploaded material into a cited, self-checked draft course."

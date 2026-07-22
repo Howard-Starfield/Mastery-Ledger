@@ -129,7 +129,19 @@ For video, the skill tries these methods in order:
 3. Save permitted media only when captions are not enough.
 4. Transcribe locally only after you approve the model and download.
 
-The skill can use the Python `yt-dlp` package. FFmpeg is optional. It does not fetch tools or media without permission.
+Remote-media acquisition is optional and is not installed with the reading and exam app. To let the skill use the Python `yt-dlp` package, reinstall the local project with its media extra:
+
+```powershell
+uv tool install ".[media]" --force --no-cache
+```
+
+For a GitHub installation, use:
+
+```powershell
+uv tool install "mastery-ledger[media] @ git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main" --force --no-cache
+```
+
+FFmpeg remains optional. Mastery Ledger does not fetch tools or media without permission.
 
 ### 4. Check the evidence
 
@@ -257,6 +269,37 @@ npm.cmd run build
 ```
 
 The frontend build writes to `src/mastery_ledger/web/`. Commit those files with any frontend change.
+
+### Desktop executable foundation
+
+The Windows desktop preview runs the existing FastAPI backend inside a native WebView2 window. Install the desktop development and build extras in a virtual environment:
+
+```powershell
+python -m venv .venv
+uv pip install --python .\.venv\Scripts\python.exe -e ".[dev,desktop,desktop-build]"
+```
+
+Run a backend and bundled-frontend smoke test without opening a window:
+
+```powershell
+& .\.venv\Scripts\mastery-ledger-desktop.exe --smoke-test --json
+```
+
+Run the native desktop application during development:
+
+```powershell
+& .\.venv\Scripts\mastery-ledger-desktop.exe
+```
+
+Build the clean one-directory executable preview:
+
+```powershell
+& .\.venv\Scripts\pyinstaller.exe --noconfirm --clean .\packaging\mastery-ledger.spec
+& .\dist\MasteryLedger\MasteryLedger.exe --smoke-test --output .\.work\desktop-smoke.json
+Get-Content .\.work\desktop-smoke.json
+```
+
+The preview intentionally has no installer, custom icon, automatic updater, or code signature yet. Those remain release work after the desktop-host behavior and frontend are validated together.
 
 ## Current limits
 

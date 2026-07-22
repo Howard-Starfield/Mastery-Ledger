@@ -11,8 +11,8 @@ A tag matching `v*` starts the release workflow. The workflow requires the tag t
 ## Maintainer checklist
 
 1. Update the application version, the skill version in `mastery-ledger/assets/runtime-compatibility.json`, and any fixed skill command together.
-2. Regenerate `requirements/core.lock` and `requirements/transcription.lock` when Python dependency ranges change.
-3. Run the commands in the README's automated-check section from a clean checkout.
+2. Regenerate `requirements/core.lock`, `requirements/desktop.lock`, `requirements/media.lock`, and `requirements/transcription.lock` when Python dependency ranges change. The desktop lock includes the `desktop` and `desktop-build` extras; the transcription lock includes both the `media` and `transcription` extras.
+3. Run the commands in the README's automated-check section from a clean checkout. Local distribution builds must start without a stale generated `build/` directory so retired frontend hashes cannot leak into the wheel.
 4. Commit and push the release candidate; wait for CI to pass.
 5. Create and push the matching annotated version tag, such as `v0.1.0`.
 6. Verify the release's checksums and GitHub artifact attestation before recommending it.

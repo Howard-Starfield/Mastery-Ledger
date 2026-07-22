@@ -145,6 +145,62 @@ def test_api_rejects_requests_without_local_session(runtime_home: Path, tmp_path
     assert response.status_code == 401
 
 
+def test_appearance_settings_have_safe_defaults_and_persist(
+    runtime_home: Path, tmp_path: Path
+) -> None:
+    app = create_app(session_token="appearance-session", web_dir=tmp_path / "missing-web")
+
+    with TestClient(app) as client:
+        assert client.get("/api/v1/settings/appearance").status_code == 401
+        client.get("/bootstrap/appearance-session", follow_redirects=False)
+
+        defaults = client.get("/api/v1/settings/appearance")
+        assert defaults.status_code == 200
+        assert defaults.json() == {
+            "schema_version": "appearance-settings-v1",
+            "theme_mode": "system",
+            "navigation_panel_open": True,
+            "navigation_panel_width": 312,
+            "content_theme": "infield",
+        }
+
+        invalid = client.put(
+            "/api/v1/settings/appearance",
+            json={
+                "theme_mode": "midnight",
+                "navigation_panel_open": True,
+                "navigation_panel_width": 500,
+                "content_theme": "infield",
+            },
+        )
+        assert invalid.status_code == 422
+
+        updated = client.put(
+            "/api/v1/settings/appearance",
+            json={
+                "theme_mode": "dark",
+                "navigation_panel_open": False,
+                "navigation_panel_width": 432,
+                "content_theme": "infield",
+            },
+        )
+        assert updated.status_code == 200
+        assert updated.json()["theme_mode"] == "dark"
+        assert updated.json()["navigation_panel_open"] is False
+        assert updated.json()["navigation_panel_width"] == 432
+
+        persisted_payload = client.get("/api/v1/settings/appearance").json()
+        assert persisted_payload == updated.json()
+
+    reloaded_app = create_app(
+        session_token="appearance-reloaded-session",
+        web_dir=tmp_path / "missing-web",
+    )
+    with TestClient(reloaded_app) as reloaded_client:
+        reloaded_client.get("/bootstrap/appearance-reloaded-session", follow_redirects=False)
+        assert reloaded_client.get("/api/v1/settings/appearance").json() == persisted_payload
+
+
 def test_workspace_repair_preserves_settings_and_native_picker_is_explicit(
     runtime_home: Path, tmp_path: Path
 ) -> None:

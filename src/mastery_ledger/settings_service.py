@@ -12,6 +12,8 @@ from mastery_ledger.course_discovery import course_roots as _course_roots
 from mastery_ledger.database import read_setting, save_settings
 from mastery_ledger.models import (
     ApplicationSettings,
+    AppearanceSettings,
+    AppearanceSettingsUpdateRequest,
     ReviewCurveProfile,
     ReviewCurveUpdateRequest,
     ReviewCurveUpdateResult,
@@ -20,6 +22,7 @@ from mastery_ledger.models import (
 
 DEFAULT_REVIEW_INTERVALS = [1, 3, 7, 14, 28, 56, 112, 224, 448, 896, 1792, 3584]
 DEFAULT_CURVE_ID = "CURVE-OWNERSHIP"
+APPEARANCE_SETTINGS_KEY = "appearance_settings"
 
 
 class SettingsUpdateError(RuntimeError):
@@ -124,6 +127,24 @@ def application_settings(workspace: WorkspaceState) -> ApplicationSettings:
         default_review_intervals=DEFAULT_REVIEW_INTERVALS,
         scheduled_question_count=scheduled_question_count(Path(workspace.path)),
     )
+
+
+def appearance_settings() -> AppearanceSettings:
+    payload = read_setting(APPEARANCE_SETTINGS_KEY, None)
+    if isinstance(payload, dict):
+        try:
+            return AppearanceSettings.model_validate(payload)
+        except ValueError:
+            pass
+    return AppearanceSettings()
+
+
+def update_appearance_settings(
+    request: AppearanceSettingsUpdateRequest,
+) -> AppearanceSettings:
+    current = AppearanceSettings(**request.model_dump())
+    save_settings({APPEARANCE_SETTINGS_KEY: current.model_dump()})
+    return current
 
 
 def _curve_fields(profile: ReviewCurveProfile) -> dict[str, object]:

@@ -6,11 +6,17 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Callable
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from mastery_ledger.config import bundled_web_dir, default_workspace_path, runtime_signature
+from mastery_ledger.course_import import (
+    MAX_ARCHIVE_BYTES,
+    CourseImportConflictError,
+    CourseImportError,
+    import_course_zip,
+)
 from mastery_ledger.dashboard import build_dashboard
 from mastery_ledger.database import (
     DatabaseReadError,
@@ -29,6 +35,8 @@ from mastery_ledger.exam_service import (
 from mastery_ledger.folder_picker import pick_folder
 from mastery_ledger.models import (
     ApplicationSettings,
+    AppearanceSettings,
+    AppearanceSettingsUpdateRequest,
     DashboardResult,
     DoctorResult,
     ExamAttemptStart,
@@ -56,7 +64,9 @@ from mastery_ledger.runtime import build_doctor_result, validate_workspace
 from mastery_ledger.settings_service import (
     DEFAULT_REVIEW_INTERVALS,
     SettingsUpdateError,
+    appearance_settings,
     application_settings,
+    update_appearance_settings,
     update_review_curve,
 )
 from mastery_ledger.study_service import StudyMaterialNotFoundError, glossary_index, study_glossary, study_lesson, study_library
@@ -132,6 +142,60 @@ def create_app(
     def study_materials() -> StudyLibraryResult:
         return study_library(ready_workspace())
 
+    @app.post(
+        "/api/v1/courses/import",
+        status_code=status.HTTP_201_CREATED,
+        dependencies=[Depends(require_session)],
+    )
+    async def import_course_archive(
+        request: Request,
+        filename: str = Query(min_length=5, max_length=180),
+    ) -> dict[str, object]:
+        content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().casefold()
+        if content_type not in {
+            "application/octet-stream",
+            "application/x-zip-compressed",
+            "application/zip",
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail="Upload the course as a ZIP file.",
+            )
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length) > MAX_ARCHIVE_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail="Course ZIP exceeds the 25 MB upload limit.",
+                    )
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid Content-Length header.",
+                ) from None
+        payload = bytearray()
+        async for chunk in request.stream():
+            payload.extend(chunk)
+            if len(payload) > MAX_ARCHIVE_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Course ZIP exceeds the 25 MB upload limit.",
+                )
+        try:
+            return import_course_zip(
+                Path(ready_workspace().path),
+                bytes(payload),
+                filename=filename,
+            )
+        except CourseImportConflictError as error:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        except CourseImportError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from error
+
     @app.get(
         "/api/v1/glossary",
         response_model=GlossaryIndexResult,
@@ -179,6 +243,24 @@ def create_app(
     )
     def settings() -> ApplicationSettings:
         return application_settings(ready_workspace())
+
+    @app.get(
+        "/api/v1/settings/appearance",
+        response_model=AppearanceSettings,
+        dependencies=[Depends(require_session)],
+    )
+    def get_appearance_settings() -> AppearanceSettings:
+        return appearance_settings()
+
+    @app.put(
+        "/api/v1/settings/appearance",
+        response_model=AppearanceSettings,
+        dependencies=[Depends(require_session)],
+    )
+    def save_appearance_settings(
+        request: AppearanceSettingsUpdateRequest,
+    ) -> AppearanceSettings:
+        return update_appearance_settings(request)
 
     @app.put(
         "/api/v1/settings/review-curve",

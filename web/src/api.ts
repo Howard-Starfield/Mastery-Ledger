@@ -105,7 +105,17 @@ export interface StudyCourse {
   course_id: string
   title: string
   updated_at: string | null
+  publication_status: string
   chapters: StudyChapter[]
+}
+
+export interface CourseImportResult {
+  schema_version: 'course-import-v1'
+  status: 'imported'
+  course_id: string
+  title: string
+  publication_status: 'DRAFT_UNVERIFIED'
+  relative_path: string
 }
 
 export interface StudyLibraryResult {
@@ -192,6 +202,18 @@ export interface ApplicationSettings {
   default_review_intervals: number[]
   scheduled_question_count: number
 }
+
+export type ThemeMode = 'system' | 'light' | 'dark'
+
+export interface AppearanceSettings {
+  schema_version: 'appearance-settings-v1'
+  theme_mode: ThemeMode
+  navigation_panel_open: boolean
+  navigation_panel_width: number
+  content_theme: 'infield'
+}
+
+export type AppearanceSettingsUpdate = Omit<AppearanceSettings, 'schema_version'>
 
 export type CurveApplicationPolicy = 'new_questions_only' | 'future_advancement' | 'recalculate_all'
 
@@ -325,6 +347,12 @@ export const applicationApi = {
   status: () => request<ApplicationStatus>('/api/v1/status'),
   dashboard: () => request<DashboardResult>('/api/v1/dashboard'),
   studyLibrary: () => request<StudyLibraryResult>('/api/v1/study'),
+  importCourse: (file: File) =>
+    request<CourseImportResult>(`/api/v1/courses/import?filename=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/zip' },
+      body: file,
+    }),
   studyLesson: (courseId: string, chapterId: string) =>
     request<StudyLessonResult>(
       `/api/v1/study/${encodeURIComponent(courseId)}/chapters/${encodeURIComponent(chapterId)}`,
@@ -340,6 +368,12 @@ export const applicationApi = {
     return request<GlossaryIndexResult>(`/api/v1/glossary?${params.toString()}`)
   },
   settings: () => request<ApplicationSettings>('/api/v1/settings'),
+  appearanceSettings: () => request<AppearanceSettings>('/api/v1/settings/appearance'),
+  updateAppearanceSettings: (payload: AppearanceSettingsUpdate) =>
+    request<AppearanceSettings>('/api/v1/settings/appearance', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
   updateReviewCurve: (payload: ReviewCurveUpdatePayload) =>
     request<ReviewCurveUpdateResult>('/api/v1/settings/review-curve', {
       method: 'PUT',

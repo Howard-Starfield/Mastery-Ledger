@@ -175,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     "status": "failed",
                     "code": "missing_ytdlp",
-                    "message": "Install Mastery Ledger core dependencies; no standalone executable is used.",
+                    "message": "Install the optional Mastery Ledger media dependencies in the Python environment running this helper; no standalone executable is used.",
                 }
             )
         )
