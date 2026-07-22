@@ -626,6 +626,24 @@ def test_study_library_exposes_validated_lessons_without_frontmatter_and_preserv
             + draft_body,
             encoding="utf-8",
         )
+        (draft / "lessons" / "glossary.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "course-glossary-v1",
+                    "terms": [
+                        {
+                            "term_id": "TERM-DRAFT-001",
+                            "term": "Feedback loop",
+                            "definition": "A cycle in which an effect influences its own cause.",
+                            "aliases": ["causal cycle"],
+                            "chapter_ids": ["CH-DRAFT"],
+                            "source_refs": [{"source_id": "SRC-DRAFT"}],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
         (draft / "questions" / "question-bank.json").write_text(
             json.dumps(
                 {
@@ -715,6 +733,31 @@ def test_study_library_exposes_validated_lessons_without_frontmatter_and_preserv
             ],
             "warnings": [],
         }
+
+        index = client.get("/api/v1/glossary?limit=1")
+        assert index.status_code == 200
+        index_payload = index.json()
+        assert index_payload["schema_version"] == "glossary-index-v1"
+        assert index_payload["selected_course_id"] is None
+        assert index_payload["total_terms"] == 3
+        assert index_payload["has_more"] is True
+        assert [(course["course_id"], course["term_count"]) for course in index_payload["courses"]] == [
+            ("COURSE-DRAFT", 1),
+            ("COURSE-STUDY", 2),
+        ]
+
+        draft_index = client.get("/api/v1/glossary?course_id=COURSE-DRAFT")
+        assert draft_index.status_code == 200
+        assert draft_index.json()["total_terms"] == 1
+        assert draft_index.json()["terms"][0]["course_title"] == "Draft course"
+        assert draft_index.json()["terms"][0]["chapters"] == [
+            {"chapter_id": "CH-DRAFT", "title": "Draft"}
+        ]
+
+        alias_search = client.get("/api/v1/glossary?q=causal%20cycle")
+        assert alias_search.status_code == 200
+        assert [term["course_id"] for term in alias_search.json()["terms"]] == ["COURSE-DRAFT"]
+        assert client.get("/api/v1/glossary?course_id=COURSE-MISSING").status_code == 404
 
 
 def test_dashboard_requires_completed_onboarding(runtime_home: Path, tmp_path: Path) -> None:

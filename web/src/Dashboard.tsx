@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { applicationApi, onboardingApi, type DashboardExam, type DashboardResult } from './api'
 import CurveSettings from './CurveSettings'
 import ExamRunner from './ExamRunner'
+import GlossaryBrowser from './GlossaryBrowser'
 import StudyReader from './StudyReader'
 
 type DashboardProps = {
@@ -11,6 +12,7 @@ type DashboardProps = {
 
 const navItems = [
   { label: 'Study', icon: 'book', action: 'study' },
+  { label: 'Glossary', icon: 'letters', action: 'glossary' },
   { label: 'Exams', icon: 'paper', action: 'exams' },
   { label: 'Due review', icon: 'clock', action: 'review' },
   { label: 'Review curve', icon: 'grid', action: 'curve' },
@@ -22,6 +24,7 @@ function Icon({ name }: { name: string }) {
     grid: <><rect x="3" y="3" width="6" height="6" /><rect x="15" y="3" width="6" height="6" /><rect x="3" y="15" width="6" height="6" /><rect x="15" y="15" width="6" height="6" /></>,
     clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
     paper: <><path d="M6 3h9l4 4v14H6z" /><path d="M15 3v5h4M9 12h7M9 16h7" /></>,
+    letters: <><path d="M4 19 9 5l5 14M6 14h6" /><path d="M15 9h5M17.5 9v10M15 19h5" /></>,
   }
   return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>
 }
@@ -63,9 +66,10 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [activeExam, setActiveExam] = useState<DashboardExam | null>(null)
   const [activeReview, setActiveReview] = useState(false)
   const [curveSettingsOpen, setCurveSettingsOpen] = useState(false)
-  const [activeScreen, setActiveScreen] = useState<'study' | 'exams'>('exams')
+  const [activeScreen, setActiveScreen] = useState<'study' | 'glossary' | 'exams'>('exams')
   const [studyRefreshToken, setStudyRefreshToken] = useState(0)
   const [studyCourseId, setStudyCourseId] = useState<string | null>(null)
+  const [studyChapterId, setStudyChapterId] = useState<string | null>(null)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [workspacePath, setWorkspacePath] = useState('')
   const [workspaceBusy, setWorkspaceBusy] = useState(false)
@@ -118,6 +122,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
       setWorkspacePath(result.workspace.path)
       setWorkspaceMenuOpen(false)
       setStudyCourseId(null)
+      setStudyChapterId(null)
       setStudyRefreshToken((value) => value + 1)
       refresh()
     } catch (cause) {
@@ -171,8 +176,8 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
           <span>ML</span>
           <strong>Mastery Ledger</strong>
         </a>
-        <div className="workspace-crumb"><span>Workspace</span><b>/</b><strong>{data?.workspace.name ?? workspaceName}</strong>{activeScreen === 'study' && <><b>/</b><span>Study</span></>}</div>
-        <button className="topbar-action" type="button" onClick={() => { refresh(); if (activeScreen === 'study') setStudyRefreshToken((value) => value + 1) }} disabled={loading}>
+        <div className="workspace-crumb"><span>Workspace</span><b>/</b><strong>{data?.workspace.name ?? workspaceName}</strong>{activeScreen !== 'exams' && <><b>/</b><span>{activeScreen === 'study' ? 'Study' : 'Glossary'}</span></>}</div>
+        <button className="topbar-action" type="button" onClick={() => { refresh(); if (activeScreen !== 'exams') setStudyRefreshToken((value) => value + 1) }} disabled={loading}>
           <span className={loading ? 'refresh-glyph is-spinning' : 'refresh-glyph'}>↻</span>
           {loading ? 'Scanning' : 'Rescan'}
         </button>
@@ -188,6 +193,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
               disabled={item.action === 'review' && !data?.due_now}
               onClick={() => {
                 if (item.action === 'study') setActiveScreen('study')
+                if (item.action === 'glossary') setActiveScreen('glossary')
                 if (item.action === 'exams') setActiveScreen('exams')
                 if (item.action === 'review') setActiveReview(true)
                 if (item.action === 'curve') setCurveSettingsOpen(true)
@@ -240,7 +246,16 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
         </div>
       </aside>
 
-      {activeScreen === 'study' ? <StudyReader refreshToken={studyRefreshToken} initialCourseId={studyCourseId} /> : <>
+      {activeScreen === 'study' ? <StudyReader refreshToken={studyRefreshToken} initialCourseId={studyCourseId} initialChapterId={studyChapterId} /> : activeScreen === 'glossary' ? (
+        <GlossaryBrowser
+          refreshToken={studyRefreshToken}
+          onOpenChapter={(nextCourseId, nextChapterId) => {
+            setStudyCourseId(nextCourseId)
+            setStudyChapterId(nextChapterId)
+            setActiveScreen('study')
+          }}
+        />
+      ) : <>
         <section className="ledger-main">
         <header className="dashboard-heading">
           <div>
@@ -297,7 +312,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
                 <div className="course-rule"><span style={{ width: `${item.concept_count ? (item.proficient_concept_count / item.concept_count) * 100 : 0}%` }} /></div>
                 <div className="course-actions">
                   <span>{item.ready_exam_count ? 'Lessons and exam available' : item.question_count ? `${item.question_count} authored questions · exam validation pending` : 'Course preparation in progress'}</span>
-                  <button type="button" onClick={() => { setStudyCourseId(item.course_id); setActiveScreen('study') }}>Open course <span aria-hidden="true">→</span></button>
+                  <button type="button" onClick={() => { setStudyCourseId(item.course_id); setStudyChapterId(null); setActiveScreen('study') }}>Open course <span aria-hidden="true">→</span></button>
                 </div>
               </article>
             )) : <div className="course-empty"><strong>No course folders discovered.</strong><span>Create a course through the Mastery Ledger skill, then rescan this workspace.</span></div>}

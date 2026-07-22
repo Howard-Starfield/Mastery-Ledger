@@ -239,6 +239,37 @@ class StudyGlossaryResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class GlossaryCourseSummary(BaseModel):
+    course_id: str
+    title: str
+    term_count: int = Field(ge=0)
+
+
+class GlossaryChapterLink(BaseModel):
+    chapter_id: str
+    title: str
+
+
+class GlossaryIndexTerm(StudyGlossaryTerm):
+    course_id: str
+    course_title: str
+    chapters: list[GlossaryChapterLink] = Field(default_factory=list)
+
+
+class GlossaryIndexResult(BaseModel):
+    schema_version: Literal["glossary-index-v1"] = "glossary-index-v1"
+    workspace: WorkspaceState
+    courses: list[GlossaryCourseSummary] = Field(default_factory=list)
+    selected_course_id: str | None = None
+    query: str = ""
+    total_terms: int = Field(ge=0)
+    offset: int = Field(ge=0)
+    limit: int = Field(ge=1)
+    has_more: bool = False
+    terms: list[GlossaryIndexTerm] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class ExamOption(BaseModel):
     option_id: str = Field(min_length=1, max_length=24)
     text: str = Field(min_length=1, max_length=10_000)

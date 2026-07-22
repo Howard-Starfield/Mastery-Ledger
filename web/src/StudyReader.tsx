@@ -12,6 +12,7 @@ import {
 type StudyReaderProps = {
   refreshToken: number
   initialCourseId?: string | null
+  initialChapterId?: string | null
 }
 
 function readingMinutes(wordCount: number) {
@@ -68,7 +69,7 @@ export function lessonDocument(markdown: string) {
 </html>`
 }
 
-export default function StudyReader({ refreshToken, initialCourseId = null }: StudyReaderProps) {
+export default function StudyReader({ refreshToken, initialCourseId = null, initialChapterId = null }: StudyReaderProps) {
   const [library, setLibrary] = useState<StudyLibraryResult | null>(null)
   const [lesson, setLesson] = useState<StudyLessonResult | null>(null)
   const [glossary, setGlossary] = useState<StudyGlossaryResult | null>(null)
@@ -90,7 +91,9 @@ export default function StudyReader({ refreshToken, initialCourseId = null }: St
       const selectedCourse = result.courses.find((course) => course.course_id === initialCourseId)
         ?? result.courses.find((course) => course.course_id === courseId)
         ?? result.courses[0]
-      const selectedChapter = selectedCourse?.chapters.find((chapter) => chapter.chapter_id === chapterId) ?? selectedCourse?.chapters[0]
+      const selectedChapter = selectedCourse?.chapters.find((chapter) => chapter.chapter_id === initialChapterId)
+        ?? selectedCourse?.chapters.find((chapter) => chapter.chapter_id === chapterId)
+        ?? selectedCourse?.chapters[0]
       setCourseId(selectedCourse?.course_id ?? null)
       setChapterId(selectedChapter?.chapter_id ?? null)
     }).catch((cause: Error) => {
@@ -99,7 +102,7 @@ export default function StudyReader({ refreshToken, initialCourseId = null }: St
       if (active) setLoading(false)
     })
     return () => { active = false }
-  }, [initialCourseId, refreshToken])
+  }, [initialChapterId, initialCourseId, refreshToken])
 
   useEffect(() => {
     if (!courseId || !chapterId) {

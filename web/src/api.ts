@@ -144,6 +144,37 @@ export interface StudyGlossaryResult {
   warnings: string[]
 }
 
+export interface GlossaryCourseSummary {
+  course_id: string
+  title: string
+  term_count: number
+}
+
+export interface GlossaryChapterLink {
+  chapter_id: string
+  title: string
+}
+
+export interface GlossaryIndexTerm extends StudyGlossaryTerm {
+  course_id: string
+  course_title: string
+  chapters: GlossaryChapterLink[]
+}
+
+export interface GlossaryIndexResult {
+  schema_version: 'glossary-index-v1'
+  workspace: OnboardingResult['workspace']
+  courses: GlossaryCourseSummary[]
+  selected_course_id: string | null
+  query: string
+  total_terms: number
+  offset: number
+  limit: number
+  has_more: boolean
+  terms: GlossaryIndexTerm[]
+  warnings: string[]
+}
+
 export interface ReviewCurveProfile {
   curve_id: string
   version: number
@@ -300,6 +331,14 @@ export const applicationApi = {
     ),
   studyGlossary: (courseId: string) =>
     request<StudyGlossaryResult>(`/api/v1/study/${encodeURIComponent(courseId)}/glossary`),
+  glossaryIndex: (options: { courseId?: string; query?: string; offset?: number; limit?: number } = {}) => {
+    const params = new URLSearchParams()
+    if (options.courseId) params.set('course_id', options.courseId)
+    if (options.query) params.set('q', options.query)
+    if (options.offset) params.set('offset', String(options.offset))
+    params.set('limit', String(options.limit ?? 100))
+    return request<GlossaryIndexResult>(`/api/v1/glossary?${params.toString()}`)
+  },
   settings: () => request<ApplicationSettings>('/api/v1/settings'),
   updateReviewCurve: (payload: ReviewCurveUpdatePayload) =>
     request<ReviewCurveUpdateResult>('/api/v1/settings/review-curve', {

@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Callable
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -35,6 +35,7 @@ from mastery_ledger.models import (
     ExamCompletion,
     FolderPickerRequest,
     FolderPickerResult,
+    GlossaryIndexResult,
     OnboardingRequest,
     OnboardingResult,
     QuestionFeedback,
@@ -58,7 +59,7 @@ from mastery_ledger.settings_service import (
     application_settings,
     update_review_curve,
 )
-from mastery_ledger.study_service import StudyMaterialNotFoundError, study_glossary, study_lesson, study_library
+from mastery_ledger.study_service import StudyMaterialNotFoundError, glossary_index, study_glossary, study_lesson, study_library
 SESSION_COOKIE = "mastery_ledger_session"
 
 
@@ -130,6 +131,24 @@ def create_app(
     )
     def study_materials() -> StudyLibraryResult:
         return study_library(ready_workspace())
+
+    @app.get(
+        "/api/v1/glossary",
+        response_model=GlossaryIndexResult,
+        dependencies=[Depends(require_session)],
+    )
+    def workspace_glossary(
+        course_id: str | None = Query(default=None, max_length=160),
+        q: str = Query(default="", max_length=200),
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=100, ge=1, le=200),
+    ) -> GlossaryIndexResult:
+        try:
+            return glossary_index(
+                ready_workspace(), course_id=course_id, query=q, offset=offset, limit=limit
+            )
+        except StudyMaterialNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
 
     @app.get(
         "/api/v1/study/{course_id}/chapters/{chapter_id}",

@@ -169,6 +169,8 @@ Logs record visible actions and decisions. They do not contain hidden reasoning.
 
 The `Study` view lists published lessons and loads the course glossary beside them. The reader renders each lesson without showing its metadata header. The app never edits the lesson.
 
+The `Glossary` view gathers published terms from every course into one searchable index. It opens on `All courses`, can be narrowed to one course, and links each term back to the lesson chapters that teach it.
+
 The exam view shows one question at a time. Before you answer, the browser does not receive the answer key or explanation.
 
 * A wrong answer gives no hint.
