@@ -210,7 +210,7 @@ Add `--json` to a launch command when another program needs structured status.
 
 ## Install without cloning
 
-Download `MasteryLedger-windows-x64-v0.1.1.zip` from the latest GitHub release, extract the complete folder, and run `MasteryLedger.exe`. The portable Windows preview is unsigned, so Windows may ask you to confirm that you trust it. Keep the extracted files together; the executable depends on the adjacent runtime files.
+Download `MasteryLedger-windows-x64-v0.1.2.zip` from the latest GitHub release, extract the complete folder, and run `MasteryLedger.exe`. The portable Windows preview is unsigned, so Windows may ask you to confirm that you trust it. Keep the extracted files together; the executable depends on the adjacent runtime files.
 
 Alternatively, install the Python application from GitHub:
 
@@ -228,6 +228,12 @@ npx.cmd skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y
 The portable Windows application is an unsigned preview. Signed operating system installers are not ready.
 
 ## Update the app and skill
+
+The packaged Windows app checks the latest stable GitHub release when it opens. If a newer Windows build is available, an update card shows the installed and available versions. Select **Update and restart** once to download the release ZIP, verify its GitHub SHA-256 digest, replace the application files after the running EXE closes, and reopen Mastery Ledger. Course folders, attempts, progress, and settings live outside the application folder and are not replaced.
+
+If the computer is offline or GitHub cannot be reached, no update card appears and the local app continues normally. Because the portable preview is not yet Authenticode-signed, Windows may still display its standard trust warning after an update.
+
+For a source or `uv tool` installation, update manually:
 
 ```powershell
 Set-Location Mastery-Ledger
@@ -255,35 +261,48 @@ python .\mastery-ledger\scripts\migrate_course_layout.py C:\path\to\course
 
 The migration moves source, evidence, and log records under `records/`. It converts `study-guide.md` to `index.md` and keeps retired files in `.work/migration-backup/`. It refuses to run while a worker plan is active.
 
-## Development
+## Local development, tests, and Windows EXE
 
-Run the Python and skill tests from the repository root:
+Run every command below from a PowerShell prompt. Start at the repository root:
 
 ```powershell
+Set-Location C:\path\to\Mastery-Ledger
 python -m venv .venv
-& .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-& .\.venv\Scripts\python.exe -m pytest -q tests mastery-ledger/tests
+uv pip install --python .\.venv\Scripts\python.exe -e ".[dev,desktop,desktop-build]"
 ```
 
-Run the frontend tests and build:
+Build the frontend before starting the local app so FastAPI and the desktop host serve the current React bundle:
 
 ```powershell
-Set-Location web
+Set-Location .\web
 npm.cmd ci
+npm.cmd run build
+Set-Location ..
+```
+
+Run the native local development build:
+
+```powershell
+& .\.venv\Scripts\mastery-ledger-desktop.exe
+```
+
+The desktop command uses the active workspace registered in the local app database. Complete onboarding first if this checkout has not registered a workspace.
+
+Run the complete automated test suite from the repository root:
+
+```powershell
+& .\.venv\Scripts\python.exe -m pytest -q tests mastery-ledger/tests
+Set-Location .\web
 npm.cmd test
 npm.cmd run build
+Set-Location ..
 ```
 
 The frontend build writes to `src/mastery_ledger/web/`. Commit those files with any frontend change.
 
-### Desktop executable foundation
+### Compile the Windows EXE
 
-The Windows desktop preview runs the existing FastAPI backend inside a native WebView2 window. Install the desktop development and build extras in a virtual environment:
-
-```powershell
-python -m venv .venv
-uv pip install --python .\.venv\Scripts\python.exe -e ".[dev,desktop,desktop-build]"
-```
+The Windows desktop preview runs the FastAPI backend inside a native WebView2 window. The environment created above already includes the required desktop and PyInstaller build packages.
 
 Run a backend and bundled-frontend smoke test without opening a window:
 
@@ -297,7 +316,7 @@ Run the native desktop application during development:
 & .\.venv\Scripts\mastery-ledger-desktop.exe
 ```
 
-Build the clean one-directory executable preview:
+Build the clean one-directory executable, then smoke-test the packaged result:
 
 ```powershell
 & .\.venv\Scripts\pyinstaller.exe --noconfirm --clean .\packaging\mastery-ledger.spec
@@ -305,7 +324,13 @@ Build the clean one-directory executable preview:
 Get-Content .\.work\desktop-smoke.json
 ```
 
-The preview intentionally has no installer, custom icon, automatic updater, or code signature yet. Those remain release work after the desktop-host behavior and frontend are validated together.
+The runnable application is `dist\MasteryLedger\MasteryLedger.exe`. Keep the complete `dist\MasteryLedger\` directory together because the EXE uses its adjacent `_internal` runtime files. To reproduce the GitHub release archive locally:
+
+```powershell
+Compress-Archive -Path .\dist\MasteryLedger\* -DestinationPath .\MasteryLedger-windows-x64-v0.1.2.zip -Force
+```
+
+The portable build includes the automatic updater but still has no installer, custom icon, or code signature.
 
 ## Current limits
 

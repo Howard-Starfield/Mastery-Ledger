@@ -33,6 +33,9 @@
   --sidebar-ring: oklch(0.708 0 0);
   --scrollbar-thumb: oklch(0.56 0.02 255 / 58%);
   --scrollbar-thumb-hover: oklch(0.42 0.035 255 / 78%);
+  --scrollbar-thumb-edge: oklch(0.48 0.025 255 / 72%);
+  --scrollbar-thumb-shine: oklch(0.86 0.012 255 / 82%);
+  --scrollbar-thumb-hover-edge: oklch(0.35 0.03 255 / 84%);
 }
 
 .dark {
@@ -64,6 +67,9 @@
   --sidebar-ring: oklch(0.556 0 0);
   --scrollbar-thumb: oklch(0.63 0.015 255 / 52%);
   --scrollbar-thumb-hover: oklch(0.77 0.015 255 / 74%);
+  --scrollbar-thumb-edge: oklch(0.43 0.012 255 / 74%);
+  --scrollbar-thumb-shine: oklch(0.84 0.01 255 / 76%);
+  --scrollbar-thumb-hover-edge: oklch(0.58 0.012 255 / 86%);
 }
 
 @theme inline {
@@ -114,11 +120,23 @@
   *::-webkit-scrollbar-thumb {
     border: 2px solid transparent;
     border-radius: 999px;
-    background: var(--scrollbar-thumb);
+    background: linear-gradient(
+      90deg,
+      var(--scrollbar-thumb-edge),
+      var(--scrollbar-thumb) 42%,
+      var(--scrollbar-thumb-shine) 58%,
+      var(--scrollbar-thumb)
+    );
     background-clip: padding-box;
   }
   *::-webkit-scrollbar-thumb:hover {
-    background: var(--scrollbar-thumb-hover);
+    background: linear-gradient(
+      90deg,
+      var(--scrollbar-thumb-hover-edge),
+      var(--scrollbar-thumb-hover) 45%,
+      var(--scrollbar-thumb-shine) 62%,
+      var(--scrollbar-thumb-hover)
+    );
     background-clip: padding-box;
   }
 

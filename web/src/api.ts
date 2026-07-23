@@ -53,6 +53,24 @@ export interface ApplicationStatus {
   action: string | null
 }
 
+export interface UpdateStatus {
+  schema_version: 'update-status-v1'
+  status: 'up_to_date' | 'available' | 'unavailable'
+  current_version: string
+  latest_version: string | null
+  release_url: string | null
+  asset_name: string | null
+  download_size: number | null
+  automatic_install_available: boolean
+  message: string | null
+}
+
+export interface UpdateInstallResult {
+  schema_version: 'update-install-v1'
+  status: 'restarting'
+  version: string
+}
+
 export interface DashboardExam {
   exam_id: string
   course_id: string
@@ -357,6 +375,12 @@ export const onboardingApi = {
 
 export const applicationApi = {
   status: () => request<ApplicationStatus>('/api/v1/status'),
+  updateStatus: () => request<UpdateStatus>('/api/v1/update'),
+  installUpdate: (version: string) =>
+    request<UpdateInstallResult>('/api/v1/update/install', {
+      method: 'POST',
+      body: JSON.stringify({ version }),
+    }),
   dashboard: () => request<DashboardResult>('/api/v1/dashboard'),
   studyLibrary: (options: { offset?: number; limit?: number; courseId?: string } = {}) => {
     const params = new URLSearchParams()

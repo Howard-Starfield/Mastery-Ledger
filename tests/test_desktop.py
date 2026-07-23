@@ -53,7 +53,7 @@ def test_desktop_bootstrap_route_matches_runtime_action(action: str | None, suff
     doctor = DoctorResult(
         status="onboarding_required" if action == "open_onboarding" else "ready",
         onboarding_required=action == "open_onboarding",
-        app_version="0.1.1",
+        app_version="0.1.2",
         action=action,
     )
     assert _bootstrap_url(8765, "token", doctor) == (
@@ -123,7 +123,7 @@ def test_desktop_host_runs_webview_on_the_calling_thread(runtime_home: Path) -> 
         webview_module=FakeWebview(),
         backend_factory=lambda **_kwargs: FakeBackend(),
         doctor_factory=lambda: DoctorResult(
-            status="ready", onboarding_required=False, app_version="0.1.1"
+            status="ready", onboarding_required=False, app_version="0.1.2"
         ),
     )
 

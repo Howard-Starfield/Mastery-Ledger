@@ -61,11 +61,15 @@ export function lessonDocument(markdown: string, theme: 'light' | 'dark' = 'ligh
         canvas: '#1e1e1e', foreground: '#c9cacb', heading1: '#dedfe0', heading2: '#d3d4d5',
         heading3: '#c5c6c7', muted: '#a0a0a0', surface: '#202020', raised: '#282828',
         accent: '#0169cc', link: '#6aaeff', selection: '#0d263e', border: '#383838',
+        scrollbar: '#777a80', scrollbarEdge: '#55585e', scrollbarShine: '#a8abb1',
+        scrollbarHover: '#aeb1b7', scrollbarHoverEdge: '#777a80',
       }
     : {
         canvas: '#ffffff', foreground: '#1f1f1f', heading1: '#1f1f1f', heading2: '#1f1f1f',
         heading3: '#1f1f1f', muted: '#737373', surface: '#ececed', raised: '#e3e3e4',
         accent: '#5e6ad2', link: '#5e6ad2', selection: '#d6d9f3', border: '#dededf',
+        scrollbar: '#9aa3b1', scrollbarEdge: '#7b8492', scrollbarShine: '#d6dbe3',
+        scrollbarHover: '#788392', scrollbarHoverEdge: '#5f6977',
       }
   return `<!doctype html>
 <html lang="en" data-theme="${theme}">
@@ -82,11 +86,19 @@ export function lessonDocument(markdown: string, theme: 'light' | 'dark' = 'ligh
         font-synthesis: none;
       }
       * { box-sizing: border-box; }
-      * { scrollbar-color: ${palette.muted} transparent; scrollbar-width: thin; }
+      * { scrollbar-color: ${palette.scrollbar} transparent; scrollbar-width: thin; }
       *::-webkit-scrollbar { width: 8px; height: 8px; }
       *::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
-      *::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: ${palette.muted}; background-clip: padding-box; }
-      *::-webkit-scrollbar-thumb:hover { background: ${palette.foreground}; background-clip: padding-box; }
+      *::-webkit-scrollbar-thumb {
+        border: 2px solid transparent;
+        border-radius: 999px;
+        background: linear-gradient(90deg, ${palette.scrollbarEdge}, ${palette.scrollbar} 42%, ${palette.scrollbarShine} 58%, ${palette.scrollbar});
+        background-clip: padding-box;
+      }
+      *::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(90deg, ${palette.scrollbarHoverEdge}, ${palette.scrollbarHover} 45%, ${palette.scrollbarShine} 62%, ${palette.scrollbarHover});
+        background-clip: padding-box;
+      }
       html, body { min-height: 100%; margin: 0; }
       body {
         color: ${palette.foreground};

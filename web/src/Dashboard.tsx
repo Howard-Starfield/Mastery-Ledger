@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { applicationApi, onboardingApi, type DashboardExam, type DashboardResult } from './api'
 import CurveSettings from './CurveSettings'
@@ -164,6 +164,20 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
 
   const maxStageCount = Math.max(1, ...(data?.ownership_curve.map((stage) => stage.question_count) ?? [1]))
 
+  const handleStudyNavigationChange = useCallback((snapshot: StudyNavigationSnapshot) => {
+    setStudyNavigation((current) => (
+      current.courses === snapshot.courses
+      && current.totalCourses === snapshot.totalCourses
+      && current.selectedCourseId === snapshot.selectedCourseId
+      && current.selectedChapterId === snapshot.selectedChapterId
+      && current.loading === snapshot.loading
+        ? current
+        : snapshot
+    ))
+    setStudyCourseId((current) => current === snapshot.selectedCourseId ? current : snapshot.selectedCourseId)
+    setStudyChapterId((current) => current === snapshot.selectedChapterId ? current : snapshot.selectedChapterId)
+  }, [])
+
   if (activeExam) {
     return <main className="workbench-app exam-app"><ExamRunner courseId={activeExam.course_id} examId={activeExam.exam_id} onExit={() => { setActiveExam(null); refresh() }} /></main>
   }
@@ -291,11 +305,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
           initialCourseId={studyCourseId}
           initialChapterId={studyChapterId}
           showCatalog={false}
-          onNavigationChange={(snapshot) => {
-            setStudyNavigation(snapshot)
-            setStudyCourseId(snapshot.selectedCourseId)
-            setStudyChapterId(snapshot.selectedChapterId)
-          }}
+          onNavigationChange={handleStudyNavigationChange}
         />
       ) : activeScreen === 'glossary' ? (
         <GlossaryBrowser

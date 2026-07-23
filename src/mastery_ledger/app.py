@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Callable
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -55,6 +55,9 @@ from mastery_ledger.models import (
     StudyLessonResult,
     StudyGlossaryResult,
     StudyLibraryResult,
+    UpdateInstallRequest,
+    UpdateInstallResult,
+    UpdateStatus,
     WorkspaceState,
     WorkspaceRepairRequest,
     WorkspaceRepairResult,
@@ -72,6 +75,12 @@ from mastery_ledger.settings_service import (
     update_review_curve,
 )
 from mastery_ledger.study_service import StudyMaterialNotFoundError, glossary_index, study_glossary, study_lesson, study_library
+from mastery_ledger.update_service import (
+    UpdateServiceError,
+    check_for_updates,
+    exit_for_update,
+    install_update,
+)
 SESSION_COOKIE = "mastery_ledger_session"
 
 
@@ -80,6 +89,9 @@ def create_app(
     session_token: str | None = None,
     web_dir: Path | None = None,
     folder_picker: Callable[[str | None], FolderPickerResult] = pick_folder,
+    update_checker: Callable[[], UpdateStatus] = check_for_updates,
+    update_installer: Callable[[str], UpdateInstallResult] = install_update,
+    update_exit: Callable[[], None] = exit_for_update,
 ) -> FastAPI:
     token = session_token or os.environ.get("MASTERY_LEDGER_SESSION_TOKEN") or secrets.token_urlsafe(32)
     frontend = web_dir or bundled_web_dir()
@@ -116,6 +128,40 @@ def create_app(
     @app.get("/api/v1/status", response_model=DoctorResult, dependencies=[Depends(require_session)])
     def application_status() -> DoctorResult:
         return build_doctor_result()
+
+    @app.get(
+        "/api/v1/update",
+        response_model=UpdateStatus,
+        dependencies=[Depends(require_session)],
+    )
+    def application_update() -> UpdateStatus:
+        try:
+            return update_checker()
+        except UpdateServiceError as error:
+            return UpdateStatus(
+                status="unavailable",
+                current_version=__version__,
+                message=str(error),
+            )
+
+    @app.post(
+        "/api/v1/update/install",
+        response_model=UpdateInstallResult,
+        dependencies=[Depends(require_session)],
+    )
+    def install_application_update(
+        request: UpdateInstallRequest,
+        background_tasks: BackgroundTasks,
+    ) -> UpdateInstallResult:
+        try:
+            result = update_installer(request.version)
+        except UpdateServiceError as error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(error),
+            ) from error
+        background_tasks.add_task(update_exit)
+        return result
 
     @app.get("/api/v1/dashboard", response_model=DashboardResult, dependencies=[Depends(require_session)])
     def dashboard() -> DashboardResult:

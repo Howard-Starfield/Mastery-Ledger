@@ -15,6 +15,8 @@ describe('lessonDocument', () => {
     expect(document).toContain('width: min(720px, 100%)')
     expect(document).toContain('font-size: 16px')
     expect(document).toContain('line-height: 1.7')
+    expect(document).toContain('scrollbar-color: #9aa3b1 transparent')
+    expect(document).toContain('linear-gradient(90deg, #7b8492, #9aa3b1 42%, #d6dbe3 58%, #9aa3b1)')
     expect(document).toContain('<aside><strong>Example</strong></aside>')
     expect(document).toContain('<script>window.parent.compromised = true</script>')
     expect(document).toContain("script-src 'none'")
@@ -30,6 +32,8 @@ describe('lessonDocument', () => {
     expect(document).toContain('color: #c9cacb')
     expect(document).toContain('background: #0d263e')
     expect(document).toContain('color: #6aaeff')
+    expect(document).toContain('scrollbar-color: #777a80 transparent')
+    expect(document).toContain('linear-gradient(90deg, #55585e, #777a80 42%, #a8abb1 58%, #777a80)')
   })
 
   it('renders lesson source references as linked footnotes instead of Markdown syntax', () => {

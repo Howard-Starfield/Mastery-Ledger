@@ -294,6 +294,28 @@ class GlossaryIndexResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class UpdateStatus(BaseModel):
+    schema_version: Literal["update-status-v1"] = "update-status-v1"
+    status: Literal["up_to_date", "available", "unavailable"]
+    current_version: str
+    latest_version: str | None = None
+    release_url: str | None = None
+    asset_name: str | None = None
+    download_size: int | None = Field(default=None, ge=1)
+    automatic_install_available: bool = False
+    message: str | None = None
+
+
+class UpdateInstallRequest(BaseModel):
+    version: str = Field(min_length=1, max_length=40)
+
+
+class UpdateInstallResult(BaseModel):
+    schema_version: Literal["update-install-v1"] = "update-install-v1"
+    status: Literal["restarting"] = "restarting"
+    version: str
+
+
 class ExamOption(BaseModel):
     option_id: str = Field(min_length=1, max_length=24)
     text: str = Field(min_length=1, max_length=10_000)
