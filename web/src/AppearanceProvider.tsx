@@ -16,8 +16,10 @@ import {
 } from '@/api'
 import {
   applyResolvedTheme,
+  applyUiScale,
   clampNavigationPanelWidth,
   DEFAULT_APPEARANCE,
+  normalizeUiScale,
   resolveTheme,
   type ResolvedTheme,
 } from '@/lib/appearance'
@@ -57,6 +59,7 @@ export function AppearanceProvider({ children }: PropsWithChildren) {
           commitLocalSettings({
             ...saved,
             navigation_panel_width: clampNavigationPanelWidth(saved.navigation_panel_width),
+            ui_scale: normalizeUiScale(saved.ui_scale ?? DEFAULT_APPEARANCE.ui_scale),
           })
         }
       })
@@ -80,6 +83,10 @@ export function AppearanceProvider({ children }: PropsWithChildren) {
     return () => media.removeEventListener('change', apply)
   }, [settings.theme_mode])
 
+  useEffect(() => {
+    applyUiScale(settings.ui_scale)
+  }, [settings.ui_scale])
+
   const updateAppearance = useCallback(
     async (patch: Partial<AppearanceSettingsUpdate>) => {
       const previous = settingsRef.current
@@ -89,6 +96,7 @@ export function AppearanceProvider({ children }: PropsWithChildren) {
         navigation_panel_width: clampNavigationPanelWidth(
           patch.navigation_panel_width ?? previous.navigation_panel_width,
         ),
+        ui_scale: normalizeUiScale(patch.ui_scale ?? previous.ui_scale),
       }
       commitLocalSettings(next)
       setError(null)
@@ -97,6 +105,7 @@ export function AppearanceProvider({ children }: PropsWithChildren) {
           theme_mode: next.theme_mode,
           navigation_panel_open: next.navigation_panel_open,
           navigation_panel_width: next.navigation_panel_width,
+          ui_scale: next.ui_scale,
           content_theme: next.content_theme,
         })
         commitLocalSettings(saved)

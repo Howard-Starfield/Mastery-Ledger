@@ -35,8 +35,8 @@ function EmptyLedger({ filtered }: { filtered: boolean }) {
     <div className="ledger-empty">
       <span className="ledger-empty__folio" aria-hidden="true">00</span>
       <div>
-        <strong>{filtered ? 'No exams match this view.' : 'No ready exams yet.'}</strong>
-        <p>{filtered ? 'Clear the search or choose another course.' : 'Validated exam sets created in a course will appear here automatically.'}</p>
+        <strong>{filtered ? 'No assessments match this view.' : 'No assessments yet.'}</strong>
+        <p>{filtered ? 'Clear the search or choose another course.' : 'Verified exams and AI self-checked practice tests will appear here automatically.'}</p>
       </div>
     </div>
   )
@@ -59,6 +59,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const [studyChapterId, setStudyChapterId] = useState<string | null>(null)
   const [studyNavigation, setStudyNavigation] = useState<StudyNavigationSnapshot>({
     courses: [],
+    totalCourses: 0,
     selectedCourseId: null,
     selectedChapterId: null,
     loading: true,
@@ -164,10 +165,10 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
   const maxStageCount = Math.max(1, ...(data?.ownership_curve.map((stage) => stage.question_count) ?? [1]))
 
   if (activeExam) {
-    return <ExamRunner courseId={activeExam.course_id} examId={activeExam.exam_id} onExit={() => { setActiveExam(null); refresh() }} />
+    return <main className="workbench-app exam-app"><ExamRunner courseId={activeExam.course_id} examId={activeExam.exam_id} onExit={() => { setActiveExam(null); refresh() }} /></main>
   }
   if (activeReview) {
-    return <ExamRunner reviewMode onExit={() => { setActiveReview(false); refresh() }} />
+    return <main className="workbench-app exam-app"><ExamRunner reviewMode onExit={() => { setActiveReview(false); refresh() }} /></main>
   }
   return (
     <main className="workbench-app">
@@ -211,7 +212,13 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
             onStartReview={() => setActiveReview(true)}
           />
         )}
-        onNavigate={setActiveScreen}
+        onNavigate={(destination) => {
+          if (destination === 'study') {
+            setStudyCourseId(null)
+            setStudyChapterId(null)
+          }
+          setActiveScreen(destination)
+        }}
         onStartReview={() => setActiveReview(true)}
         onOpenSettings={() => setCurveSettingsOpen(true)}
         onChangeWorkspace={() => void browseForWorkspace()}
@@ -220,7 +227,7 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
           if (activeScreen !== 'exams') setStudyRefreshToken((value) => value + 1)
         }}
       >
-      <div className={`workbench-canvas workbench-canvas--${activeScreen}`}>
+      <div className={`workbench-canvas workbench-canvas--${activeScreen}${activeScreen === 'study' && !studyNavigation.selectedCourseId ? ' is-library' : ''}`}>
       <header className="legacy-ledger-topbar">
         <a className="ledger-wordmark" href="/" aria-label="Mastery Ledger home">
           <span>ML</span>
@@ -284,7 +291,11 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
           initialCourseId={studyCourseId}
           initialChapterId={studyChapterId}
           showCatalog={false}
-          onNavigationChange={setStudyNavigation}
+          onNavigationChange={(snapshot) => {
+            setStudyNavigation(snapshot)
+            setStudyCourseId(snapshot.selectedCourseId)
+            setStudyChapterId(snapshot.selectedChapterId)
+          }}
         />
       ) : activeScreen === 'glossary' ? (
         <GlossaryBrowser
@@ -305,11 +316,11 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
         <section className="ledger-main">
         <header className="dashboard-heading">
           <div>
-            <h1>Exams</h1>
-            <p className="dashboard-heading__summary">Validated assessments available in this workspace.</p>
+            <h1>Assessments</h1>
+            <p className="dashboard-heading__summary">Verified exams and clearly labeled AI self-checked practice.</p>
           </div>
           <dl className="exam-summary">
-            <div><dt>Ready</dt><dd>{data?.ready_exams.length ?? 0}</dd></div>
+            <div><dt>Available</dt><dd>{data?.ready_exams.length ?? 0}</dd></div>
             <div><dt>Due</dt><dd>{data?.due_now ?? 0}</dd></div>
             <div><dt>Courses</dt><dd>{data?.recent_courses.length ?? 0}</dd></div>
           </dl>
@@ -329,43 +340,27 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
 
         <section className="exam-register" aria-labelledby="ready-exams-title">
           <header className="register-heading">
-            <div><h2 id="ready-exams-title">Ready exams</h2><p>Select an exam to inspect its evidence and start or resume an attempt.</p></div>
+            <div><h2 id="ready-exams-title">Available assessments</h2><p>Inspect the evidence status before starting or resuming an attempt.</p></div>
             <span className="register-count" aria-live="polite">{filteredExams.length} of {data?.ready_exams.length ?? 0}</span>
           </header>
           <div className="register-tools">
-            <label className="search-field"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search exams or concepts" aria-label="Search ready exams" /></label>
+            <label className="search-field"><span aria-hidden="true">⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search assessments or concepts" aria-label="Search assessments" /></label>
             <label className="course-filter"><span>Course</span><select value={course} onChange={(event) => setCourse(event.target.value)}><option value="all">All courses</option>{data?.recent_courses.map((item) => <option key={item.course_id} value={item.course_id}>{item.title}</option>)}</select></label>
-            <label className="course-filter"><span>Evidence</span><select value={evidence} onChange={(event) => setEvidence(event.target.value)}><option value="all">Any status</option><option value="verified">Verified</option><option value="ready">Ready</option><option value="review_needed">Review needed</option></select></label>
+            <label className="course-filter"><span>Evidence</span><select value={evidence} onChange={(event) => setEvidence(event.target.value)}><option value="all">Any status</option><option value="verified">Verified</option><option value="self_checked">AI self-checked</option><option value="ready">Ready</option><option value="review_needed">Review needed</option></select></label>
           </div>
-          <div className="register-scroll" tabIndex={0} aria-label="Scrollable ready exam ledger">
-            <div className="register-columns" aria-hidden="true"><span>Exam</span><span>Questions</span><span>Duration</span><span>Evidence</span><span>Action</span></div>
-            {loading && !data ? <div className="register-loading">Reading course manifests…</div> : filteredExams.length ? filteredExams.map((exam, index) => (
-              <article className="exam-row" key={`${exam.course_id}-${exam.exam_id}`}>
-                <div className="exam-identity"><span className="exam-folio">{String(index + 1).padStart(2, '0')}</span><div><h3>{exam.title}</h3><p>{exam.course_title} · {formatDate(exam.created_at)}</p>{Boolean(exam.concepts.length) && <small>{exam.concepts.slice(0, 3).join(' · ')}</small>}</div></div>
-                <div className="exam-metric"><strong>{exam.question_count}</strong><span>items</span></div>
-                <div className="exam-metric"><strong>{exam.estimated_minutes}</strong><span>minutes</span></div>
-                <div className={`evidence-state evidence-state--${exam.source_status}`}><i />{exam.source_status === 'review_needed' ? 'Review needed' : exam.source_status === 'verified' ? 'Verified' : 'Ready'}</div>
-                <button type="button" className={exam.resume_available ? 'exam-action has-resume' : 'exam-action'} onClick={() => setSelectedExam(exam)}>{exam.resume_available ? 'Continue' : 'Inspect'} <span>↗</span></button>
-              </article>
-            )) : <EmptyLedger filtered={Boolean(query || course !== 'all' || evidence !== 'all')} />}
-          </div>
-        </section>
-
-        <section className="course-shelf" aria-labelledby="recent-courses-title">
-          <header><div><h2 id="recent-courses-title">Courses</h2><p>Portable course folders discovered in this workspace.</p></div><span>{data?.recent_courses.length ?? 0} registered</span></header>
-          <div className="course-strip">
-            {data?.recent_courses.length ? data.recent_courses.slice(0, 6).map((item) => (
-              <article key={item.course_id}>
-                <span className="course-index">{item.course_id}</span><h3>{item.title}</h3>
-                <dl><div><dt>Questions</dt><dd>{item.question_count}</dd></div><div><dt>Ready exams</dt><dd>{item.ready_exam_count}</dd></div><div><dt>Due</dt><dd>{item.due_count}</dd></div></dl>
-                <p className="course-concepts"><span>Concept evidence</span><strong>{item.proficient_concept_count}/{item.concept_count} proficient</strong></p>
-                <div className="course-rule"><span style={{ width: `${item.concept_count ? (item.proficient_concept_count / item.concept_count) * 100 : 0}%` }} /></div>
-                <div className="course-actions">
-                  <span>{item.ready_exam_count ? 'Lessons and exam available' : item.question_count ? `${item.question_count} authored questions · exam validation pending` : 'Course preparation in progress'}</span>
-                  <button type="button" onClick={() => { setStudyCourseId(item.course_id); setStudyChapterId(null); setActiveScreen('study') }}>Open course <span aria-hidden="true">→</span></button>
-                </div>
-              </article>
-            )) : <div className="course-empty"><strong>No course folders discovered.</strong><span>Create a course through the Mastery Ledger skill, then rescan this workspace.</span></div>}
+          <div className="register-frame">
+            <div className="register-columns" aria-hidden="true"><span>Assessment</span><span>Questions</span><span>Duration</span><span>Evidence</span><span>Action</span></div>
+            <div className="register-scroll" tabIndex={0} aria-label="Scrollable assessment ledger">
+              {loading && !data ? <div className="register-loading">Reading course manifests…</div> : filteredExams.length ? filteredExams.map((exam, index) => (
+                <article className="exam-row" key={`${exam.course_id}-${exam.exam_id}`}>
+                  <div className="exam-identity"><span className="exam-folio">{String(index + 1).padStart(2, '0')}</span><div><h3>{exam.title}</h3><p>{exam.course_title} · {formatDate(exam.created_at)}</p>{Boolean(exam.concepts.length) && <small>{exam.concepts.slice(0, 3).join(' · ')}</small>}</div></div>
+                  <div className="exam-metric"><strong>{exam.question_count}</strong><span>items</span></div>
+                  <div className="exam-metric"><strong>{exam.estimated_minutes}</strong><span>minutes</span></div>
+                  <div className={`evidence-state evidence-state--${exam.source_status}`}><i />{exam.source_status === 'review_needed' ? 'Review needed' : exam.source_status === 'verified' ? 'Verified' : exam.source_status === 'self_checked' ? 'AI self-checked' : 'Ready'}</div>
+                  <button type="button" className={exam.resume_available ? 'exam-action has-resume' : 'exam-action'} onClick={() => setSelectedExam(exam)}>{exam.resume_available ? 'Continue' : 'Inspect'} <span>↗</span></button>
+                </article>
+              )) : <EmptyLedger filtered={Boolean(query || course !== 'all' || evidence !== 'all')} />}
+            </div>
           </div>
         </section>
         </section>
@@ -395,8 +390,8 @@ export default function Dashboard({ workspaceName }: DashboardProps) {
             <p className="kicker">{selectedExam.exam_id}</p><h2 id="exam-sheet-title">{selectedExam.title}</h2><p className="sheet-course">{selectedExam.course_title}</p>
             <dl><div><dt>Questions</dt><dd>{selectedExam.question_count}</dd></div><div><dt>Expected time</dt><dd>{selectedExam.estimated_minutes} minutes</dd></div><div><dt>Evidence</dt><dd>{selectedExam.source_status.replace('_', ' ')}</dd></div><div><dt>Created</dt><dd>{formatDate(selectedExam.created_at)}</dd></div></dl>
             {Boolean(selectedExam.concepts.length) && <div className="sheet-concepts">{selectedExam.concepts.map((concept) => <span key={concept}>{concept}</span>)}</div>}
-            <div className="sheet-notice"><strong>{selectedExam.resume_available ? 'Saved attempt found' : 'Focused Question delivery'}</strong><p>{selectedExam.resume_available ? 'Locked answers will be restored from the portable course record.' : 'Each answer locks once. Incorrect answers reveal nothing; correct answers enable the collapsed source disclosure.'}</p></div>
-            <button type="button" className="sheet-start" onClick={() => { setActiveExam(selectedExam); setSelectedExam(null) }}>{selectedExam.resume_available ? 'Continue saved exam' : 'Begin focused exam'} <span>→</span></button>
+            <div className="sheet-notice"><strong>{selectedExam.resume_available ? 'Saved attempt found' : selectedExam.assessment_kind === 'practice' ? 'Practice only' : 'Focused Question delivery'}</strong><p>{selectedExam.resume_available ? 'Locked answers will be restored from the portable course record.' : selectedExam.assessment_kind === 'practice' ? 'This test was checked by the same AI that authored it. Your result is saved, but it does not update mastery or the review schedule.' : 'Each answer locks once. Incorrect answers reveal nothing; correct answers enable the collapsed source disclosure.'}</p></div>
+            <button type="button" className="sheet-start" onClick={() => { setActiveExam(selectedExam); setSelectedExam(null) }}>{selectedExam.resume_available ? `Continue saved ${selectedExam.assessment_kind === 'practice' ? 'practice' : 'exam'}` : selectedExam.assessment_kind === 'practice' ? 'Begin practice test' : 'Begin focused exam'} <span>→</span></button>
           </section>
         </div>
       )}

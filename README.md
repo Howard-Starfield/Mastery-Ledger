@@ -34,6 +34,10 @@ During setup, choose one of these locations:
 * A folder whose direct children are courses
 * A workspace that keeps its courses inside `courses/`
 
+The Import button is optional. To add a course without importing, extract its single top-level `<course-slug>/` folder and place that folder directly in the active workspace or under `workspace/courses/`, then select **Rescan**. An unopened ZIP is not treated as a writable course folder; use Import when you want the app to validate and extract the ZIP for you.
+
+ChatGPT-built draft bundles may include an **AI self-checked practice test**. The app labels it separately from a verified exam, saves the attempt for review, and does not use its result to update mastery or schedule reviews.
+
 After setup, open the app from any drive or directory:
 
 ```powershell
@@ -206,7 +210,9 @@ Add `--json` to a launch command when another program needs structured status.
 
 ## Install without cloning
 
-Install the app from GitHub:
+Download `MasteryLedger-windows-x64-v0.1.0.zip` from the latest GitHub release, extract the complete folder, and run `MasteryLedger.exe`. The portable Windows preview is unsigned, so Windows may ask you to confirm that you trust it. Keep the extracted files together; the executable depends on the adjacent runtime files.
+
+Alternatively, install the Python application from GitHub:
 
 ```powershell
 uv tool install "git+https://github.com/Howard-Starfield/Mastery-Ledger.git@main"
@@ -219,7 +225,7 @@ Install the skill from GitHub:
 npx.cmd skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y --copy
 ```
 
-This is an unsigned preview. Signed operating system installers are not ready.
+The portable Windows application is an unsigned preview. Signed operating system installers are not ready.
 
 ## Update the app and skill
 

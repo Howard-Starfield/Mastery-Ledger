@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   applicationApi,
   type ExamAttempt,
   type ExamCompletion,
+  type ExamQuestion,
   type QuestionFeedback,
   type QuestionReview,
   type SourceDisclosure,
@@ -28,32 +29,100 @@ function formatElapsed(totalSeconds: number) {
   return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':')
 }
 
-function SourcesDisclosure({ sources, count, enabled }: { sources: SourceDisclosure[]; count: number; enabled: boolean }) {
-  if (!enabled) {
-    return (
-      <div className="question-sources is-disabled" aria-disabled="true">
-        <div><span className="source-lock" aria-hidden="true">◇</span><strong>Sources used in this question</strong></div>
-        <span>Verified · {count} {count === 1 ? 'source' : 'sources'} · available after a correct answer</span>
-      </div>
-    )
-  }
+function SourceDialog({ sources, evidenceLabel, onClose }: { sources: SourceDisclosure[]; evidenceLabel: string; onClose: () => void }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    closeButtonRef.current?.focus()
+    const handleDialogKeys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const dialog = closeButtonRef.current?.closest('[role="dialog"]')
+      const focusable = dialog ? Array.from(dialog.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]')) : []
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', handleDialogKeys)
+    return () => {
+      window.removeEventListener('keydown', handleDialogKeys)
+      previouslyFocused?.focus()
+    }
+  }, [])
 
   return (
-    <details className="question-sources">
-      <summary>
-        <div><span className="source-lock" aria-hidden="true">✓</span><strong>Sources used in this question</strong></div>
-        <span>Verified · {sources.length} {sources.length === 1 ? 'source' : 'sources'} · open deliberately</span>
-      </summary>
-      <div className="source-disclosure-list">
-        {sources.map((source) => (
-          <article key={`${source.source_id}-${source.locator_label}`}>
-            <span>{source.source_id}</span>
-            <div><strong>{source.title}</strong><p>{source.locator_label} · {source.support_strength} support</p></div>
-            {source.href && <a href={source.href} target="_blank" rel="noreferrer">Open source <span aria-hidden="true">↗</span></a>}
-          </article>
-        ))}
-      </div>
-    </details>
+    <div className="exam-modal-backdrop source-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <section className="source-dialog" role="dialog" aria-modal="true" aria-labelledby="source-dialog-title" aria-describedby="source-dialog-description">
+        <header>
+          <div>
+            <p className="kicker">Question evidence</p>
+            <h2 id="source-dialog-title">Sources used for this answer</h2>
+            <p id="source-dialog-description">{evidenceLabel} · {sources.length} {sources.length === 1 ? 'source' : 'sources'}</p>
+          </div>
+          <button ref={closeButtonRef} type="button" className="source-dialog-close" onClick={onClose} aria-label="Close source details">×</button>
+        </header>
+        <div className="source-dialog-list">
+          {sources.map((source) => (
+            <article key={`${source.source_id}-${source.locator_label}`}>
+              <span>{source.source_id}</span>
+              <div>
+                <h3>{source.title}</h3>
+                <p>{source.locator_label} · {source.support_strength} support</p>
+                {source.href && <a href={source.href} target="_blank" rel="noreferrer">Open source <span aria-hidden="true">↗</span></a>}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function SourceControl({ sources, count, enabled, status, onOpen }: { sources: SourceDisclosure[]; count: number; enabled: boolean; status: ExamQuestion['source_status']; onOpen: () => void }) {
+  const evidenceLabel = status === 'self_checked' ? 'AI self-checked' : status === 'verified' ? 'Verified' : 'Source status unavailable'
+  const sourceCount = enabled ? sources.length : count
+  const sourceNames = sources.map((source) => source.title).join(', ')
+  const tooltip = enabled
+    ? `${evidenceLabel}: ${sourceNames || `${sourceCount} ${sourceCount === 1 ? 'source' : 'sources'}`}. Click to view details.`
+    : `${evidenceLabel}: ${sourceCount} ${sourceCount === 1 ? 'source' : 'sources'}. Available after a correct answer.`
+
+  return (
+    <span className={`support-control source-control ${enabled ? 'is-enabled' : 'is-locked'}`}>
+      <button type="button" onClick={enabled ? onOpen : undefined} aria-disabled={!enabled} aria-describedby="source-control-tooltip">
+        <span aria-hidden="true">{enabled ? '⌕' : '◇'}</span>
+        <span className="support-control__label">Source</span>
+        <small>{sourceCount}</small>
+      </button>
+      <span className="source-control-tooltip" id="source-control-tooltip" role="tooltip">{tooltip}</span>
+    </span>
+  )
+}
+
+function ExplanationControl({ explanation, enabled }: { explanation?: string | null; enabled: boolean }) {
+  const tooltip = enabled && explanation
+    ? explanation
+    : 'The explanation becomes available after a correct answer.'
+
+  return (
+    <span className={`support-control explanation-control ${enabled ? 'is-enabled' : 'is-locked'}`}>
+      <button type="button" aria-disabled={!enabled} aria-describedby="explanation-control-tooltip">
+        <span aria-hidden="true">?</span>
+        <span className="support-control__label">Explanation</span>
+      </button>
+      <span className="support-control-tooltip" id="explanation-control-tooltip" role="tooltip">{tooltip}</span>
+    </span>
   )
 }
 
@@ -64,7 +133,7 @@ function ResultDialog({ completion, onReview, onExit }: { completion: ExamComple
         <p className="kicker">Attempt complete</p>
         <div className="result-score"><strong>{completion.score_percent}</strong><span>%</span></div>
         <h2 id="result-title">A record, not a verdict.</h2>
-        <p>The ledger preserves what was correct, incorrect, and unanswered so the same knowledge can return at the right time.</p>
+        <p>{completion.mastery_updated ? 'The ledger preserves what was correct, incorrect, and unanswered so the same knowledge can return at the right time.' : 'This AI self-checked practice result is saved, but it does not update mastery or the review schedule.'}</p>
         <dl><div><dt>Correct</dt><dd>{completion.correct_count}</dd></div><div><dt>Incorrect</dt><dd>{completion.incorrect_count}</dd></div><div><dt>Unanswered</dt><dd>{completion.unanswered_count}</dd></div></dl>
         <div className="result-actions"><button type="button" onClick={onExit}>Return to ledger</button><button type="button" className="is-primary" onClick={onReview}>Review questions →</button></div>
       </section>
@@ -84,6 +153,7 @@ export default function ExamRunner({ courseId, examId, reviewMode = false, onExi
   const [completion, setCompletion] = useState<ExamCompletion | null>(null)
   const [showResult, setShowResult] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [sourceDialogOpen, setSourceDialogOpen] = useState(false)
 
   useEffect(() => {
     const startAttempt = reviewMode
@@ -101,8 +171,7 @@ export default function ExamRunner({ courseId, examId, reviewMode = false, onExi
         setAnswers(restoredAnswers)
         const firstUnlocked = nextAttempt.questions.findIndex((question) => !restoredAnswers[question.question_id]?.feedback)
         setCurrentIndex(firstUnlocked >= 0 ? firstUnlocked : 0)
-        const startedAt = Date.parse(nextAttempt.started_at)
-        if (!Number.isNaN(startedAt)) setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)))
+        setElapsedSeconds(nextAttempt.elapsed_seconds)
       })
       .catch((cause: Error) => setError(cause.message))
       .finally(() => setBusy(false))
@@ -160,6 +229,23 @@ export default function ExamRunner({ courseId, examId, reviewMode = false, onExi
     }
   }
 
+  const pauseExam = async () => {
+    if (!attempt || completion) {
+      onExit()
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      await applicationApi.pauseExam(attempt)
+      onExit()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The exam could not be paused.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const toggleFlag = () => {
     if (!currentQuestion) return
     setFlags((current) => {
@@ -170,6 +256,17 @@ export default function ExamRunner({ courseId, examId, reviewMode = false, onExi
     })
   }
 
+  const goForward = () => {
+    if (!attempt || currentIndex >= attempt.questions.length - 1) return
+    setSourceDialogOpen(false)
+    setCurrentIndex((value) => value + 1)
+  }
+
+  const goBack = () => {
+    setSourceDialogOpen(false)
+    setCurrentIndex((value) => Math.max(0, value - 1))
+  }
+
   if (busy && !attempt) return <main className="exam-launch"><span className="exam-launch__mark">ML</span><p>Preparing {reviewMode ? 'your due review' : 'the focused exam'}…</p></main>
   if (!attempt || !currentQuestion) return <main className="exam-launch exam-launch--error"><span className="exam-launch__mark">!</span><h1>This {reviewMode ? 'review' : 'exam'} could not open.</h1><p>{error ?? 'No deliverable questions were found.'}</p><button type="button" onClick={onExit}>Return to Exam Ledger</button></main>
 
@@ -178,21 +275,28 @@ export default function ExamRunner({ courseId, examId, reviewMode = false, onExi
   const sourceEnabled = Boolean(currentAnswer?.feedback?.correct || currentReview)
   const sources = currentReview?.sources ?? currentAnswer?.feedback?.sources ?? []
   const explanation = currentReview?.explanation ?? currentAnswer?.feedback?.explanation
+  const isPractice = attempt.assessment_kind === 'practice'
+  const evidenceLabel = currentQuestion.source_status === 'self_checked' ? 'AI self-checked' : currentQuestion.source_status === 'verified' ? 'Verified' : 'Source status unavailable'
+  const canGoForward = currentIndex < attempt.questions.length - 1
+  const showNext = Boolean(currentAnswer?.feedback || completion)
 
   return (
     <main className="focused-exam">
       <header className="exam-topbar">
-        <button type="button" className="exam-exit" onClick={onExit} aria-label="Return to Exam Ledger">ML</button>
+        <button type="button" className="exam-exit" onClick={pauseExam} aria-label={completion ? 'Return to Exam Ledger' : 'Pause and return to Exam Ledger'}>ML</button>
         <div className="exam-title-lockup"><span>{attempt.course_title}</span><strong>{attempt.title}</strong>{attempt.resumed && <em>Resumed</em>}</div>
         <div className="exam-clock"><small>Time elapsed</small><strong>{formatElapsed(elapsedSeconds)}</strong></div>
-        <button type="button" className="palette-toggle" onClick={() => setPaletteOpen((value) => !value)} aria-expanded={paletteOpen}>Questions {currentIndex + 1}/{attempt.questions.length}</button>
-        <button type="button" className="finish-exam" onClick={() => completion ? setShowResult(true) : setFinishCheckpoint(true)}>{completion ? 'Results' : reviewMode ? 'Finish review' : 'Finish exam'}</button>
+        <div className="exam-topbar-actions">
+          <button type="button" className="palette-toggle" onClick={() => setPaletteOpen((value) => !value)} aria-expanded={paletteOpen}>Questions {currentIndex + 1}/{attempt.questions.length}</button>
+          {!completion && <button type="button" className="pause-exam" onClick={pauseExam} disabled={busy}>Pause exam</button>}
+          <button type="button" className="finish-exam" onClick={() => completion ? setShowResult(true) : setFinishCheckpoint(true)}>{completion ? 'Results' : reviewMode ? 'Finish review' : isPractice ? 'Finish practice' : 'Finish exam'}</button>
+        </div>
       </header>
 
       <section className="question-workspace">
         <article className="question-paper" aria-labelledby="active-question-title">
           <header className="question-meta">
-            <div><p className="kicker">{reviewMode ? 'Scheduled review' : 'Focused question'}</p><span>Question {currentIndex + 1} of {attempt.questions.length}</span></div>
+            <div><p className="kicker">{reviewMode ? 'Scheduled review' : isPractice ? 'AI self-checked practice' : 'Focused question'}</p><span>Question {currentIndex + 1} of {attempt.questions.length}</span></div>
             <button type="button" className={flags.has(currentQuestion.question_id) ? 'flag-button is-flagged' : 'flag-button'} onClick={toggleFlag} aria-pressed={flags.has(currentQuestion.question_id)}><span aria-hidden="true">⚑</span>{flags.has(currentQuestion.question_id) ? 'Flagged' : 'Flag question'}</button>
           </header>
 
@@ -210,24 +314,19 @@ export default function ExamRunner({ courseId, examId, reviewMode = false, onExi
                 return <label className={classes} key={option.option_id}><input type="radio" name={`answer-${currentQuestion.question_id}`} value={option.option_id} checked={selected} onChange={() => selectOption(option.option_id)} /><span className="option-letter">{option.option_id}</span><span className="option-text">{option.text}</span><span className="option-state">{correctInReview || submittedCorrect ? 'Correct' : submittedIncorrect ? 'Incorrect' : selected ? 'Selected' : ''}</span></label>
               })}
             </fieldset>
-            {!currentAnswer?.feedback && !completion && <button type="button" className="submit-answer" onClick={submitAnswer} disabled={!currentAnswer?.selectedOptionId || busy}>{busy ? 'Locking answer…' : 'Submit answer'}</button>}
-
-            {currentAnswer?.feedback && !currentReview && (
-              <section className={currentAnswer.feedback.correct ? 'answer-feedback is-correct' : 'answer-feedback is-incorrect'} role="status">
-                <span className="feedback-mark" aria-hidden="true">{currentAnswer.feedback.correct ? '✓' : '×'}</span>
-                <div><strong>{currentAnswer.feedback.correct ? 'Correct.' : 'Incorrect.'}</strong>{currentAnswer.feedback.correct ? <p>{currentAnswer.feedback.explanation}</p> : <p>This answer is locked. No hint, explanation, source, or correct option is shown during the active attempt.</p>}</div>
-              </section>
-            )}
-            {currentReview && <section className={`answer-feedback review-${currentReview.status}`}><span className="feedback-mark">{currentReview.status === 'correct' ? '✓' : currentReview.status === 'incorrect' ? '×' : '—'}</span><div><strong>{currentReview.status === 'unanswered' ? 'Unanswered.' : `${currentReview.status[0].toUpperCase()}${currentReview.status.slice(1)}.`}</strong><p>{explanation}</p></div></section>}
+            {currentAnswer?.feedback && !currentReview && <p className="answer-feedback-status" role="status">Answer locked: {currentAnswer.feedback.correct ? 'correct' : 'incorrect'}.</p>}
           </section>
-
-          <div key={`${currentQuestion.question_id}-${sourceEnabled ? 'enabled' : 'locked'}`}><SourcesDisclosure sources={sources} count={currentQuestion.source_count} enabled={sourceEnabled} /></div>
 
           {error && <div className="exam-error" role="alert">{error}</div>}
           <footer className="question-navigation">
-            <button type="button" onClick={() => setCurrentIndex((value) => Math.max(0, value - 1))} disabled={currentIndex === 0}>← Previous</button>
-            <span>{isReview ? 'Review mode · sources available' : currentAnswer?.feedback ? 'Answer locked' : currentAnswer?.selectedOptionId ? 'Answer selected' : 'Unanswered'}</span>
-            <button type="button" onClick={() => setCurrentIndex((value) => Math.min(attempt.questions.length - 1, value + 1))} disabled={currentIndex === attempt.questions.length - 1}>Next →</button>
+            <button type="button" className="question-back" onClick={goBack} disabled={currentIndex === 0}>← Back</button>
+            <div className="question-support-controls">
+              <ExplanationControl explanation={explanation} enabled={Boolean(explanation && sourceEnabled)} />
+              <SourceControl sources={sources} count={currentQuestion.source_count} enabled={sourceEnabled} status={currentQuestion.source_status} onOpen={() => setSourceDialogOpen(true)} />
+            </div>
+            {showNext
+              ? <button type="button" className="question-primary-action" onClick={goForward} disabled={!canGoForward}>Next →</button>
+              : <button type="button" className="question-primary-action" onClick={submitAnswer} disabled={!currentAnswer?.selectedOptionId || busy}>{busy ? 'Submitting…' : 'Submit'}</button>}
           </footer>
         </article>
       </section>
@@ -246,8 +345,9 @@ export default function ExamRunner({ courseId, examId, reviewMode = false, onExi
         <div className="palette-progress"><span style={{ width: `${(answeredCount / attempt.questions.length) * 100}%` }} /><small>{Math.round((answeredCount / attempt.questions.length) * 100)}% answered</small></div>
       </aside>
 
-      {finishCheckpoint && !completion && <div className="exam-modal-backdrop"><section className="finish-card" role="dialog" aria-modal="true" aria-labelledby="finish-title"><p className="kicker">Submission checkpoint</p><h2 id="finish-title">Finish this {reviewMode ? 'review' : 'exam'}?</h2><p>Once submitted, unanswered questions remain unanswered and the complete answer review becomes available.</p><dl><div><dt>Locked</dt><dd>{answeredCount}</dd></div><div><dt>Unanswered</dt><dd>{attempt.questions.length - answeredCount}</dd></div><div><dt>Flagged</dt><dd>{flags.size}</dd></div></dl><div className="result-actions"><button type="button" onClick={() => setFinishCheckpoint(false)}>Keep working</button><button type="button" className="is-primary" onClick={finishExam} disabled={busy}>{busy ? 'Submitting…' : reviewMode ? 'Submit final review' : 'Submit final exam'}</button></div></section></div>}
+      {finishCheckpoint && !completion && <div className="exam-modal-backdrop"><section className="finish-card" role="dialog" aria-modal="true" aria-labelledby="finish-title"><p className="kicker">Submission checkpoint</p><h2 id="finish-title">Finish this {reviewMode ? 'review' : isPractice ? 'practice test' : 'exam'}?</h2><p>{isPractice ? 'Once submitted, the complete answer review becomes available. This result will not update mastery or the review schedule.' : 'Once submitted, unanswered questions remain unanswered and the complete answer review becomes available.'}</p><dl><div><dt>Locked</dt><dd>{answeredCount}</dd></div><div><dt>Unanswered</dt><dd>{attempt.questions.length - answeredCount}</dd></div><div><dt>Flagged</dt><dd>{flags.size}</dd></div></dl><div className="result-actions"><button type="button" onClick={() => setFinishCheckpoint(false)}>Keep working</button><button type="button" className="is-primary" onClick={finishExam} disabled={busy}>{busy ? 'Submitting…' : reviewMode ? 'Submit final review' : isPractice ? 'Submit practice result' : 'Submit final exam'}</button></div></section></div>}
       {showResult && completion && <ResultDialog completion={completion} onExit={onExit} onReview={() => setShowResult(false)} />}
+      {sourceDialogOpen && sourceEnabled && <SourceDialog sources={sources} evidenceLabel={evidenceLabel} onClose={() => setSourceDialogOpen(false)} />}
     </main>
   )
 }

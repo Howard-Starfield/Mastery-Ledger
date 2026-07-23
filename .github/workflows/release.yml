@@ -10,7 +10,7 @@ permissions:
   attestations: write
 
 jobs:
-  build-and-release:
+  build-python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -52,20 +52,75 @@ jobs:
           python -m build
       - name: Package the matching Codex skill
         run: git archive --format=zip --output="dist/mastery-ledger-skill-$GITHUB_REF_NAME.zip" HEAD mastery-ledger
-      - name: Create SHA-256 manifest
-        working-directory: dist
-        run: sha256sum * > SHA256SUMS.txt
-      - name: Attest distributions and checksum manifest
-        uses: actions/attest@v4
-        with:
-          subject-path: "dist/*"
-      - name: Upload immutable workflow artifacts
+      - name: Upload Python and skill artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: mastery-ledger-${{ github.ref_name }}
+          name: release-python
           path: dist/
           if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Require tag and package versions to match
+        shell: pwsh
+        run: |
+          $version = python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
+          if ("v$version" -ne "${{ github.ref_name }}") {
+            throw "Tag ${{ github.ref_name }} does not match package version v$version"
+          }
+      - name: Install desktop build dependencies
+        run: python -m pip install --upgrade ".[desktop,desktop-build]"
+      - name: Build Windows desktop preview
+        run: python -m PyInstaller --noconfirm --clean .\packaging\mastery-ledger.spec
+      - name: Smoke test packaged application
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .work | Out-Null
+          $process = Start-Process -FilePath .\dist\MasteryLedger\MasteryLedger.exe -ArgumentList "--smoke-test", "--output", ".\.work\desktop-smoke.json" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Packaged desktop smoke test exited with code $($process.ExitCode)" }
+          Get-Content .\.work\desktop-smoke.json
+          $result = Get-Content .\.work\desktop-smoke.json | ConvertFrom-Json
+          if ($result.status -ne "ready") { throw "Packaged desktop smoke test did not report ready" }
+      - name: Archive portable Windows application
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Compress-Archive -Path .\dist\MasteryLedger\* -DestinationPath ".\release\MasteryLedger-windows-x64-${{ github.ref_name }}.zip"
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: release/
+          if-no-files-found: error
+
+  publish-release:
+    runs-on: ubuntu-latest
+    needs: [build-python, build-windows]
+    steps:
+      - name: Download Python and skill artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: release-python
+          path: release/
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: release-windows
+          path: release/
+      - name: Create SHA-256 manifest
+        run: sha256sum release/* > release/SHA256SUMS.txt
+      - name: Attest release artifacts and checksum manifest
+        uses: actions/attest@v4
+        with:
+          subject-path: "release/*"
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --title "Mastery Ledger $GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" release/* --verify-tag --generate-notes --title "Mastery Ledger $GITHUB_REF_NAME"

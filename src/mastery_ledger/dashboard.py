@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 
+from mastery_ledger.course_import import CourseImportError, validate_course_folder
 from mastery_ledger.course_discovery import course_roots as _course_roots
 from mastery_ledger.database import read_setting
 from mastery_ledger.models import (
@@ -136,6 +137,7 @@ def _exam_summaries(
     course_root: Path,
     course_id: str,
     course_title: str,
+    manifest: dict[str, Any],
 ) -> list[DashboardExam]:
     exams_root = course_root / "exams"
     if not exams_root.is_dir() or exams_root.is_symlink():
@@ -151,7 +153,33 @@ def _exam_summaries(
         if not exam_root.is_dir() or exam_root.is_symlink():
             continue
         payload = _read_json(exam_root / "exam.json", course_root)
-        if not payload or str(payload.get("status", "")).casefold() != "ready":
+        if not payload:
+            continue
+        status = str(payload.get("status", "")).casefold()
+        if status == "ready":
+            assessment_kind = "exam"
+            mastery_eligible = True
+        elif status == "practice_ready":
+            if (
+                manifest.get("bundle_schema") != "mastery-ledger-course-bundle-v1"
+                or manifest.get("layout_schema") != "course-layout-v2"
+                or manifest.get("workflow_state") != "STUDY_PACK_DRAFTED"
+                or manifest.get("publication_status") != "DRAFT_UNVERIFIED"
+                or payload.get("verification_status") != "self_checked"
+                or payload.get("mastery_eligible") is not False
+            ):
+                continue
+            try:
+                validate_course_folder(
+                    course_root,
+                    allow_runtime_state=True,
+                    require_practice=True,
+                )
+            except (CourseImportError, OSError, UnicodeError):
+                continue
+            assessment_kind = "practice"
+            mastery_eligible = False
+        else:
             continue
         questions = payload.get("questions")
         fallback_count = len(questions) if isinstance(questions, list) else 0
@@ -164,7 +192,7 @@ def _exam_summaries(
         raw_concepts = payload.get("concepts", payload.get("concept_ids", []))
         concepts = [str(item) for item in raw_concepts if isinstance(item, (str, int))][:12] if isinstance(raw_concepts, list) else []
         source_value = str(payload.get("source_status", payload.get("verification_status", "ready"))).casefold()
-        source_status = "verified" if source_value in {"verified", "passed", "approved"} else "review_needed" if source_value in {"review_needed", "changes_required", "warning"} else "ready"
+        source_status = "self_checked" if assessment_kind == "practice" else "verified" if source_value in {"verified", "passed", "approved"} else "review_needed" if source_value in {"review_needed", "changes_required", "warning"} else "ready"
         exams.append(
             DashboardExam(
                 exam_id=str(payload.get("exam_id") or exam_root.name),
@@ -176,6 +204,8 @@ def _exam_summaries(
                 concepts=concepts,
                 created_at=str(payload["created_at"]) if payload.get("created_at") else None,
                 source_status=source_status,
+                assessment_kind=assessment_kind,
+                mastery_eligible=mastery_eligible,
                 resume_available=str(payload.get("exam_id") or exam_root.name) in in_progress_exam_ids,
             )
         )
@@ -208,7 +238,7 @@ def build_dashboard(workspace: WorkspaceState, *, now: datetime | None = None) -
             stage = record.get("stage_index")
             if isinstance(stage, int) and 0 <= stage < len(stage_counts):
                 stage_counts[stage] += 1
-        exams = _exam_summaries(course_root, course_id, title)
+        exams = _exam_summaries(course_root, course_id, title, manifest)
         ready_exams.extend(exams)
         concept_count, proficient_concept_count = _concept_counts(course_root)
         courses.append(

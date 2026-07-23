@@ -8,12 +8,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mastery_ledger.app import create_app
-from mastery_ledger import cli
+from mastery_ledger import cli, study_service
 from mastery_ledger.cli import main
 from mastery_ledger.config import database_path, runtime_signature
 from mastery_ledger.course_discovery import course_roots
 from mastery_ledger.database import initialize_database
-from mastery_ledger.models import FolderPickerResult
+from mastery_ledger.models import FolderPickerResult, StudyChapter, StudyCourse, WorkspaceState
 from mastery_ledger.runtime import build_doctor_result, validate_workspace
 
 
@@ -145,6 +145,48 @@ def test_api_rejects_requests_without_local_session(runtime_home: Path, tmp_path
     assert response.status_code == 401
 
 
+def test_study_library_loads_no_more_than_ten_courses_per_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    roots = [tmp_path / f"course-{index:02d}" for index in range(12)]
+    records = {
+        root: StudyCourse(
+            course_id=f"COURSE-{index:02d}",
+            title=f"Course {index:02d}",
+            updated_at=f"2026-07-{index + 1:02d}T12:00:00Z",
+            publication_status="PUBLISHED",
+            chapters=[
+                StudyChapter(
+                    chapter_id="CH-001",
+                    title="Lesson",
+                    chapter_class="core",
+                    lesson_path="lessons/CH-001.md",
+                    word_count=225,
+                )
+            ],
+        )
+        for index, root in enumerate(roots)
+    }
+    monkeypatch.setattr(study_service, "_course_roots", lambda _workspace: roots)
+    monkeypatch.setattr(study_service, "_course_record", lambda root: (records[root], []))
+    workspace = WorkspaceState(
+        workspace_id="WORKSPACE-PAGED",
+        name="Paged workspace",
+        path=str(tmp_path),
+        available=True,
+        writable=True,
+    )
+
+    first_page = study_service.study_library(workspace)
+    second_page = study_service.study_library(workspace, offset=10)
+
+    assert len(first_page.courses) == 10
+    assert first_page.total_courses == 12
+    assert first_page.has_more is True
+    assert len(second_page.courses) == 2
+    assert second_page.has_more is False
+
+
 def test_appearance_settings_have_safe_defaults_and_persist(
     runtime_home: Path, tmp_path: Path
 ) -> None:
@@ -160,7 +202,8 @@ def test_appearance_settings_have_safe_defaults_and_persist(
             "schema_version": "appearance-settings-v1",
             "theme_mode": "system",
             "navigation_panel_open": True,
-            "navigation_panel_width": 312,
+            "navigation_panel_width": 224,
+            "ui_scale": 100,
             "content_theme": "infield",
         }
 
@@ -170,6 +213,7 @@ def test_appearance_settings_have_safe_defaults_and_persist(
                 "theme_mode": "midnight",
                 "navigation_panel_open": True,
                 "navigation_panel_width": 500,
+                "ui_scale": 100,
                 "content_theme": "infield",
             },
         )
@@ -181,6 +225,7 @@ def test_appearance_settings_have_safe_defaults_and_persist(
                 "theme_mode": "dark",
                 "navigation_panel_open": False,
                 "navigation_panel_width": 432,
+                "ui_scale": 110,
                 "content_theme": "infield",
             },
         )
@@ -188,6 +233,7 @@ def test_appearance_settings_have_safe_defaults_and_persist(
         assert updated.json()["theme_mode"] == "dark"
         assert updated.json()["navigation_panel_open"] is False
         assert updated.json()["navigation_panel_width"] == 432
+        assert updated.json()["ui_scale"] == 110
 
         persisted_payload = client.get("/api/v1/settings/appearance").json()
         assert persisted_payload == updated.json()
@@ -749,8 +795,23 @@ def test_study_library_exposes_validated_lessons_without_frontmatter_and_preserv
         payload = library.json()
         assert payload["schema_version"] == "study-library-v1"
         assert [course["course_id"] for course in payload["courses"]] == ["COURSE-STUDY", "COURSE-DRAFT"]
+        assert payload["total_courses"] == 2
+        assert payload["offset"] == 0
+        assert payload["limit"] == 10
+        assert payload["has_more"] is False
         assert payload["courses"][0]["chapters"][0]["lesson_path"] == "lessons/CH-001.md"
         assert any("CH-UNSAFE" in warning for warning in payload["warnings"])
+
+        first_page = client.get("/api/v1/study?limit=1").json()
+        assert [course["course_id"] for course in first_page["courses"]] == ["COURSE-STUDY"]
+        assert first_page["has_more"] is True
+        assert first_page["total_courses"] == 2
+        second_page = client.get("/api/v1/study?offset=1&limit=1").json()
+        assert [course["course_id"] for course in second_page["courses"]] == ["COURSE-DRAFT"]
+        assert second_page["has_more"] is False
+        selected_course = client.get("/api/v1/study?course_id=COURSE-DRAFT&limit=1").json()
+        assert [course["course_id"] for course in selected_course["courses"]] == ["COURSE-DRAFT"]
+        assert client.get("/api/v1/study?limit=11").status_code == 422
 
         lesson = client.get("/api/v1/study/COURSE-STUDY/chapters/CH-001")
         assert lesson.status_code == 200
@@ -982,6 +1043,22 @@ def test_focused_exam_locks_answers_and_gates_explanations(
         dashboard_before_restart = client.get("/api/v1/dashboard").json()
         assert dashboard_before_restart["ready_exams"][0]["resume_available"] is True
 
+        paused = client.post(
+            f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/pause"
+        )
+        assert paused.status_code == 200
+        assert paused.json()["status"] == "paused"
+        assert paused.json()["elapsed_seconds"] >= 0
+        persisted_paused = json.loads(attempt_path.read_text(encoding="utf-8"))
+        assert persisted_paused["paused_at"]
+        assert persisted_paused["paused_seconds"] == 0
+
+        blocked_while_paused = client.post(
+            f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/questions/Q-002",
+            json={"option_id": "A"},
+        )
+        assert blocked_while_paused.status_code == 409
+
         retry = client.post(
             f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/questions/Q-001",
             json={"option_id": "B"},
@@ -999,8 +1076,11 @@ def test_focused_exam_locks_answers_and_gates_explanations(
             assert resumed.status_code == 200
             assert resumed.json()["attempt_id"] == attempt_id
             assert resumed.json()["resumed"] is True
+            assert resumed.json()["elapsed_seconds"] >= paused.json()["elapsed_seconds"]
             assert resumed.json()["answers"][0]["status"] == "incorrect"
             assert resumed.json()["answers"][0]["explanation"] is None
+            persisted_resumed = json.loads(attempt_path.read_text(encoding="utf-8"))
+            assert persisted_resumed["paused_at"] is None
 
             correct = restarted_client.post(
                 f"/api/v1/exams/COURSE-MED/EXAM-FOCUSED/attempts/{attempt_id}/questions/Q-002",

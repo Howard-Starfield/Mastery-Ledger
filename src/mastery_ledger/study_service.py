@@ -8,6 +8,7 @@ from typing import Any
 import yaml
 
 from mastery_ledger.course_discovery import course_roots as _course_roots
+from mastery_ledger.course_import import CourseImportError, validate_course_folder
 from mastery_ledger.models import (
     GlossaryChapterLink,
     GlossaryCourseSummary,
@@ -141,6 +142,16 @@ def _course_record(course_root: Path) -> tuple[StudyCourse | None, list[str]]:
         return None, warnings
     published = _published(manifest)
     draft_preview = _draft_preview(manifest)
+    if draft_preview:
+        try:
+            validate_course_folder(
+                course_root,
+                allow_runtime_state=True,
+                require_practice=False,
+            )
+        except (CourseImportError, OSError, UnicodeError) as error:
+            warnings.append(f"Skipped invalid AI self-checked course {course_root.name}: {error}")
+            return None, warnings
     course_id = str(manifest.get("course_id") or manifest.get("study_id") or course_root.name)
     title = str(manifest.get("title") or course_root.name.replace("-", " ").title())
     question_bank = _read_json(course_root / "questions" / "question-bank.json", course_root)
@@ -192,7 +203,13 @@ def _course_record(course_root: Path) -> tuple[StudyCourse | None, list[str]]:
     )
 
 
-def study_library(workspace: WorkspaceState) -> StudyLibraryResult:
+def study_library(
+    workspace: WorkspaceState,
+    *,
+    offset: int = 0,
+    limit: int = 10,
+    course_id: str | None = None,
+) -> StudyLibraryResult:
     courses: list[StudyCourse] = []
     warnings: list[str] = []
     seen_ids: set[str] = set()
@@ -207,7 +224,20 @@ def study_library(workspace: WorkspaceState) -> StudyLibraryResult:
         seen_ids.add(course.course_id)
         courses.append(course)
     courses.sort(key=lambda course: course.updated_at or "", reverse=True)
-    return StudyLibraryResult(workspace=workspace, courses=courses, warnings=warnings)
+    if course_id:
+        courses = [course for course in courses if course.course_id == course_id]
+        offset = 0
+    total_courses = len(courses)
+    visible_courses = courses[offset : offset + limit]
+    return StudyLibraryResult(
+        workspace=workspace,
+        courses=visible_courses,
+        total_courses=total_courses,
+        offset=offset,
+        limit=limit,
+        has_more=offset + len(visible_courses) < total_courses,
+        warnings=warnings,
+    )
 
 
 def study_lesson(workspace: WorkspaceState, course_id: str, chapter_id: str) -> StudyLessonResult:

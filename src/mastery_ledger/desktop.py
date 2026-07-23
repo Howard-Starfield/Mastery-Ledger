@@ -225,6 +225,7 @@ def run_desktop(
             width=1440,
             height=900,
             min_size=(900, 640),
+            maximized=True,
             background_color="#f4f0e8",
             text_select=True,
         )

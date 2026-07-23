@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   clampNavigationPanelWidth,
+  normalizeUiScale,
   nextThemeMode,
   resolveTheme,
   shouldAutoCollapseNavigation,
@@ -16,14 +17,20 @@ describe('appearance helpers', () => {
   })
 
   it('rounds and clamps persisted navigation widths', () => {
-    expect(clampNavigationPanelWidth(219)).toBe(300)
-    expect(clampNavigationPanelWidth(299.6)).toBe(300)
-    expect(clampNavigationPanelWidth(500)).toBe(432)
+    expect(clampNavigationPanelWidth(219)).toBe(224)
+    expect(clampNavigationPanelWidth(223.6)).toBe(224)
+    expect(clampNavigationPanelWidth(500)).toBe(332)
   })
 
   it('uses compact navigation only when the window cannot support both panes', () => {
     expect(shouldAutoCollapseNavigation(819)).toBe(true)
     expect(shouldAutoCollapseNavigation(820)).toBe(false)
+  })
+
+  it('normalizes UI scaling to supported, readable presets', () => {
+    expect(normalizeUiScale(72)).toBe(80)
+    expect(normalizeUiScale(96)).toBe(100)
+    expect(normalizeUiScale(140)).toBe(125)
   })
 
   it('rotates through the three theme modes', () => {

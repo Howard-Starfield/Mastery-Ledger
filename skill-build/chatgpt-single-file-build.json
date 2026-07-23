@@ -1,7 +1,7 @@
 {
   "schema_version": "chatgpt-single-file-build-v1",
   "package_name": "mastery-ledger-chatgpt",
-  "package_version": "0.3.0",
+  "package_version": "0.4.3",
   "source_file": "mastery-ledger-chatgpt/SKILL.md",
   "default_output": "dist/mastery-ledger-chatgpt-upload/SKILL.md"
 }

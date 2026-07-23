@@ -7,6 +7,8 @@ import {
   type ReviewCurveUpdateResult,
 } from './api'
 import { formatReviewInterval, reviewCurveWarnings } from './reviewIntervals'
+import { useAppearance } from './AppearanceProvider'
+import { UI_SCALE_OPTIONS } from './lib/appearance'
 
 type CurveSettingsProps = {
   onClose: () => void
@@ -45,6 +47,7 @@ function validateStages(values: string[]): { intervals: number[]; error: string 
 }
 
 export default function CurveSettings({ onClose, onSaved }: CurveSettingsProps) {
+  const { settings: appearance, updateAppearance } = useAppearance()
   const [settings, setSettings] = useState<ApplicationSettings | null>(null)
   const [name, setName] = useState('')
   const [stages, setStages] = useState<string[]>([])
@@ -54,6 +57,8 @@ export default function CurveSettings({ onClose, onSaved }: CurveSettingsProps) 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<ReviewCurveUpdateResult | null>(null)
+  const [scaleBusy, setScaleBusy] = useState(false)
+  const [scaleError, setScaleError] = useState<string | null>(null)
 
   useEffect(() => {
     applicationApi.settings().then((payload) => {
@@ -112,6 +117,19 @@ export default function CurveSettings({ onClose, onSaved }: CurveSettingsProps) 
     }
   }
 
+  const saveUiScale = async (uiScale: number) => {
+    if (uiScale === appearance.ui_scale || scaleBusy) return
+    setScaleBusy(true)
+    setScaleError(null)
+    try {
+      await updateAppearance({ ui_scale: uiScale })
+    } catch (cause) {
+      setScaleError(cause instanceof Error ? cause.message : 'UI scaling could not be saved.')
+    } finally {
+      setScaleBusy(false)
+    }
+  }
+
   return (
     <div className="settings-backdrop" role="presentation" onMouseDown={() => !busy && onClose()}>
       <section className="curve-settings" role="dialog" aria-modal="true" aria-labelledby="curve-settings-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -121,6 +139,22 @@ export default function CurveSettings({ onClose, onSaved }: CurveSettingsProps) 
         </header>
 
         {!settings && !error && <div className="settings-loading" aria-busy="true">Reading the current curve…</div>}
+
+        <section className="appearance-settings" aria-labelledby="ui-scale-title">
+          <div>
+            <span>Interface</span>
+            <h3 id="ui-scale-title">UI scaling</h3>
+            <p>Currently {appearance.ui_scale}%. Saved for the next time you open Mastery Ledger.</p>
+          </div>
+          <div className="ui-scale-options" role="group" aria-label="UI scaling">
+            {UI_SCALE_OPTIONS.map((scale) => (
+              <button type="button" key={scale} className={appearance.ui_scale === scale ? 'is-selected' : ''} aria-pressed={appearance.ui_scale === scale} disabled={scaleBusy} onClick={() => void saveUiScale(scale)}>
+                {scale}%{scale === 100 && <small>Default</small>}
+              </button>
+            ))}
+          </div>
+          {scaleError && <p className="appearance-settings__error" role="alert">{scaleError}</p>}
+        </section>
 
         {settings && (
           <div className="curve-settings__body">

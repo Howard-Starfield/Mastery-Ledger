@@ -49,7 +49,7 @@ const activityItems = [
 const destinationDescriptions: Record<WorkbenchDestination, string> = {
   study: 'Published lessons and course chapters',
   glossary: 'Definitions across your local courses',
-  exams: 'Validated assessments ready to take',
+  exams: 'Verified exams and self-checked practice',
 }
 
 const themeItems: Record<ThemeMode, { label: string; icon: typeof Monitor }> = {
@@ -175,8 +175,8 @@ export default function WorkbenchShell({
             id="navigation"
             panelRef={panelRef}
             defaultSize={`${48 + settings.navigation_panel_width}px`}
-            minSize="348px"
-            maxSize="480px"
+            minSize="272px"
+            maxSize="380px"
             collapsedSize="48px"
             collapsible
             groupResizeBehavior="preserve-pixel-size"

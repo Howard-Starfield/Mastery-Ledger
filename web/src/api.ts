@@ -62,7 +62,9 @@ export interface DashboardExam {
   estimated_minutes: number
   concepts: string[]
   created_at: string | null
-  source_status: 'verified' | 'ready' | 'review_needed'
+  source_status: 'verified' | 'ready' | 'review_needed' | 'self_checked'
+  assessment_kind: 'exam' | 'practice'
+  mastery_eligible: boolean
   resume_available: boolean
 }
 
@@ -122,6 +124,10 @@ export interface StudyLibraryResult {
   schema_version: 'study-library-v1'
   workspace: OnboardingResult['workspace']
   courses: StudyCourse[]
+  total_courses: number
+  offset: number
+  limit: number
+  has_more: boolean
   warnings: string[]
 }
 
@@ -210,6 +216,7 @@ export interface AppearanceSettings {
   theme_mode: ThemeMode
   navigation_panel_open: boolean
   navigation_panel_width: number
+  ui_scale: number
   content_theme: 'infield'
 }
 
@@ -245,7 +252,7 @@ export interface ExamQuestion {
   difficulty: string | number | null
   concept_ids: string[]
   source_count: number
-  source_status: 'verified' | 'unavailable'
+  source_status: 'verified' | 'self_checked' | 'unavailable'
 }
 
 export interface ExamAttempt {
@@ -257,7 +264,10 @@ export interface ExamAttempt {
   title: string
   estimated_minutes: number
   started_at: string
+  elapsed_seconds: number
   resumed: boolean
+  assessment_kind: 'exam' | 'practice' | 'review'
+  mastery_eligible: boolean
   questions: ExamQuestion[]
   answers: QuestionFeedback[]
 }
@@ -294,6 +304,8 @@ export interface ExamCompletion {
   schema_version: 'exam-completion-v1'
   attempt_id: string
   status: 'complete'
+  assessment_kind: 'exam' | 'practice' | 'review'
+  mastery_updated: boolean
   question_count: number
   answered_count: number
   correct_count: number
@@ -346,7 +358,13 @@ export const onboardingApi = {
 export const applicationApi = {
   status: () => request<ApplicationStatus>('/api/v1/status'),
   dashboard: () => request<DashboardResult>('/api/v1/dashboard'),
-  studyLibrary: () => request<StudyLibraryResult>('/api/v1/study'),
+  studyLibrary: (options: { offset?: number; limit?: number; courseId?: string } = {}) => {
+    const params = new URLSearchParams()
+    if (options.offset) params.set('offset', String(options.offset))
+    params.set('limit', String(Math.min(10, options.limit ?? 10)))
+    if (options.courseId) params.set('course_id', options.courseId)
+    return request<StudyLibraryResult>(`/api/v1/study?${params.toString()}`)
+  },
   importCourse: (file: File) =>
     request<CourseImportResult>(`/api/v1/courses/import?filename=${encodeURIComponent(file.name)}`, {
       method: 'POST',
@@ -400,6 +418,11 @@ export const applicationApi = {
   finishExam: (attempt: ExamAttempt) =>
     request<ExamCompletion>(
       `/api/v1/exams/${encodeURIComponent(attempt.course_id)}/${encodeURIComponent(attempt.exam_id)}/attempts/${encodeURIComponent(attempt.attempt_id)}/finish`,
+      { method: 'POST' },
+    ),
+  pauseExam: (attempt: ExamAttempt) =>
+    request<{ schema_version: 'exam-pause-v1'; attempt_id: string; status: 'paused'; elapsed_seconds: number }>(
+      `/api/v1/exams/${encodeURIComponent(attempt.course_id)}/${encodeURIComponent(attempt.exam_id)}/attempts/${encodeURIComponent(attempt.attempt_id)}/pause`,
       { method: 'POST' },
     ),
 }

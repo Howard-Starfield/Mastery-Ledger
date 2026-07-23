@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import zipfile
@@ -11,8 +12,10 @@ from fastapi.testclient import TestClient
 
 from mastery_ledger.app import create_app
 from mastery_ledger.course_import import CourseImportConflictError, CourseImportError, import_course_zip
+from mastery_ledger.dashboard import build_dashboard
+from mastery_ledger.exam_service import ExamSessionStore
 from mastery_ledger.models import WorkspaceState
-from mastery_ledger.study_service import study_library
+from mastery_ledger.study_service import study_lesson, study_library
 
 
 @pytest.fixture()
@@ -31,6 +34,7 @@ def course_files(*, root: str = "causal-inference", study_id: str = "STUDY-CHATG
         "lessons": "lessons",
         "question_bank": "questions/question-bank.json",
         "question_bank_review": "questions/question-bank.md",
+        "practice_exam": "exams/PRACTICE-001/exam.json",
         "learner_progress": "progress/learner-progress.json",
         "approved_claims": "records/evidence/approved-claims.json",
         "contradictions": "records/evidence/contradictions.json",
@@ -58,6 +62,10 @@ def course_files(*, root: str = "causal-inference", study_id: str = "STUDY-CHATG
         "supports": ["claim"],
         "support_strength": "direct",
     }
+    assessment_ref = {
+        **source_ref,
+        "supports": ["question_prompt", "correct_answer", "explanation"],
+    }
     lesson = """---
 schema_version: lesson-v1
 chapter_id: CH-001
@@ -83,6 +91,30 @@ Causal inference asks what would happen under an intervention rather than merely
 
 Compare an observed outcome with a clearly stated counterfactual question, then identify assumptions and evidence gaps.
 """
+    answer_positions = ["A", "B", "C", "D", "A", "B", "C", "D", "A", "B"]
+    questions = [
+        {
+            "question_id": f"Q-{index_number:03d}",
+            "chapter_id": "CH-001",
+            "type": "standalone_mcq" if index_number <= 8 else "scenario_mcq",
+            "prompt": f"Which answer best applies the causal inference principle in item {index_number}?",
+            "options": [
+                {
+                    "option_id": option_id,
+                    "text": f"Option {option_id} for item {index_number}",
+                    "rationale": f"Rationale for option {option_id} in item {index_number}.",
+                }
+                for option_id in ("A", "B", "C", "D")
+            ],
+            "correct_option_id": answer_positions[index_number - 1],
+            "explanation": "The supported answer distinguishes an intervention claim from an observed association.",
+            "objective_ids": ["OBJ-001"],
+            "concept_ids": ["causal-effect"],
+            "source_refs": [assessment_ref],
+            "quality_status": "draft",
+        }
+        for index_number in range(1, 11)
+    ]
     bank = {
         "schema_version": "question-bank-v2",
         "source_ref_schema": "source-ref-v1",
@@ -96,7 +128,19 @@ Compare an observed outcome with a clearly stated counterfactual question, then 
                 "lesson_path": "lessons/CH-001.md",
             }
         ],
-        "questions": [],
+        "questions": questions,
+    }
+    practice = {
+        "schema_version": "exam-v1",
+        "exam_id": "PRACTICE-001",
+        "course_id": study_id,
+        "title": "AI self-checked practice test",
+        "status": "practice_ready",
+        "verification_status": "self_checked",
+        "mastery_eligible": False,
+        "question_count": len(questions),
+        "estimated_minutes": 15,
+        "questions": questions,
     }
     glossary = {
         "schema_version": "course-glossary-v1",
@@ -171,7 +215,8 @@ Compare an observed outcome with a clearly stated counterfactual question, then 
         prefix + "lessons/CH-001.md": lesson,
         prefix + "lessons/glossary.json": json.dumps(glossary),
         prefix + "questions/question-bank.json": json.dumps(bank),
-        prefix + "questions/question-bank.md": "# Question bank\n\nDraft review copy; no ready exam is included.\n",
+        prefix + "questions/question-bank.md": "# Question bank\n\nDraft review copy for the included AI self-checked practice test.\n",
+        prefix + "exams/PRACTICE-001/exam.json": json.dumps(practice),
         prefix + "progress/learner-progress.json": json.dumps(progress),
         prefix + "records/source-manifest.yaml": yaml.safe_dump(manifest, sort_keys=False),
         prefix + "records/source/SRC-001.md": "# Uploaded notes\n\nCausal questions compare outcomes under specified alternative interventions.",
@@ -192,6 +237,210 @@ def zip_bytes(files: dict[str, str]) -> bytes:
         for name, content in files.items():
             archive.writestr(name, content)
     return buffer.getvalue()
+
+
+def add_artifact_hash_manifest(
+    files: dict[str, str], *, root: str = "causal-inference"
+) -> dict[str, str]:
+    prefix = f"{root}/"
+    manifest_path = "records/evidence/validation/artifact-hashes.json"
+    files[prefix + "records/evidence/claim-ledger.json"] = json.dumps(
+        {"schema_version": "claim-ledger-v1", "claims": []}
+    )
+    source_inputs = ["records/source-manifest.yaml", "records/source/SRC-001.md"]
+    check_members = {
+        "contradiction-check.json": ["records/evidence/claim-ledger.json", *source_inputs],
+        "citation-check.json": [
+            "exams/PRACTICE-001/exam.json",
+            "lessons/CH-001.md",
+            "lessons/glossary.json",
+            "questions/question-bank.json",
+            "records/evidence/approved-claims.json",
+            *source_inputs,
+        ],
+        "lesson-check.json": [
+            "lessons/CH-001.md",
+            "records/evidence/approved-claims.json",
+            *source_inputs,
+        ],
+        "assessment-check.json": [
+            "exams/PRACTICE-001/exam.json",
+            "lessons/CH-001.md",
+            "questions/question-bank.json",
+            "records/evidence/approved-claims.json",
+            *source_inputs,
+        ],
+    }
+    groups = []
+    for check_name, paths in check_members.items():
+        members = []
+        for relative in sorted(paths):
+            data = files[prefix + relative].encode("utf-8")
+            members.append(
+                {
+                    "path": relative,
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "bytes": len(data),
+                }
+            )
+        payload = "".join(f"{item['path']}\t{item['sha256']}\n" for item in members)
+        group_id = check_name.removesuffix(".json") + "-inputs-v1"
+        group_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        check_path = f"records/evidence/validation/{check_name}"
+        receipt = json.loads(files[prefix + check_path])
+        receipt["input_artifact_id"] = group_id
+        receipt["input_artifact_hash"] = group_hash
+        files[prefix + check_path] = json.dumps(receipt)
+        groups.append(
+            {
+                "group_id": group_id,
+                "check_path": check_path,
+                "members": members,
+                "group_sha256": group_hash,
+            }
+        )
+
+    study = yaml.safe_load(files[prefix + "study.yaml"])
+    study["artifact_paths"]["artifact_hashes"] = manifest_path
+    files[prefix + "study.yaml"] = yaml.safe_dump(study, sort_keys=False)
+    files[prefix + manifest_path] = json.dumps(
+        {
+            "schema_version": "artifact-hash-manifest-v1",
+            "study_id": study["study_id"],
+            "hash_algorithm": "sha256",
+            "file_digest_recipe": "sha256-raw-bytes-v1",
+            "group_digest_recipe": "sorted-path-tab-sha256-lf-v1",
+            "groups": groups,
+        }
+    )
+    return files
+
+
+def write_course_folder(workspace: Path, relative_root: str) -> Path:
+    source_root = "causal-inference"
+    target_root = workspace.joinpath(*Path(relative_root).parts)
+    for bundled_name, content in course_files(root=source_root).items():
+        relative = Path(bundled_name).relative_to(source_root)
+        target = target_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    return target_root
+
+
+@pytest.mark.parametrize("relative_root", ["causal-inference", "courses/causal-inference"])
+def test_complete_draft_bundle_works_when_placed_directly_in_workspace(
+    tmp_path: Path, relative_root: str
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    write_course_folder(workspace, relative_root)
+    state = WorkspaceState(
+        workspace_id="WORKSPACE-001",
+        name="Workspace",
+        path=str(workspace),
+        available=True,
+        writable=True,
+    )
+
+    library = study_library(state)
+
+    assert library.warnings == []
+    assert [(course.course_id, course.publication_status) for course in library.courses] == [
+        ("STUDY-CHATGPT-001", "DRAFT_UNVERIFIED")
+    ]
+    lesson = study_lesson(state, "STUDY-CHATGPT-001", "CH-001")
+    assert lesson.title == "Foundations"
+    assert "Causal inference asks" in lesson.content
+
+
+def test_directly_placed_ai_course_must_pass_the_same_folder_contract(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    course = write_course_folder(workspace, "causal-inference")
+    (course / "unexpected.exe").write_bytes(b"not allowed")
+    state = WorkspaceState(
+        workspace_id="WORKSPACE-001",
+        name="Workspace",
+        path=str(workspace),
+        available=True,
+        writable=True,
+    )
+
+    library = study_library(state)
+
+    assert library.courses == []
+    assert any("Unsupported file at the course root" in warning for warning in library.warnings)
+
+
+def test_legacy_direct_draft_without_practice_remains_studyable(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    course = write_course_folder(workspace, "causal-inference")
+    (course / "exams" / "PRACTICE-001" / "exam.json").unlink()
+    study_path = course / "study.yaml"
+    study = yaml.safe_load(study_path.read_text(encoding="utf-8"))
+    del study["artifact_paths"]["practice_exam"]
+    study_path.write_text(yaml.safe_dump(study, sort_keys=False), encoding="utf-8")
+    state = WorkspaceState(
+        workspace_id="WORKSPACE-001",
+        name="Workspace",
+        path=str(workspace),
+        available=True,
+        writable=True,
+    )
+
+    library = study_library(state)
+
+    assert library.warnings == []
+    assert library.courses[0].course_id == "STUDY-CHATGPT-001"
+    assert build_dashboard(state).ready_exams == []
+
+
+def test_self_checked_practice_runs_without_updating_mastery(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    course = write_course_folder(workspace, "causal-inference")
+    state = WorkspaceState(
+        workspace_id="WORKSPACE-001",
+        name="Workspace",
+        path=str(workspace),
+        available=True,
+        writable=True,
+    )
+    progress_path = course / "progress" / "learner-progress.json"
+    progress_before = progress_path.read_bytes()
+
+    dashboard = build_dashboard(state)
+    assert len(dashboard.ready_exams) == 1
+    summary = dashboard.ready_exams[0]
+    assert summary.exam_id == "PRACTICE-001"
+    assert summary.assessment_kind == "practice"
+    assert summary.source_status == "self_checked"
+    assert summary.mastery_eligible is False
+
+    sessions = ExamSessionStore()
+    attempt = sessions.start(state, "STUDY-CHATGPT-001", "PRACTICE-001")
+    assert attempt.assessment_kind == "practice"
+    assert attempt.mastery_eligible is False
+    assert attempt.questions[0].source_status == "self_checked"
+    feedback = sessions.submit(
+        attempt.attempt_id,
+        attempt.course_id,
+        attempt.exam_id,
+        attempt.questions[0].question_id,
+        "A",
+    )
+    assert feedback.correct is True
+
+    completion = sessions.finish(attempt.attempt_id, attempt.course_id, attempt.exam_id)
+    assert completion.assessment_kind == "practice"
+    assert completion.mastery_updated is False
+    assert progress_path.read_bytes() == progress_before
+    assert not (course / "progress" / "review-queue.json").exists()
+    stored_attempt = json.loads(next((course / "attempts").glob("*.json")).read_text())
+    assert stored_attempt["attempt_kind"] == "practice"
+    assert stored_attempt["mastery_eligible"] is False
+    assert study_library(state).courses[0].course_id == "STUDY-CHATGPT-001"
 
 
 def test_imports_complete_draft_bundle_atomically_and_exposes_preview(tmp_path: Path) -> None:
@@ -224,6 +473,53 @@ def test_imports_complete_draft_bundle_atomically_and_exposes_preview(tmp_path: 
     assert len(library.courses) == 1
     assert library.courses[0].publication_status == "DRAFT_UNVERIFIED"
     assert library.courses[0].chapters[0].chapter_id == "CH-001"
+
+
+def test_optional_artifact_hash_manifest_is_verified_byte_for_byte(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    files = add_artifact_hash_manifest(course_files())
+
+    result = import_course_zip(workspace, zip_bytes(files), filename="causal-inference.zip")
+
+    assert result["status"] == "imported"
+    manifest = json.loads(
+        (workspace / "courses" / "causal-inference" / "records" / "evidence" / "validation" / "artifact-hashes.json").read_text()
+    )
+    assert len(manifest["groups"]) == 4
+
+
+def test_artifact_hash_manifest_rejects_changed_member(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    files = add_artifact_hash_manifest(course_files())
+    lesson_path = "causal-inference/lessons/CH-001.md"
+    files[lesson_path] += "\nChanged after hashing.\n"
+
+    with pytest.raises(CourseImportError, match="does not match the current file"):
+        import_course_zip(workspace, zip_bytes(files), filename="causal-inference.zip")
+
+
+def test_artifact_hash_manifest_rejects_omitted_required_input(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    files = add_artifact_hash_manifest(course_files())
+    manifest_path = "causal-inference/records/evidence/validation/artifact-hashes.json"
+    manifest = json.loads(files[manifest_path])
+    group = next(item for item in manifest["groups"] if item["group_id"] == "citation-check-inputs-v1")
+    group["members"] = [
+        item for item in group["members"] if item["path"] != "records/source/SRC-001.md"
+    ]
+    payload = "".join(f"{item['path']}\t{item['sha256']}\n" for item in group["members"])
+    group["group_sha256"] = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    receipt_path = "causal-inference/records/evidence/validation/citation-check.json"
+    receipt = json.loads(files[receipt_path])
+    receipt["input_artifact_hash"] = group["group_sha256"]
+    files[receipt_path] = json.dumps(receipt)
+    files[manifest_path] = json.dumps(manifest)
+
+    with pytest.raises(CourseImportError, match="missing required check inputs"):
+        import_course_zip(workspace, zip_bytes(files), filename="causal-inference.zip")
 
 
 def test_rejects_path_traversal_without_leaving_files(tmp_path: Path) -> None:
@@ -277,6 +573,51 @@ def test_rejects_missing_contract_and_duplicate_course(tmp_path: Path) -> None:
     import_course_zip(workspace, valid, filename="causal-inference.zip")
     with pytest.raises(CourseImportConflictError, match="already exists"):
         import_course_zip(workspace, valid, filename="causal-inference.zip")
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda files: files.__setitem__(
+                "causal-inference/exams/PRACTICE-001/exam.json",
+                json.dumps(
+                    {
+                        **json.loads(files["causal-inference/exams/PRACTICE-001/exam.json"]),
+                        "status": "ready",
+                        "verification_status": "verified",
+                        "mastery_eligible": True,
+                    }
+                ),
+            ),
+            "status must be practice_ready",
+        ),
+        (
+            lambda files: files.__setitem__(
+                "causal-inference/progress/learner-progress.json",
+                json.dumps(
+                    {
+                        **json.loads(files["causal-inference/progress/learner-progress.json"]),
+                        "applied_attempt_ids": ["ATTEMPT-SEEDED"],
+                    }
+                ),
+            ),
+            "may not import applied mastery attempts",
+        ),
+    ],
+)
+def test_rejects_practice_promotion_and_seeded_mastery(
+    tmp_path: Path,
+    mutate,
+    message: str,
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    files = course_files()
+    mutate(files)
+
+    with pytest.raises(CourseImportError, match=message):
+        import_course_zip(workspace, zip_bytes(files), filename="causal-inference.zip")
 
 
 def test_course_import_api_requires_session_and_accepts_raw_zip(

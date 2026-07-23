@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
+from mastery_ledger.course_import import CourseImportError, validate_course_folder
 from mastery_ledger.dashboard import (
     _course_roots,
     _inside,
@@ -78,6 +79,7 @@ class LoadedExam:
     course_root: Path
     content_hash: str
     kind: str = "exam"
+    mastery_eligible: bool = True
 
 
 @dataclass(frozen=True)
@@ -94,6 +96,8 @@ class AttemptState:
     path: Path
     started_at: str
     updated_at: str
+    paused_at: str | None = None
+    paused_seconds: int = 0
     submissions: dict[str, AttemptSubmission] = field(default_factory=dict)
     finished: bool = False
     completion: ExamCompletion | None = None
@@ -177,6 +181,8 @@ def _validate_sources(
 def _load_question(
     raw: dict[str, Any],
     source_index: dict[str, dict[str, Any]],
+    *,
+    source_status: str = "verified",
 ) -> LoadedQuestion:
     question_id = str(raw.get("question_id") or "").strip()
     prompt = raw.get("prompt")
@@ -230,7 +236,7 @@ def _load_question(
             difficulty=difficulty,
             concept_ids=concepts,
             source_count=len(sources),
-            source_status="verified",
+            source_status=source_status,
         ),
         correct_option_id=correct_option_id,
         explanation=explanation.strip(),
@@ -267,8 +273,40 @@ def load_exam(workspace: WorkspaceState, course_id: str, exam_id: str) -> Loaded
             payload_exam_id = str(payload.get("exam_id") or exam_root.name)
             if not secrets.compare_digest(payload_exam_id, exam_id):
                 continue
-            if str(payload.get("status", "")).casefold() != "ready":
-                raise ExamValidationError("Only a validated ready exam can be started.")
+            status = str(payload.get("status", "")).casefold()
+            if status == "ready":
+                kind = "exam"
+                mastery_eligible = True
+                source_status = "verified"
+            elif status == "practice_ready":
+                if (
+                    manifest.get("bundle_schema") != "mastery-ledger-course-bundle-v1"
+                    or manifest.get("layout_schema") != "course-layout-v2"
+                    or manifest.get("workflow_state") != "STUDY_PACK_DRAFTED"
+                    or manifest.get("publication_status") != "DRAFT_UNVERIFIED"
+                    or payload.get("verification_status") != "self_checked"
+                    or payload.get("mastery_eligible") is not False
+                ):
+                    raise ExamValidationError(
+                        "A practice test must remain self-checked, draft-unverified, and ineligible for mastery."
+                    )
+                try:
+                    validate_course_folder(
+                        course_root,
+                        allow_runtime_state=True,
+                        require_practice=True,
+                    )
+                except (CourseImportError, OSError, UnicodeError) as error:
+                    raise ExamValidationError(
+                        f"This self-checked practice test failed its course contract: {error}"
+                    ) from error
+                kind = "practice"
+                mastery_eligible = False
+                source_status = "self_checked"
+            else:
+                raise ExamValidationError(
+                    "Only a validated ready exam or self-checked practice test can be started."
+                )
             raw_questions = payload.get("questions")
             if not isinstance(raw_questions, list) or not raw_questions:
                 raise ExamValidationError("This exam has no embedded questions to deliver.")
@@ -278,7 +316,7 @@ def load_exam(workspace: WorkspaceState, course_id: str, exam_id: str) -> Loaded
                 )
             source_index = _source_index(course_root)
             questions = [
-                _load_question(raw, source_index)
+                _load_question(raw, source_index, source_status=source_status)
                 for raw in raw_questions
                 if isinstance(raw, dict)
             ]
@@ -304,6 +342,8 @@ def load_exam(workspace: WorkspaceState, course_id: str, exam_id: str) -> Loaded
                 questions=questions,
                 course_root=course_root,
                 content_hash=f"sha256:{hashlib.sha256(canonical).hexdigest()}",
+                kind=kind,
+                mastery_eligible=mastery_eligible,
             )
         break
     raise ExamNotFoundError("The requested exam was not found in the active workspace.")
@@ -397,6 +437,8 @@ def _build_completion(state: AttemptState) -> ExamCompletion:
     question_count = len(reviews)
     return ExamCompletion(
         attempt_id=state.attempt_id,
+        assessment_kind=state.exam.kind,
+        mastery_updated=state.exam.mastery_eligible,
         question_count=question_count,
         answered_count=question_count - unanswered_count,
         correct_count=correct_count,
@@ -431,9 +473,12 @@ def _attempt_payload(state: AttemptState) -> dict[str, Any]:
         "exam_content_hash": state.exam.content_hash,
         "exam_title": state.exam.title,
         "attempt_kind": state.exam.kind,
+        "mastery_eligible": state.exam.mastery_eligible,
         "status": "complete" if state.finished else "in_progress",
         "started_at": state.started_at,
         "updated_at": state.updated_at,
+        "paused_at": state.paused_at,
+        "paused_seconds": state.paused_seconds,
         "question_order": [
             question.view.question_id for question in state.exam.questions
         ],
@@ -469,6 +514,11 @@ def _load_resumable_attempt(exam: LoadedExam) -> AttemptState | None:
             continue
         if payload.get("exam_content_hash") != exam.content_hash:
             continue
+        if (
+            payload.get("attempt_kind") != exam.kind
+            or payload.get("mastery_eligible") is not exam.mastery_eligible
+        ):
+            continue
         updated_at = payload.get("updated_at")
         if not isinstance(updated_at, str):
             continue
@@ -489,6 +539,13 @@ def _load_resumable_attempt(exam: LoadedExam) -> AttemptState | None:
         or _parse_timestamp(updated_at) is None
     ):
         raise AttemptStorageError("The resumable attempt metadata is malformed.")
+
+    paused_at = payload.get("paused_at")
+    paused_seconds = payload.get("paused_seconds", 0)
+    if paused_at is not None and _parse_timestamp(paused_at) is None:
+        raise AttemptStorageError("The resumable attempt pause timestamp is malformed.")
+    if not isinstance(paused_seconds, int) or isinstance(paused_seconds, bool) or paused_seconds < 0:
+        raise AttemptStorageError("The resumable attempt pause duration is malformed.")
 
     submissions: dict[str, AttemptSubmission] = {}
     responses = payload.get("responses", [])
@@ -524,6 +581,8 @@ def _load_resumable_attempt(exam: LoadedExam) -> AttemptState | None:
         path=path,
         started_at=started_at,
         updated_at=updated_at,
+        paused_at=paused_at,
+        paused_seconds=paused_seconds,
         submissions=submissions,
     )
 
@@ -840,6 +899,9 @@ class ExamSessionStore:
             self._attempts.popitem(last=False)
 
     def _start_payload(self, state: AttemptState, *, resumed: bool) -> ExamAttemptStart:
+        now = self._clock().astimezone(UTC)
+        started_at = _parse_timestamp(state.started_at) or now
+        elapsed_seconds = max(0, int((now - started_at).total_seconds()) - state.paused_seconds)
         return ExamAttemptStart(
             attempt_id=state.attempt_id,
             exam_id=state.exam.exam_id,
@@ -848,7 +910,10 @@ class ExamSessionStore:
             title=state.exam.title,
             estimated_minutes=state.exam.estimated_minutes,
             started_at=state.started_at,
+            elapsed_seconds=elapsed_seconds,
             resumed=resumed,
+            assessment_kind=state.exam.kind,
+            mastery_eligible=state.exam.mastery_eligible,
             questions=[question.view for question in state.exam.questions],
             answers=[
                 _feedback(question, state.submissions[question.view.question_id])
@@ -865,6 +930,15 @@ class ExamSessionStore:
         with self._lock:
             state = _load_resumable_attempt(exam)
             if state is not None:
+                if state.paused_at is not None:
+                    resumed_at = self._clock().astimezone(UTC)
+                    paused_at = _parse_timestamp(state.paused_at)
+                    if paused_at is None:
+                        raise AttemptStorageError("The resumable attempt pause timestamp is malformed.")
+                    state.paused_seconds += max(0, int((resumed_at - paused_at).total_seconds()))
+                    state.paused_at = None
+                    state.updated_at = _timestamp(resumed_at)
+                    _atomic_write_json(state.path, _attempt_payload(state), state.exam.course_root)
                 self._remember(state)
                 return self._start_payload(state, resumed=True)
 
@@ -881,6 +955,20 @@ class ExamSessionStore:
             _atomic_write_json(state.path, _attempt_payload(state), exam.course_root)
             self._remember(state)
             return self._start_payload(state, resumed=False)
+
+    def pause(self, attempt_id: str, course_id: str, exam_id: str) -> int:
+        with self._lock:
+            attempt = self._attempt(attempt_id, course_id, exam_id)
+            if attempt.finished:
+                raise AttemptConflictError("This exam attempt is already complete.")
+            now = self._clock().astimezone(UTC)
+            if attempt.paused_at is None:
+                timestamp = _timestamp(now)
+                attempt.paused_at = timestamp
+                attempt.updated_at = timestamp
+                _atomic_write_json(attempt.path, _attempt_payload(attempt), attempt.exam.course_root)
+            started_at = _parse_timestamp(attempt.started_at) or now
+            return max(0, int((now - started_at).total_seconds()) - attempt.paused_seconds)
 
     def _attempt(
         self,
@@ -909,6 +997,8 @@ class ExamSessionStore:
             attempt = self._attempt(attempt_id, course_id, exam_id)
             if attempt.finished:
                 raise AttemptConflictError("This exam attempt is already complete.")
+            if attempt.paused_at is not None:
+                raise AttemptConflictError("Resume this exam attempt before submitting another answer.")
             question = _question_for(attempt.exam, question_id)
             if question is None:
                 raise AttemptNotFoundError("The requested question is not part of this attempt.")
@@ -950,19 +1040,20 @@ class ExamSessionStore:
 
             completed_at = self._clock().astimezone(UTC)
             completion = _build_completion(attempt)
-            curve = active_review_curve()
-            review_queue = _update_review_queue(
-                attempt,
-                completion,
-                completed_at,
-                curve,
-            )
-            _update_learner_progress(
-                attempt,
-                completion,
-                completed_at,
-                review_queue,
-            )
+            if attempt.exam.mastery_eligible:
+                curve = active_review_curve()
+                review_queue = _update_review_queue(
+                    attempt,
+                    completion,
+                    completed_at,
+                    curve,
+                )
+                _update_learner_progress(
+                    attempt,
+                    completion,
+                    completed_at,
+                    review_queue,
+                )
             timestamp = _timestamp(completed_at)
             previous_updated_at = attempt.updated_at
             attempt.finished = True

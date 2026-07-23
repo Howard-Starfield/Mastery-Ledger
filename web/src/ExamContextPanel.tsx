@@ -24,10 +24,10 @@ export default function ExamContextPanel({
   onStartReview,
 }: ExamContextPanelProps) {
   return (
-    <section className="exam-context" aria-label="Exam filters">
+    <section className="exam-context" aria-label="Assessment filters">
       <header>
         <div>
-          <p>Exams</p>
+          <p>Assessments</p>
           <strong>Assessment register</strong>
         </div>
         <span>{data?.ready_exams.length ?? 0}</span>
@@ -38,8 +38,8 @@ export default function ExamContextPanel({
         <input
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Find an exam"
-          aria-label="Search ready exams"
+          placeholder="Find an assessment"
+          aria-label="Search assessments"
         />
         <span />
       </label>
@@ -59,6 +59,7 @@ export default function ExamContextPanel({
         {[
           ['all', 'Any'],
           ['verified', 'Verified'],
+          ['self_checked', 'AI self-checked'],
           ['ready', 'Ready'],
           ['review_needed', 'Needs review'],
         ].map(([value, label]) => (
@@ -86,7 +87,7 @@ export default function ExamContextPanel({
 
       <div className="exam-context__note">
         <FileCheck2 aria-hidden="true" />
-        <p>Only validated exam sets appear here. Course authoring remains outside the application.</p>
+        <p>Verified exams and self-checked practice are kept distinct. Practice never updates mastery.</p>
       </div>
     </section>
   )

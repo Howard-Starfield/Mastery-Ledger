@@ -127,7 +127,8 @@ class AppearanceSettings(BaseModel):
     schema_version: Literal["appearance-settings-v1"] = "appearance-settings-v1"
     theme_mode: Literal["system", "light", "dark"] = "system"
     navigation_panel_open: bool = True
-    navigation_panel_width: int = Field(default=312, ge=220, le=432)
+    navigation_panel_width: int = Field(default=224, ge=220, le=432)
+    ui_scale: int = Field(default=100, ge=80, le=125)
     content_theme: Literal["infield"] = "infield"
 
 
@@ -135,6 +136,7 @@ class AppearanceSettingsUpdateRequest(BaseModel):
     theme_mode: Literal["system", "light", "dark"]
     navigation_panel_open: bool
     navigation_panel_width: int = Field(ge=220, le=432)
+    ui_scale: int = Field(default=100, ge=80, le=125)
     content_theme: Literal["infield"] = "infield"
 
 
@@ -172,7 +174,9 @@ class DashboardExam(BaseModel):
     estimated_minutes: int = Field(ge=0)
     concepts: list[str] = Field(default_factory=list)
     created_at: str | None = None
-    source_status: Literal["verified", "ready", "review_needed"] = "ready"
+    source_status: Literal["verified", "self_checked", "ready", "review_needed"] = "ready"
+    assessment_kind: Literal["exam", "practice"] = "exam"
+    mastery_eligible: bool = True
     resume_available: bool = False
 
 
@@ -223,6 +227,10 @@ class StudyLibraryResult(BaseModel):
     schema_version: Literal["study-library-v1"] = "study-library-v1"
     workspace: WorkspaceState
     courses: list[StudyCourse] = Field(default_factory=list)
+    total_courses: int = Field(default=0, ge=0)
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=10, ge=1, le=10)
+    has_more: bool = False
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -298,7 +306,7 @@ class ExamQuestionView(BaseModel):
     difficulty: str | int | None = None
     concept_ids: list[str] = Field(default_factory=list)
     source_count: int = Field(ge=0)
-    source_status: Literal["verified", "unavailable"]
+    source_status: Literal["verified", "self_checked", "unavailable"]
 
 
 class SourceDisclosure(BaseModel):
@@ -328,7 +336,10 @@ class ExamAttemptStart(BaseModel):
     course_title: str
     title: str
     estimated_minutes: int = Field(ge=0)
+    assessment_kind: Literal["exam", "practice", "review"] = "exam"
+    mastery_eligible: bool = True
     started_at: str
+    elapsed_seconds: int = Field(default=0, ge=0)
     resumed: bool = False
     questions: list[ExamQuestionView]
     answers: list[QuestionFeedback] = Field(default_factory=list)
@@ -336,6 +347,13 @@ class ExamAttemptStart(BaseModel):
 
 class QuestionSubmissionRequest(BaseModel):
     option_id: str = Field(min_length=1, max_length=24)
+
+
+class ExamPauseResult(BaseModel):
+    schema_version: Literal["exam-pause-v1"] = "exam-pause-v1"
+    attempt_id: str
+    status: Literal["paused"] = "paused"
+    elapsed_seconds: int = Field(ge=0)
 
 
 class QuestionReview(BaseModel):
@@ -351,6 +369,8 @@ class ExamCompletion(BaseModel):
     schema_version: Literal["exam-completion-v1"] = "exam-completion-v1"
     attempt_id: str
     status: Literal["complete"] = "complete"
+    assessment_kind: Literal["exam", "practice", "review"] = "exam"
+    mastery_updated: bool = True
     question_count: int = Field(ge=0)
     answered_count: int = Field(ge=0)
     correct_count: int = Field(ge=0)

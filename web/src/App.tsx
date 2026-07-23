@@ -268,7 +268,7 @@ function OnboardingApp() {
               <p className="kicker">Begin with intent</p>
               <h1 id="step-title">Practice trusted exams without going online.</h1>
               <p className="lead">
-                Codex and the Mastery Ledger skill create and validate your course files. This application reads ready exams and records only attempts, results, and review schedules.
+                Codex or ChatGPT with the Mastery Ledger skill creates your course files. This application keeps verified exams distinct from AI self-checked practice and never applies practice results to mastery.
               </p>
 
               <div className="principle-strip" aria-label="Mastery Ledger principles">

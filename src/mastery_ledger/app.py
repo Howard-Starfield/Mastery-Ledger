@@ -41,6 +41,7 @@ from mastery_ledger.models import (
     DoctorResult,
     ExamAttemptStart,
     ExamCompletion,
+    ExamPauseResult,
     FolderPickerRequest,
     FolderPickerResult,
     GlossaryIndexResult,
@@ -139,8 +140,17 @@ def create_app(
         response_model=StudyLibraryResult,
         dependencies=[Depends(require_session)],
     )
-    def study_materials() -> StudyLibraryResult:
-        return study_library(ready_workspace())
+    def study_materials(
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=10, ge=1, le=10),
+        course_id: str | None = Query(default=None, min_length=1, max_length=240),
+    ) -> StudyLibraryResult:
+        return study_library(
+            ready_workspace(),
+            offset=offset,
+            limit=limit,
+            course_id=course_id,
+        )
 
     @app.post(
         "/api/v1/courses/import",
@@ -336,6 +346,22 @@ def create_app(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
         except ExamValidationError as error:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+        except AttemptStorageError as error:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
+
+    @app.post(
+        "/api/v1/exams/{course_id}/{exam_id}/attempts/{attempt_id}/pause",
+        response_model=ExamPauseResult,
+        dependencies=[Depends(require_session)],
+    )
+    def pause_exam(course_id: str, exam_id: str, attempt_id: str) -> ExamPauseResult:
+        try:
+            elapsed_seconds = exam_sessions.pause(attempt_id, course_id, exam_id)
+            return ExamPauseResult(attempt_id=attempt_id, elapsed_seconds=elapsed_seconds)
+        except AttemptNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+        except AttemptConflictError as error:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
         except AttemptStorageError as error:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
 

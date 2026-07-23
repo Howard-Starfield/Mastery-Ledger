@@ -83,6 +83,7 @@ def test_native_folder_picker_uses_bound_window(tmp_path: Path) -> None:
 
 def test_desktop_host_runs_webview_on_the_calling_thread(runtime_home: Path) -> None:
     lifecycle: list[str] = []
+    window_options: dict[str, object] = {}
 
     class Events:
         def __init__(self) -> None:
@@ -112,6 +113,7 @@ def test_desktop_host_runs_webview_on_the_calling_thread(runtime_home: Path) -> 
 
         def create_window(self, title: str, url: str, **options):
             lifecycle.append(f"window:{title}:{url}")
+            window_options.update(options)
             return Window()
 
         def start(self, **options) -> None:
@@ -132,6 +134,8 @@ def test_desktop_host_runs_webview_on_the_calling_thread(runtime_home: Path) -> 
     )
     assert "close-handler" in lifecycle
     assert "webview-start" in lifecycle
+    assert window_options["maximized"] is True
+    assert window_options["min_size"] == (900, 640)
     assert lifecycle[-1] == "backend-stop"
 
 
