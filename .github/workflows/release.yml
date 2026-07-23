@@ -79,6 +79,9 @@ jobs:
         run: python -m pip install --upgrade ".[desktop,desktop-build]"
       - name: Build Windows desktop preview
         run: python -m PyInstaller --noconfirm --clean .\packaging\mastery-ledger.spec
+      - name: Add Windows runtime configuration
+        shell: pwsh
+        run: Copy-Item .\packaging\MasteryLedger.exe.config .\dist\MasteryLedger\MasteryLedger.exe.config
       - name: Smoke test packaged application
         shell: pwsh
         run: |
@@ -88,11 +91,59 @@ jobs:
           Get-Content .\.work\desktop-smoke.json
           $result = Get-Content .\.work\desktop-smoke.json | ConvertFrom-Json
           if ($result.status -ne "ready") { throw "Packaged desktop smoke test did not report ready" }
+      - name: Smoke test packaged Windows webview runtime
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath .\dist\MasteryLedger\MasteryLedger.exe -ArgumentList "--webview-smoke-test", "--output", ".\.work\webview-smoke.json" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Packaged webview smoke test exited with code $($process.ExitCode)" }
+          Get-Content .\.work\webview-smoke.json
+          $result = Get-Content .\.work\webview-smoke.json | ConvertFrom-Json
+          if ($result.status -ne "ready" -or $result.webview -ne "ready") {
+            throw "Packaged webview smoke test did not report ready"
+          }
       - name: Archive portable Windows application
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release | Out-Null
           Compress-Archive -Path .\dist\MasteryLedger\* -DestinationPath ".\release\MasteryLedger-windows-x64-${{ github.ref_name }}.zip"
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $version = python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" .\packaging\mastery-ledger.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+      - name: Install and smoke test Windows installer
+        shell: pwsh
+        run: |
+          $version = python -c "import pathlib, tomllib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
+          $installer = (Resolve-Path ".\release\MasteryLedger-Setup-v$version.exe").Path
+          $installRoot = Join-Path (Resolve-Path .\.work) "installer-smoke"
+          $install = Start-Process -FilePath $installer -ArgumentList @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/CURRENTUSER",
+            "/DIR=$installRoot"
+          ) -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode)" }
+          if (-not (Test-Path "$installRoot\MasteryLedger.exe.config")) {
+            throw "Installer did not deploy the Windows runtime configuration"
+          }
+          $smoke = Start-Process -FilePath "$installRoot\MasteryLedger.exe" -ArgumentList @(
+            "--webview-smoke-test",
+            "--output",
+            ".\.work\installer-webview-smoke.json"
+          ) -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "Installed webview smoke test exited with code $($smoke.ExitCode)" }
+          Get-Content .\.work\installer-webview-smoke.json
+          $uninstall = Start-Process -FilePath "$installRoot\unins000.exe" -ArgumentList @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART"
+          ) -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstall.ExitCode)" }
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:

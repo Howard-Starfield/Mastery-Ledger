@@ -210,7 +210,9 @@ Add `--json` to a launch command when another program needs structured status.
 
 ## Install without cloning
 
-Download `MasteryLedger-windows-x64-v0.1.2.zip` from the latest GitHub release, extract the complete folder, and run `MasteryLedger.exe`. The portable Windows preview is unsigned, so Windows may ask you to confirm that you trust it. Keep the extracted files together; the executable depends on the adjacent runtime files.
+Download `MasteryLedger-Setup-v0.1.3.exe` from the latest GitHub release and run it. The per-user installer does not require administrator access, adds Start Menu and uninstall entries, and keeps the application runtime together under `%LOCALAPPDATA%\Programs\Mastery Ledger`.
+
+The installer is not yet Authenticode-signed, so Windows may ask you to confirm that you trust it. The release also includes `MasteryLedger-windows-x64-v0.1.3.zip` as an optional portable build. If you use the portable build, extract the complete folder before running `MasteryLedger.exe`; do not move the EXE away from its adjacent `_internal` runtime files.
 
 Alternatively, install the Python application from GitHub:
 
@@ -225,11 +227,11 @@ Install the skill from GitHub:
 npx.cmd skills add Howard-Starfield/Mastery-Ledger@mastery-ledger -g -a codex -y --copy
 ```
 
-The portable Windows application is an unsigned preview. Signed operating system installers are not ready.
+The Windows installer and portable application are unsigned previews. A signed installer remains a release-hardening goal.
 
 ## Update the app and skill
 
-The packaged Windows app checks the latest stable GitHub release when it opens. If a newer Windows build is available, an update card shows the installed and available versions. Select **Update and restart** once to download the release ZIP, verify its GitHub SHA-256 digest, replace the application files after the running EXE closes, and reopen Mastery Ledger. Course folders, attempts, progress, and settings live outside the application folder and are not replaced.
+The installed and portable Windows app checks the latest stable GitHub release when it opens. If a newer Windows build is available, an update card shows the installed and available versions. Select **Update and restart** once to download the portable update payload, verify its GitHub SHA-256 digest, replace the application files after the running EXE closes, and reopen Mastery Ledger. Course folders, attempts, progress, and settings live outside the application folder and are not replaced.
 
 If the computer is offline or GitHub cannot be reached, no update card appears and the local app continues normally. Because the portable preview is not yet Authenticode-signed, Windows may still display its standard trust warning after an update.
 
@@ -316,27 +318,56 @@ Run the native desktop application during development:
 & .\.venv\Scripts\mastery-ledger-desktop.exe
 ```
 
-Build the clean one-directory executable, then smoke-test the packaged result:
+Build the clean one-directory executable, add its Windows runtime configuration, then run both release smoke tests:
 
 ```powershell
 & .\.venv\Scripts\pyinstaller.exe --noconfirm --clean .\packaging\mastery-ledger.spec
+Copy-Item .\packaging\MasteryLedger.exe.config .\dist\MasteryLedger\MasteryLedger.exe.config
 & .\dist\MasteryLedger\MasteryLedger.exe --smoke-test --output .\.work\desktop-smoke.json
+& .\dist\MasteryLedger\MasteryLedger.exe --webview-smoke-test --output .\.work\webview-smoke.json
 Get-Content .\.work\desktop-smoke.json
+Get-Content .\.work\webview-smoke.json
 ```
+
+The webview smoke test loads Python.NET, Windows Forms, and the pywebview Windows backend without opening the application window. It protects the release against native runtime failures that the backend-only smoke test cannot detect.
 
 The runnable application is `dist\MasteryLedger\MasteryLedger.exe`. Keep the complete `dist\MasteryLedger\` directory together because the EXE uses its adjacent `_internal` runtime files. To reproduce the GitHub release archive locally:
 
 ```powershell
-Compress-Archive -Path .\dist\MasteryLedger\* -DestinationPath .\MasteryLedger-windows-x64-v0.1.2.zip -Force
+New-Item -ItemType Directory -Force .\release | Out-Null
+Compress-Archive -Path .\dist\MasteryLedger\* -DestinationPath .\release\MasteryLedger-windows-x64-v0.1.3.zip -Force
 ```
 
-The portable build includes the automatic updater but still has no installer, custom icon, or code signature.
+Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then compile the one-click installer:
+
+```powershell
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=0.1.3" .\packaging\mastery-ledger.iss
+```
+
+The resulting installer is `release\MasteryLedger-Setup-v0.1.3.exe`. It installs for the current user by default and can be tested without UI:
+
+```powershell
+$testRoot = (Resolve-Path .\.work).Path + "\installer-smoke"
+$installer = Resolve-Path .\release\MasteryLedger-Setup-v0.1.3.exe
+$process = Start-Process -FilePath $installer -ArgumentList @(
+  "/VERYSILENT",
+  "/SUPPRESSMSGBOXES",
+  "/NORESTART",
+  "/CURRENTUSER",
+  "/DIR=$testRoot"
+) -Wait -PassThru
+if ($process.ExitCode -ne 0) { throw "Installer failed: $($process.ExitCode)" }
+& "$testRoot\MasteryLedger.exe" --webview-smoke-test --json
+& "$testRoot\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+```
+
+The installer and portable build include the automatic updater but do not yet have a custom icon or Authenticode signature.
 
 ## Current limits
 
 * The review sequence is a product rule, not a proven memory model.
 * Local transcription needs the optional `faster-whisper` package and a model approved by the learner.
 * Lessons are Markdown files. The app reads them but does not create them.
-* Releases do not yet include signed operating system installers.
+* The Windows installer is not yet Authenticode-signed.
 
 Mastery Ledger uses the [MIT License](LICENSE).

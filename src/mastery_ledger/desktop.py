@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import secrets
@@ -283,12 +284,36 @@ def run_smoke_test(
         backend.stop()
 
 
+def run_webview_runtime_smoke_test(
+    importer: Callable[[str], ModuleType] = importlib.import_module,
+) -> dict[str, object]:
+    """Load the Windows GUI backend without opening an application window."""
+
+    importer("webview")
+    gui = "default"
+    if sys.platform == "win32":
+        importer("webview.platforms.winforms")
+        gui = "edgechromium"
+    return {
+        "schema_version": "desktop-webview-smoke-v1",
+        "status": "ready",
+        "webview": "ready",
+        "gui": gui,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="mastery-ledger-desktop")
-    parser.add_argument(
+    smoke_group = parser.add_mutually_exclusive_group()
+    smoke_group.add_argument(
         "--smoke-test",
         action="store_true",
         help="Start the packaged backend, verify the bundled frontend, and exit",
+    )
+    smoke_group.add_argument(
+        "--webview-smoke-test",
+        action="store_true",
+        help="Load the packaged native webview and .NET runtime, then exit",
     )
     parser.add_argument("--json", action="store_true", dest="as_json")
     parser.add_argument(
@@ -324,20 +349,31 @@ def _write_smoke_output(path: Path, payload: dict[str, object]) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     smoke_test = args.smoke_test or os.environ.get("MASTERY_LEDGER_SMOKE_TEST") == "1"
+    webview_smoke_test = args.webview_smoke_test or (
+        os.environ.get("MASTERY_LEDGER_WEBVIEW_SMOKE_TEST") == "1"
+    )
     output_path = args.output
     if output_path is None and os.environ.get("MASTERY_LEDGER_SMOKE_OUTPUT"):
         output_path = Path(os.environ["MASTERY_LEDGER_SMOKE_OUTPUT"])
 
-    if smoke_test:
+    if smoke_test or webview_smoke_test:
         def report(payload: dict[str, object]) -> None:
             if output_path is not None:
                 _write_smoke_output(output_path, payload)
 
         try:
-            result = run_smoke_test(progress=report)
+            if webview_smoke_test:
+                result = run_webview_runtime_smoke_test()
+                report(result)
+            else:
+                result = run_smoke_test(progress=report)
         except Exception as error:
             result = {
-                "schema_version": "desktop-smoke-v1",
+                "schema_version": (
+                    "desktop-webview-smoke-v1"
+                    if webview_smoke_test
+                    else "desktop-smoke-v1"
+                ),
                 "status": "error",
                 "message": str(error),
             }

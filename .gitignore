@@ -12,6 +12,7 @@ venv/
 *.egg-info/
 dist/
 build/
+release/
 
 # Frontend dependencies and build output
 node_modules/

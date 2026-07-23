@@ -13,6 +13,7 @@ from mastery_ledger.desktop import (
     _bootstrap_url,
     main,
     run_desktop,
+    run_webview_runtime_smoke_test,
 )
 from mastery_ledger.models import DoctorResult
 
@@ -157,3 +158,22 @@ def test_desktop_smoke_cli_writes_machine_readable_output(
     output = tmp_path / "smoke.json"
     assert main(["--smoke-test", "--output", str(output)]) == 0
     assert json.loads(output.read_text(encoding="utf-8"))["status"] == "ready"
+
+
+def test_webview_runtime_smoke_loads_windows_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    imported: list[str] = []
+    monkeypatch.setattr("mastery_ledger.desktop.sys.platform", "win32")
+
+    result = run_webview_runtime_smoke_test(
+        importer=lambda name: imported.append(name) or SimpleNamespace()
+    )
+
+    assert imported == ["webview", "webview.platforms.winforms"]
+    assert result == {
+        "schema_version": "desktop-webview-smoke-v1",
+        "status": "ready",
+        "webview": "ready",
+        "gui": "edgechromium",
+    }
