@@ -210,7 +210,7 @@ Add `--json` to a launch command when another program needs structured status.
 
 ## Install without cloning
 
-Download `MasteryLedger-windows-x64-v0.1.0.zip` from the latest GitHub release, extract the complete folder, and run `MasteryLedger.exe`. The portable Windows preview is unsigned, so Windows may ask you to confirm that you trust it. Keep the extracted files together; the executable depends on the adjacent runtime files.
+Download `MasteryLedger-windows-x64-v0.1.1.zip` from the latest GitHub release, extract the complete folder, and run `MasteryLedger.exe`. The portable Windows preview is unsigned, so Windows may ask you to confirm that you trust it. Keep the extracted files together; the executable depends on the adjacent runtime files.
 
 Alternatively, install the Python application from GitHub:
 

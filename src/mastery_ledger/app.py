@@ -10,6 +10,7 @@ from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Request, Res
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from mastery_ledger import __version__
 from mastery_ledger.config import bundled_web_dir, default_workspace_path, runtime_signature
 from mastery_ledger.course_import import (
     MAX_ARCHIVE_BYTES,
@@ -92,7 +93,7 @@ def create_app(
 
     app = FastAPI(
         title="Mastery Ledger",
-        version="0.1.0",
+        version=__version__,
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
